@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Home</title>
+  <title>JobHive | Home</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <style>
@@ -97,7 +97,7 @@
   <section class="container py-5">
     <h2 class="mb-4 fw-semibold text-center">Featured Jobs</h2>
     <div class="row row-cols-1 row-cols-md-3 g-4">
-      <!-- Example Job Card -->
+      <!--  Job Card -->
       <div class="col">
         <div class="card job-card h-100">
           <div class="card-body">
@@ -149,6 +149,9 @@
       </div>
     </div>
   </section>
+
+
+
 
   <!-- How it Works -->
   <section class="bg-light py-5">

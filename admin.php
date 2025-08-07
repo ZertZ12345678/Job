@@ -10,6 +10,15 @@ try {
     $companies = [];
     $error_message = "Error loading companies data: " . $e->getMessage();
 }
+
+// Fetch seekers (users) data for display
+try {
+    $stmt2 = $pdo->query("SELECT * FROM users ORDER BY user_id DESC");
+    $seekers = $stmt2->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    $seekers = [];
+    $seekers_error = "Error loading seekers data: " . $e->getMessage();
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -85,7 +94,6 @@ try {
       box-shadow: 0 1px 5px rgba(30,30,55,0.06);
       display: inline-block;
     }
-    /* ---- Table ALL DARK & GOLD --- */
     .dark-table {
       background: #22223b;
       color: #ffc107;
@@ -124,7 +132,6 @@ try {
       display: block;
       margin: 0 auto;
     }
-    /* Optional: Table hover effect */
     .dark-table tbody tr:hover td {
       background: #292944 !important;
       color: #ffd966 !important;
@@ -156,7 +163,7 @@ try {
     <nav class="nav flex-column">
       <a id="dashboardLink" class="nav-link" onclick="showSection('dashboardSection', this)">Dashboard</a>
       <a id="companiesLink" class="nav-link" onclick="showSection('companiesSection', this)">Companies</a>
-      <a class="nav-link" href="admin_seekers.php">Seekers</a>
+      <a id="seekersLink" class="nav-link" onclick="showSection('seekersSection', this)">Seekers</a>
       <a class="nav-link" href="admin_jobs.php">Jobs</a>
       <a class="nav-link" href="admin_add_role.php">Add Admin Role</a>
       <a class="nav-link" href="admin_reports.php">Reports</a>
@@ -199,66 +206,133 @@ try {
       </div>
     </div>
 
-   <div id="companiesSection" class="section" style="display:none;">
-  <div class="companies-title-bar mb-4">
-    <?php
-      $company_count = count($companies);
-      if ($company_count === 0) {
-        echo "No Company Information";
-      } elseif ($company_count === 1) {
-        echo "1 Company Information";
-      } else {
-        echo "{$company_count} Companies Information";
-      }
-    ?>
-  </div>
-  <?php if (!empty($error_message)): ?>
-    <div class="alert alert-danger"><?php echo htmlspecialchars($error_message); ?></div>
-  <?php endif; ?>
+    <!-- Companies Section -->
+    <div id="companiesSection" class="section" style="display:none;">
+      <div class="companies-title-bar mb-4">
+        <?php
+          $company_count = count($companies);
+          if ($company_count === 0) {
+            echo "No Company Information";
+          } elseif ($company_count === 1) {
+            echo "1 Company Information";
+          } else {
+            echo "{$company_count} Companies Information";
+          }
+        ?>
+      </div>
+      <?php if (!empty($error_message)): ?>
+        <div class="alert alert-danger"><?php echo htmlspecialchars($error_message); ?></div>
+      <?php endif; ?>
 
-  <?php if (empty($companies)): ?>
-    <div class="alert alert-info">No companies found.</div>
-  <?php else: ?>
-    <div class="table-responsive">
-      <table class="table dark-table align-middle" style="font-weight:bold; text-align:center;">
-        <thead>
-          <tr>
-            <th>Company Id</th>
-            <th>Company Name</th>
-            <th>Email</th>
-            <th>Password</th>
-            <th>Phone</th>
-            <th>Address</th>
-            <th>Logo</th>
-          </tr>
-        </thead>
-        <tbody>
-          <?php foreach ($companies as $company): ?>
-            <tr>
-              <td><?php echo htmlspecialchars($company['company_id'] ?? ''); ?></td>
-              <td><?php echo htmlspecialchars($company['company_name'] ?? ''); ?></td>
-              <td><?php echo htmlspecialchars($company['email'] ?? ''); ?></td>
-              <td><?php echo htmlspecialchars($company['password'] ?? ''); ?></td>
-              <td><?php echo htmlspecialchars($company['phone'] ?? ''); ?></td>
-              <td><?php echo htmlspecialchars($company['address'] ?? ''); ?></td>
-              <td class="logo-cell">
-                <?php if (!empty($company['logo'])): ?>
-                  <img src="company_logos/<?php echo htmlspecialchars($company['logo']); ?>"
-                       alt="Logo"
-                       class="company-logo-img"
-                       style="width:60px;height:60px;object-fit:contain;background:#fff;border-radius:10px;">
-                <?php else: ?>
-                  <span style="color:#ccc;">—</span>
-                <?php endif; ?>
-              </td>
-            </tr>
-          <?php endforeach; ?>
-        </tbody>
-      </table>
+      <?php if (empty($companies)): ?>
+        <div class="alert alert-info">No companies found.</div>
+      <?php else: ?>
+        <div class="table-responsive">
+          <table class="table dark-table align-middle" style="font-weight:bold; text-align:center;">
+            <thead>
+              <tr>
+                <th>Company Id</th>
+                <th>Company Name</th>
+                <th>Email</th>
+                <th>Password</th>
+                <th>Phone</th>
+                <th>Address</th>
+                <th>Logo</th>
+              </tr>
+            </thead>
+            <tbody>
+              <?php foreach ($companies as $company): ?>
+                <tr>
+                  <td><?php echo htmlspecialchars($company['company_id'] ?? ''); ?></td>
+                  <td><?php echo htmlspecialchars($company['company_name'] ?? ''); ?></td>
+                  <td><?php echo htmlspecialchars($company['email'] ?? ''); ?></td>
+                  <td><?php echo htmlspecialchars($company['password'] ?? ''); ?></td>
+                  <td><?php echo htmlspecialchars($company['phone'] ?? ''); ?></td>
+                  <td><?php echo htmlspecialchars($company['address'] ?? ''); ?></td>
+                  <td class="logo-cell">
+                    <?php if (!empty($company['logo'])): ?>
+                      <img src="company_logos/<?php echo htmlspecialchars($company['logo']); ?>"
+                        alt="Logo"
+                        class="company-logo-img"
+                        style="width:60px;height:60px;object-fit:contain;background:#fff;border-radius:10px;">
+                    <?php else: ?>
+                      <span style="color:#ccc;">—</span>
+                    <?php endif; ?>
+                  </td>
+                </tr>
+              <?php endforeach; ?>
+            </tbody>
+          </table>
+        </div>
+      <?php endif; ?>
     </div>
-  <?php endif; ?>
-</div>
 
+    <!-- Seekers Section -->
+    <div id="seekersSection" class="section" style="display:none;">
+      <div class="companies-title-bar mb-4">
+        <?php
+          // Only count users with role "user"
+          $user_seekers = array_filter($seekers, function($s) { return ($s['role'] ?? '') === 'user'; });
+          $seeker_count = count($user_seekers);
+          if ($seeker_count === 0) {
+            echo "No Seekers Information";
+          } elseif ($seeker_count === 1) {
+            echo "1 Seeker Information";
+          } else {
+            echo "{$seeker_count} Seekers Information";
+          }
+        ?>
+      </div>
+      <?php if (!empty($seekers_error)): ?>
+        <div class="alert alert-danger"><?php echo htmlspecialchars($seekers_error); ?></div>
+      <?php endif; ?>
+
+      <?php if (empty($user_seekers)): ?>
+        <div class="alert alert-info">No seekers found.</div>
+      <?php else: ?>
+        <div class="table-responsive">
+          <table class="table dark-table align-middle" style="font-weight:bold; text-align:center;">
+            <thead>
+              <tr>
+                <th>User Id</th>
+                <th>Full Name</th>
+                <th>Email</th>
+                <th>Password</th>
+                <th>Phone</th>
+                <th>Address</th>
+                <th>Job Category</th>
+                <th>Current Position</th>
+                <th>Profile Picture</th>
+              </tr>
+            </thead>
+            <tbody>
+              <?php foreach ($user_seekers as $seeker): ?>
+                <tr>
+                  <td><?php echo htmlspecialchars($seeker['user_id'] ?? ''); ?></td>
+                  <td><?php echo htmlspecialchars($seeker['full_name'] ?? ''); ?></td>
+                  <td><?php echo htmlspecialchars($seeker['email'] ?? ''); ?></td>
+                  <td><?php echo htmlspecialchars($seeker['password'] ?? ''); ?></td>
+                  <td><?php echo htmlspecialchars($seeker['phone'] ?? ''); ?></td>
+                  <td><?php echo htmlspecialchars($seeker['address'] ?? ''); ?></td>
+                  <td><?php echo htmlspecialchars($seeker['job_category'] ?? ''); ?></td>
+                  <td><?php echo htmlspecialchars($seeker['current_position'] ?? ''); ?></td>
+                  <td class="logo-cell">
+                    <?php if (!empty($seeker['profile_picture'])): ?>
+                      <img src="profile_pics/<?php echo htmlspecialchars($seeker['profile_picture']); ?>"
+                           alt="Photo"
+                           class="company-logo-img"
+                           style="width:60px;height:60px;object-fit:contain;background:#fff;border-radius:10px;">
+                    <?php else: ?>
+                      <span style="color:#ccc;">No photo available.</span>
+                    <?php endif; ?>
+                  </td>
+                </tr>
+              <?php endforeach; ?>
+            </tbody>
+          </table>
+        </div>
+      <?php endif; ?>
+    </div>
 
   </div>
 </body>
