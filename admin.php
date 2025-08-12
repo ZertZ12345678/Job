@@ -2,6 +2,27 @@
 include("connect.php");
 session_start();
 
+/* ===== Auth: require logged-in admin ===== */
+if (!isset($_SESSION['user_id'])) {
+  header("Location: login.php");
+  exit;
+}
+$current_admin_id = (int) $_SESSION['user_id'];
+
+/* Load logged-in user and verify role=admin */
+try {
+  $stmt = $pdo->prepare("SELECT * FROM users WHERE user_id = ?");
+  $stmt->execute([$current_admin_id]);
+  $loggedAdmin = $stmt->fetch(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+  $loggedAdmin = null;
+}
+if (!$loggedAdmin || ($loggedAdmin['role'] ?? '') !== 'admin') {
+  session_destroy();
+  header("Location: login.php?err=unauthorized");
+  exit;
+}
+
 /* -------------------- Handle Add Admin form (same page) -------------------- */
 $admin_success = '';
 $admin_error   = '';
@@ -12,19 +33,61 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add_a
   $password  = trim($_POST['password'] ?? '');
   $phone     = trim($_POST['phone'] ?? '');
   $address   = trim($_POST['address'] ?? '');
+  $profile_picture = null;
 
+  // Required fields
   if ($full_name === '' || $email === '' || $password === '' || $phone === '' || $address === '') {
     $admin_error = "All fields are required.";
   } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
     $admin_error = "Email is not valid.";
-  } else {
+  }
+
+  // Photo is required
+  if ($admin_error === '') {
+    if (!isset($_FILES['profile_picture']) || $_FILES['profile_picture']['error'] === UPLOAD_ERR_NO_FILE) {
+      $admin_error = "Photo is required for admin profile.";
+    }
+  }
+
+  // Validate + save image
+  if ($admin_error === '' && isset($_FILES['profile_picture'])) {
+    if ($_FILES['profile_picture']['error'] === UPLOAD_ERR_OK) {
+      $allowed = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+      $ext  = strtolower(pathinfo($_FILES['profile_picture']['name'], PATHINFO_EXTENSION));
+      $size = $_FILES['profile_picture']['size'] ?? 0;
+
+      if (!in_array($ext, $allowed, true)) {
+        $admin_error = "Invalid image type. Allowed: " . implode(', ', $allowed);
+      } elseif ($size > 3 * 1024 * 1024) {
+        $admin_error = "Image too large. Max 3MB.";
+      } else {
+        $dir = __DIR__ . "/profile_pics";
+        if (!is_dir($dir)) {
+          @mkdir($dir, 0775, true);
+        }
+        $rand     = bin2hex(random_bytes(4));
+        $filename = "admin_" . time() . "_" . $rand . "." . $ext;
+        $destFS   = $dir . "/" . $filename;
+
+        if (!move_uploaded_file($_FILES['profile_picture']['tmp_name'], $destFS)) {
+          $admin_error = "Failed to save uploaded photo.";
+        } else {
+          $profile_picture = $filename;
+        }
+      }
+    } else {
+      $admin_error = "Upload error (code: " . (int)$_FILES['profile_picture']['error'] . ").";
+    }
+  }
+
+  // Insert admin
+  if ($admin_error === '') {
     try {
-      // Insert into users with role='admin' (plaintext as requested)
       $stmtIns = $pdo->prepare("
-        INSERT INTO users (full_name, email, password, phone, address, role)
-        VALUES (?, ?, ?, ?, ?, 'admin')
+        INSERT INTO users (full_name, email, password, phone, address, profile_picture, role)
+        VALUES (?, ?, ?, ?, ?, ?, 'admin')
       ");
-      $stmtIns->execute([$full_name, $email, $password, $phone, $address]);
+      $stmtIns->execute([$full_name, $email, $password, $phone, $address, $profile_picture]);
       $admin_success = "Admin added successfully.";
     } catch (PDOException $e) {
       if (stripos($e->getMessage(), 'duplicate') !== false || stripos($e->getMessage(), 'unique') !== false) {
@@ -32,6 +95,93 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add_a
       } else {
         $admin_error = "Could not add admin: " . $e->getMessage();
       }
+    }
+  }
+}
+
+/* -------------------- Handle CURRENT ADMIN PROFILE UPDATE -------------------- */
+$profile_success = '';
+$profile_error   = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'update_admin_profile') {
+  $p_full_name = trim($_POST['p_full_name'] ?? '');
+  $p_email     = trim($_POST['p_email'] ?? '');
+  $p_phone     = trim($_POST['p_phone'] ?? '');
+  $p_address   = trim($_POST['p_address'] ?? '');
+
+  if ($p_full_name === '' || $p_email === '' || $p_address === '') {
+    $profile_error = "Full name, email, and address are required.";
+  } elseif (!filter_var($p_email, FILTER_VALIDATE_EMAIL)) {
+    $profile_error = "Email is not valid.";
+  }
+
+  // Load current row for old photo cleanup
+  $adminRow = [];
+  if ($profile_error === '') {
+    try {
+      $stmt = $pdo->prepare("SELECT * FROM users WHERE user_id=?");
+      $stmt->execute([$current_admin_id]);
+      $adminRow = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+    } catch (PDOException $e) {
+      $profile_error = "Could not load current profile.";
+    }
+  }
+
+  // Optional photo replacement
+  $new_photo = null;
+  if ($profile_error === '' && isset($_FILES['p_profile_picture']) && $_FILES['p_profile_picture']['error'] !== UPLOAD_ERR_NO_FILE) {
+    if ($_FILES['p_profile_picture']['error'] === UPLOAD_ERR_OK) {
+      $allowed = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+      $ext  = strtolower(pathinfo($_FILES['p_profile_picture']['name'], PATHINFO_EXTENSION));
+      $size = $_FILES['p_profile_picture']['size'] ?? 0;
+
+      if (!in_array($ext, $allowed, true)) {
+        $profile_error = "Invalid image type. Allowed: " . implode(', ', $allowed);
+      } elseif ($size > 3 * 1024 * 1024) {
+        $profile_error = "Image too large. Max 3MB.";
+      } else {
+        $dir = __DIR__ . "/profile_pics";
+        if (!is_dir($dir)) {
+          @mkdir($dir, 0775, true);
+        }
+        $rand     = bin2hex(random_bytes(4));
+        $filename = "admin_" . $current_admin_id . "_" . time() . "_" . $rand . "." . $ext;
+        $destFS   = $dir . "/" . $filename;
+
+        if (!move_uploaded_file($_FILES['p_profile_picture']['tmp_name'], $destFS)) {
+          $profile_error = "Failed to save uploaded photo.";
+        } else {
+          $new_photo = $filename;
+          if (!empty($adminRow['profile_picture'])) {
+            $oldFS = $dir . "/" . $adminRow['profile_picture'];
+            if (is_file($oldFS)) {
+              @unlink($oldFS);
+            }
+          }
+        }
+      }
+    } else {
+      $profile_error = "Upload error (code: " . (int)$_FILES['p_profile_picture']['error'] . ").";
+    }
+  }
+
+  // Update DB
+  if ($profile_error === '') {
+    try {
+      $sql = "UPDATE users SET full_name=?, email=?, phone=?, address=?";
+      $params = [$p_full_name, $p_email, $p_phone, $p_address];
+      if ($new_photo) {
+        $sql .= ", profile_picture=?";
+        $params[] = $new_photo;
+      }
+      $sql .= " WHERE user_id=?";
+      $params[] = $current_admin_id;
+
+      $upd = $pdo->prepare($sql);
+      $upd->execute($params);
+      $profile_success = "Profile updated successfully.";
+    } catch (PDOException $e) {
+      $profile_error = "Could not update profile: " . $e->getMessage();
     }
   }
 }
@@ -70,6 +220,16 @@ try {
   $jobs = [];
   $jobs_error = "Error loading jobs data: " . $e->getMessage();
 }
+
+/* -------------------- Load current admin for Profile display -------------------- */
+$profile_admin = [];
+try {
+  $stmt = $pdo->prepare("SELECT * FROM users WHERE user_id=?");
+  $stmt->execute([$current_admin_id]);
+  $profile_admin = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+} catch (PDOException $e) {
+  $profile_admin = [];
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -81,67 +241,221 @@ try {
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <style>
-    body { background: #f8fafc; }
+    body {
+      background: #f8fafc;
+    }
 
     .sidebar {
-      min-height: 100vh; background: #22223b; color: #fff; padding-top: 30px;
-      width: 250px; position: fixed; left: 0; top: 0; z-index: 100;
+      min-height: 100vh;
+      background: #22223b;
+      color: #fff;
+      padding-top: 30px;
+      width: 250px;
+      position: fixed;
+      left: 0;
+      top: 0;
+      z-index: 100;
     }
-    .sidebar .nav-link {
-      color: #fff; font-size: 1.09rem; padding: 0.9rem 2rem 0.9rem 2.2rem;
-      border-radius: 0.8rem 0 0 0.8rem; transition: background 0.13s, color 0.13s;
-      margin-bottom: 0.1rem; font-weight: 500; cursor: pointer; text-decoration: none; display: block;
-    }
-    .sidebar .nav-link.active, .sidebar .nav-link:hover { background: #ffc107; color: #22223b; }
-    .sidebar .sidebar-title { font-size: 1.6rem; font-weight: bold; color: #ffc107; padding-left: 2.2rem; margin-bottom: 2.4rem; }
 
-    .content { margin-left: 250px; padding: 40px 30px 30px; min-height: 100vh; }
+    .sidebar .nav-link {
+      color: #fff;
+      font-size: 1.09rem;
+      padding: 0.9rem 2rem 0.9rem 2.2rem;
+      border-radius: 0.8rem 0 0 0.8rem;
+      transition: background 0.13s, color 0.13s;
+      margin-bottom: 0.1rem;
+      font-weight: 500;
+      cursor: pointer;
+      text-decoration: none;
+      display: block;
+    }
+
+    .sidebar .nav-link.active,
+    .sidebar .nav-link:hover {
+      background: #ffc107;
+      color: #22223b;
+    }
+
+    .sidebar .sidebar-title {
+      font-size: 1.6rem;
+      font-weight: bold;
+      color: #ffc107;
+      padding-left: 2.2rem;
+      margin-bottom: 2.4rem;
+    }
+
+    .content {
+      margin-left: 250px;
+      padding: 40px 30px 30px;
+      min-height: 100vh;
+    }
+
     @media (max-width: 900px) {
-      .sidebar { width: 100%; position: relative; min-height: unset; }
-      .content { margin-left: 0; }
+      .sidebar {
+        width: 100%;
+        position: relative;
+        min-height: unset;
+      }
+
+      .content {
+        margin-left: 0;
+      }
     }
 
     .companies-title-bar {
-      background: #22223b; color: #ffc107; padding: 0.85rem 1.2rem; border-radius: 0.7rem;
-      font-size: 1.35rem; font-weight: 700; margin-bottom: 1.4rem; letter-spacing: 0.2px;
-      box-shadow: 0 1px 5px rgba(30,30,55,0.06); display: inline-block;
+      background: #22223b;
+      color: #ffc107;
+      padding: 0.85rem 1.2rem;
+      border-radius: 0.7rem;
+      font-size: 1.35rem;
+      font-weight: 700;
+      margin-bottom: 1.4rem;
+      letter-spacing: 0.2px;
+      box-shadow: 0 1px 5px rgba(30, 30, 55, 0.06);
+      display: inline-block;
     }
 
-    .dark-table { background: #22223b; color: #ffc107; border-radius: 0.7rem; overflow: hidden; }
-    .dark-table th, .dark-table td {
-      background: #22223b !important; color: #ffc107 !important; border: 1px solid #ffc107 !important;
-      font-weight: 500; font-size: 0.9rem; vertical-align: middle !important; padding: 0.5rem 0.8rem;
+    .dark-table {
+      background: #22223b;
+      color: #ffc107;
+      border-radius: 0.7rem;
+      overflow: hidden;
     }
-    .dark-table th { font-weight: 700; font-size: 0.95rem; letter-spacing: 0.03rem; border-bottom: 2px solid #ffc107 !important; text-align: left; }
-    .logo-cell { text-align: center; min-width: 70px; max-width: 90px; vertical-align: middle !important; }
-    .company-logo-img { height: 52px; width: 52px; object-fit: contain; background: #fff; box-shadow: 0 0 0 1px #f1f1f1; display: block; margin: 0 auto; }
-    .dark-table tbody tr:hover td { background: #292944 !important; color: #ffd966 !important; transition: 0.15s; }
 
-    .small-hint { font-size: .86rem; color: #6c757d; }
+    .dark-table th,
+    .dark-table td {
+      background: #22223b !important;
+      color: #ffc107 !important;
+      border: 1px solid #ffc107 !important;
+      font-weight: 500;
+      font-size: 0.9rem;
+      vertical-align: middle !important;
+      padding: 0.5rem 0.8rem;
+    }
 
-    /* --- Admin form polish (equal widths, responsive) --- */
+    .dark-table th {
+      font-weight: 700;
+      font-size: 0.95rem;
+      letter-spacing: 0.03rem;
+      border-bottom: 2px solid #ffc107 !important;
+      text-align: left;
+    }
+
+    .logo-cell {
+      text-align: center;
+      min-width: 70px;
+      max-width: 90px;
+      vertical-align: middle !important;
+    }
+
+    .thumb {
+      width: 60px;
+      height: 60px;
+      object-fit: cover;
+      background: #fff;
+      border-radius: 10px;
+      display: block;
+      margin: 0 auto;
+    }
+
+    .small-hint {
+      font-size: .86rem;
+      color: #6c757d;
+    }
+
     .form-card {
       background: #fff;
       border-radius: 0.9rem;
       padding: 1.25rem;
-      box-shadow: 0 2px 14px rgba(0,0,0,.05);
+      box-shadow: 0 2px 14px rgba(0, 0, 0, .05);
     }
+
     .form-grid {
       display: grid;
       grid-template-columns: repeat(12, 1fr);
       gap: 16px;
     }
-    .form-grid .col-6 { grid-column: span 6; }
-    .form-grid .full  { grid-column: 1 / -1; }
 
-    @media (max-width: 768px) {
-      .form-grid .col-6 { grid-column: 1 / -1; }
+    .form-grid .col-6 {
+      grid-column: span 6;
     }
 
-    .form-label { font-weight: 600; margin-bottom: .35rem; }
-    .form-control, .form-select { height: 44px; border-radius: .6rem; }
-    .input-note { font-size: .85rem; color: #6c757d; }
-    .form-actions { display: flex; gap: 10px; align-items: center; }
+    .form-grid .full {
+      grid-column: 1 / -1;
+    }
+
+    @media (max-width: 768px) {
+      .form-grid .col-6 {
+        grid-column: 1 / -1;
+      }
+    }
+
+    .form-label {
+      font-weight: 600;
+      margin-bottom: .35rem;
+    }
+
+    .form-control,
+    .form-select {
+      height: 44px;
+      border-radius: .6rem;
+    }
+
+    .input-note {
+      font-size: .85rem;
+      color: #6c757d;
+    }
+
+    .form-actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    /* Profile */
+    .profile-card {
+      max-width: 740px;
+      margin: 10px auto 0;
+      /* <— centers horizontally */
+      background: #fff;
+      border-radius: 1.1rem;
+      box-shadow: 0 3px 16px rgba(30, 30, 60, .07);
+      padding: 1.5rem;
+    }
+
+
+    .profile-img {
+      width: 112px;
+      height: 112px;
+      object-fit: cover;
+      border-radius: 1.2rem;
+      border: 3px solid #ffc107;
+      background: #fafafa;
+      margin-bottom: .8rem;
+    }
+
+    .field-label {
+      font-weight: 600;
+      color: #6c757d;
+      margin-bottom: 0.1rem;
+      font-size: 1.02rem;
+    }
+
+    .form-edit-row {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1.0rem;
+    }
+
+    .edit-btn {
+      margin-left: 8px;
+      color: #ffc107;
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 1.05rem;
+    }
   </style>
 
   <script>
@@ -167,7 +481,6 @@ try {
       }
     });
 
-    // Toggle password visibility (hooked after DOM is ready)
     document.addEventListener('DOMContentLoaded', () => {
       const btn = document.getElementById('togglePwd');
       const input = document.getElementById('adminPwd');
@@ -179,6 +492,23 @@ try {
         });
       }
     });
+
+    function toggleEdit(btn) {
+      const input = btn.parentNode.querySelector("input, select");
+      if (!input) return;
+      if (input.hasAttribute("readonly")) input.removeAttribute("readonly");
+      if (input.hasAttribute("disabled")) input.removeAttribute("disabled");
+      input.focus();
+      input.style.backgroundColor = "#fff8ec";
+    }
+
+    function previewProfilePic(input) {
+      if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        reader.onload = e => document.getElementById('profilePreview').src = e.target.result;
+        reader.readAsDataURL(input.files[0]);
+      }
+    }
   </script>
 </head>
 
@@ -193,7 +523,6 @@ try {
       <a id="jobsLink" class="nav-link" onclick="showSection('jobsSection', this)">Jobs</a>
       <a id="appliedLink" class="nav-link" onclick="showSection('appliedSection', this)">Applied Jobs</a>
       <a id="adminsLink" class="nav-link" onclick="showSection('adminsSection', this)">Add Admin Role</a>
-      <a class="nav-link" onclick="showSection('feedbacksSection', this)">Feedbacks</a>
       <a class="nav-link" onclick="showSection('profileSection', this)">Profile</a>
       <a class="nav-link" onclick="showSection('settingsSection', this)">Settings</a>
       <a class="nav-link" href="index.php">Logout</a>
@@ -274,7 +603,7 @@ try {
                   <td><?php echo htmlspecialchars($company['address'] ?? ''); ?></td>
                   <td class="logo-cell">
                     <?php if (!empty($company['logo'])): ?>
-                      <img src="company_logos/<?php echo htmlspecialchars($company['logo']); ?>" alt="Logo" class="company-logo-img" style="width:60px;height:60px;object-fit:contain;background:#fff;border-radius:10px;">
+                      <img src="company_logos/<?php echo htmlspecialchars($company['logo']); ?>" alt="Logo" class="thumb" style="object-fit:contain;">
                     <?php else: ?>
                       <span style="color:#ccc;">—</span>
                     <?php endif; ?>
@@ -331,9 +660,9 @@ try {
                   <td><?php echo htmlspecialchars($seeker['current_position'] ?? ''); ?></td>
                   <td class="logo-cell">
                     <?php if (!empty($seeker['profile_picture'])): ?>
-                      <img src="profile_pics/<?php echo htmlspecialchars($seeker['profile_picture']); ?>" alt="Photo" class="company-logo-img" style="width:60px;height:60px;object-fit:contain;background:#fff;border-radius:10px;">
+                      <img src="profile_pics/<?php echo htmlspecialchars($seeker['profile_picture']); ?>" alt="Photo" class="thumb">
                     <?php else: ?>
-                      <span style="color:#ccc;">No photo available.</span>
+                      <span style="color:#ccc;">No photo</span>
                     <?php endif; ?>
                   </td>
                 </tr>
@@ -388,41 +717,17 @@ try {
                   <td><?php echo htmlspecialchars($job['salary'] ?? ''); ?></td>
                   <td><?php echo htmlspecialchars($job['location'] ?? ''); ?></td>
                   <td title="<?php echo htmlspecialchars((string)($job['job_description'] ?? '')); ?>">
-                    <?php
-                      $full = (string)($job['job_description'] ?? '');
-                      $short = strlen($full) > 60 ? substr($full, 0, 60) . '…' : $full;
-                      echo htmlspecialchars($short);
-                    ?>
+                    <?php $full = (string)($job['job_description'] ?? '');
+                    echo htmlspecialchars(strlen($full) > 60 ? substr($full, 0, 60) . '…' : $full); ?>
                   </td>
                   <td title="<?php echo htmlspecialchars((string)($job['requirements'] ?? '')); ?>">
-                    <?php
-                      $fullReq = (string)($job['requirements'] ?? '');
-                      $shortReq = strlen($fullReq) > 60 ? substr($fullReq, 0, 60) . '…' : $fullReq;
-                      echo htmlspecialchars($shortReq);
-                    ?>
+                    <?php $fullReq = (string)($job['requirements'] ?? '');
+                    echo htmlspecialchars(strlen($fullReq) > 60 ? substr($fullReq, 0, 60) . '…' : $fullReq); ?>
                   </td>
-                  <td>
-                    <?php
-                      $p = $job['posted_at'] ?? '';
-                      $pfmt = '';
-                      if (!empty($p)) {
-                        $pts = strtotime($p);
-                        $pfmt = $pts ? date('M d, Y', $pts) : $p;
-                      }
-                      echo htmlspecialchars($pfmt);
-                    ?>
-                  </td>
-                  <td>
-                    <?php
-                      $d = $job['deadline'] ?? '';
-                      $fmt = '';
-                      if (!empty($d)) {
-                        $ts = strtotime($d);
-                        $fmt = $ts ? date('M d, Y', $ts) : $d;
-                      }
-                      echo htmlspecialchars($fmt);
-                    ?>
-                  </td>
+                  <td><?php $p = $job['posted_at'] ?? '';
+                      echo htmlspecialchars($p ? date('M d, Y', strtotime($p)) : ''); ?></td>
+                  <td><?php $d = $job['deadline'] ?? '';
+                      echo htmlspecialchars($d ? date('M d, Y', strtotime($d)) : ''); ?></td>
                   <td><?php echo htmlspecialchars($job['status'] ?? ''); ?></td>
                 </tr>
               <?php endforeach; ?>
@@ -442,15 +747,11 @@ try {
     <div id="adminsSection" class="section" style="display:none;">
       <div class="companies-title-bar mb-4">Add Admin Role</div>
 
-      <?php if ($admin_success): ?>
-        <div class="alert alert-success"><?php echo htmlspecialchars($admin_success); ?></div>
-      <?php endif; ?>
-      <?php if ($admin_error): ?>
-        <div class="alert alert-danger"><?php echo htmlspecialchars($admin_error); ?></div>
-      <?php endif; ?>
+      <?php if ($admin_success): ?><div class="alert alert-success"><?php echo htmlspecialchars($admin_success); ?></div><?php endif; ?>
+      <?php if ($admin_error): ?><div class="alert alert-danger"><?php echo htmlspecialchars($admin_error); ?></div><?php endif; ?>
 
       <div class="form-card mb-4">
-        <form method="post" id="addAdminForm" novalidate>
+        <form method="post" id="addAdminForm" enctype="multipart/form-data" novalidate>
           <input type="hidden" name="action" value="add_admin">
 
           <div class="form-grid">
@@ -477,9 +778,16 @@ try {
               <input type="text" name="phone" class="form-control" pattern="[0-9+\-()\s]{6,20}" title="Phone only" required>
             </div>
 
-            <div class="full">
+            <!-- Address and Photo side-by-side -->
+            <div class="col-6">
               <label class="form-label">Address</label>
               <input type="text" name="address" class="form-control" required>
+            </div>
+
+            <div class="col-6">
+              <label class="form-label">Photo (JPG/PNG/GIF/WebP, max 3MB)</label>
+              <input type="file" name="profile_picture" class="form-control"
+                accept=".jpg,.jpeg,.png,.gif,.webp,image/*" required>
             </div>
 
             <div class="full form-actions">
@@ -499,6 +807,7 @@ try {
             <thead>
               <tr>
                 <th>User Id</th>
+                <th>Photo</th>
                 <th>Full Name</th>
                 <th>Email</th>
                 <th>Phone</th>
@@ -510,6 +819,13 @@ try {
               <?php foreach ($admins as $a): ?>
                 <tr>
                   <td><?php echo htmlspecialchars($a['user_id'] ?? ''); ?></td>
+                  <td class="logo-cell">
+                    <?php if (!empty($a['profile_picture'])): ?>
+                      <img src="profile_pics/<?php echo htmlspecialchars($a['profile_picture']); ?>" alt="Admin" class="thumb">
+                    <?php else: ?>
+                      <span style="color:#ccc;">No photo</span>
+                    <?php endif; ?>
+                  </td>
                   <td><?php echo htmlspecialchars($a['full_name'] ?? ''); ?></td>
                   <td><?php echo htmlspecialchars($a['email'] ?? ''); ?></td>
                   <td><?php echo htmlspecialchars($a['phone'] ?? ''); ?></td>
@@ -523,19 +839,87 @@ try {
       <?php endif; ?>
     </div>
 
-    <!-- Extras -->
-    <div id="feedbacksSection" class="section" style="display:none;">
-      <div class="companies-title-bar mb-4">Feedbacks</div>
-      <p class="small-hint">(Connect your feedbacks page here if needed.)</p>
-    </div>
+    <!-- Profile (for CURRENT ADMIN only) -->
     <div id="profileSection" class="section" style="display:none;">
       <div class="companies-title-bar mb-4">Profile</div>
-      <p class="small-hint">Profile content here.</p>
+
+      <?php if ($profile_success): ?><div class="alert alert-success"><?php echo htmlspecialchars($profile_success); ?></div><?php endif; ?>
+      <?php if ($profile_error): ?><div class="alert alert-danger"><?php echo htmlspecialchars($profile_error); ?></div><?php endif; ?>
+
+      <div class="profile-card">
+        <form method="post" enctype="multipart/form-data">
+          <input type="hidden" name="action" value="update_admin_profile">
+
+          <div class="text-center mb-3">
+            <img src="<?php echo !empty($profile_admin['profile_picture']) ? 'profile_pics/' . htmlspecialchars($profile_admin['profile_picture']) : 'default_user.png'; ?>"
+              class="profile-img" id="profilePreview" alt="Profile">
+            <div style="max-width:320px;margin:6px auto 0;">
+              <input type="file" name="p_profile_picture" accept="image/*" class="form-control"
+                onchange="previewProfilePic(this)">
+            </div>
+          </div>
+
+          <div class="form-edit-row">
+            <div style="flex:1">
+              <div class="field-label">Full Name</div>
+              <input type="text" name="p_full_name" class="form-control"
+                value="<?php echo htmlspecialchars($profile_admin['full_name'] ?? ''); ?>"
+                <?php echo !empty($profile_admin['full_name']) ? 'readonly' : ''; ?> required>
+            </div>
+            <?php if (!empty($profile_admin['full_name'])): ?>
+              <button type="button" class="edit-btn" onclick="toggleEdit(this)">✎ Edit</button>
+            <?php endif; ?>
+          </div>
+
+          <div class="form-edit-row">
+            <div style="flex:1">
+              <div class="field-label">Email</div>
+              <input type="email" name="p_email" class="form-control"
+                value="<?php echo htmlspecialchars($profile_admin['email'] ?? ''); ?>"
+                <?php echo !empty($profile_admin['email']) ? 'readonly' : ''; ?> required>
+            </div>
+            <?php if (!empty($profile_admin['email'])): ?>
+              <button type="button" class="edit-btn" onclick="toggleEdit(this)">✎ Edit</button>
+            <?php endif; ?>
+          </div>
+
+          <div class="form-edit-row">
+            <div style="flex:1">
+              <div class="field-label">Phone</div>
+              <input type="text" name="p_phone" class="form-control"
+                value="<?php echo htmlspecialchars($profile_admin['phone'] ?? ''); ?>"
+                <?php echo !empty($profile_admin['phone']) ? 'readonly' : ''; ?>>
+            </div>
+            <?php if (!empty($profile_admin['phone'])): ?>
+              <button type="button" class="edit-btn" onclick="toggleEdit(this)">✎ Edit</button>
+            <?php endif; ?>
+          </div>
+
+          <div class="form-edit-row">
+            <div style="flex:1">
+              <div class="field-label">Address</div>
+              <input type="text" name="p_address" class="form-control"
+                value="<?php echo htmlspecialchars($profile_admin['address'] ?? ''); ?>"
+                <?php echo !empty($profile_admin['address']) ? 'readonly' : ''; ?> required>
+            </div>
+            <?php if (!empty($profile_admin['address'])): ?>
+              <button type="button" class="edit-btn" onclick="toggleEdit(this)">✎ Edit</button>
+            <?php endif; ?>
+          </div>
+
+          <div class="mt-3 text-center">
+            <button type="submit" class="btn btn-warning px-4">Save Changes</button>
+          </div>
+        </form>
+      </div>
     </div>
+
+    <!-- Settings -->
     <div id="settingsSection" class="section" style="display:none;">
       <div class="companies-title-bar mb-4">Settings</div>
       <p class="small-hint">Settings content here.</p>
     </div>
   </div>
 </body>
+
 </html>
