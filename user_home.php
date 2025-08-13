@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -10,16 +11,18 @@
     body {
       background: #f8fafc;
     }
+
     .hero-section {
       background: #f8fafc;
       padding: 70px 0 50px 0;
       text-align: center;
     }
+
     .search-bar {
       max-width: 700px;
       margin: 0 auto;
       margin-top: 30px;
-      box-shadow: 0 2px 16px rgba(0,0,0,0.06);
+      box-shadow: 0 2px 16px rgba(0, 0, 0, 0.06);
       border-radius: 1.5rem;
       background: #fff;
       padding: 1.5rem 2rem;
@@ -28,6 +31,7 @@
       align-items: stretch;
       gap: 1rem;
     }
+
     .search-row {
       display: flex;
       flex-wrap: wrap;
@@ -35,14 +39,17 @@
       align-items: center;
       margin-top: 0.3rem;
     }
+
     .search-bar input[type="text"] {
       flex: 1 1 auto;
       min-width: 180px;
     }
+
     .search-bar select {
       min-width: 170px;
       max-width: 230px;
     }
+
     .btn-search {
       min-width: 110px;
       background: #ffc107;
@@ -54,22 +61,26 @@
       padding: 0.45rem 0;
       transition: background 0.18s;
     }
+
     .btn-search:hover {
       background: #ff8800;
       color: #fff;
     }
+
     .popular-label {
       font-size: 1.12rem;
       color: #22223b;
       font-weight: 500;
       margin-right: 12px;
     }
+
     .popular-tags {
       margin-top: 1rem;
       display: flex;
       gap: 0.7rem;
       justify-content: center;
     }
+
     .popular-btn {
       border: 1.7px solid #ffc107;
       color: #ffc107;
@@ -80,11 +91,13 @@
       font-weight: 500;
       transition: background 0.12s, color 0.12s;
     }
+
     .popular-btn:hover {
       background: #fff8ec;
       color: #ff8800;
       border-color: #ff8800;
     }
+
     .footer {
       background: #1a202c;
       color: #fff;
@@ -93,6 +106,7 @@
     }
   </style>
 </head>
+
 <body>
   <!-- Navbar for logged-in user -->
   <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
@@ -107,7 +121,7 @@
             <a class="nav-link active" aria-current="page" href="home.php">Home</a>
           </li>
           <li class="nav-item">
-            <a class="nav-link" href="user_profile.php">Profile</a>
+            <a class="nav-link" href="user_dashboard.php">Dashboard</a>
           </li>
           <li class="nav-item">
             <a class="nav-link" href="recommended.php">Recommended Jobs</a>
@@ -163,4 +177,5 @@
     </div>
   </footer>
 </body>
+
 </html>

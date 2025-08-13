@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -12,30 +13,35 @@
       padding: 70px 0 50px 0;
       text-align: center;
     }
+
     .search-bar {
       max-width: 700px;
       margin: 0 auto;
       margin-top: 30px;
-      box-shadow: 0 2px 16px rgba(0,0,0,0.06);
+      box-shadow: 0 2px 16px rgba(0, 0, 0, 0.06);
       border-radius: 1.5rem;
       background: #fff;
       padding: 1.5rem;
     }
+
     .job-card {
       border-radius: 1.5rem;
-      box-shadow: 0 2px 16px rgba(0,0,0,0.06);
+      box-shadow: 0 2px 16px rgba(0, 0, 0, 0.06);
       margin-bottom: 2rem;
     }
+
     .company-logo {
       height: 48px;
       width: auto;
       margin-right: 10px;
       object-fit: contain;
     }
+
     .how-works-icon {
       font-size: 2.5rem;
       color: #ffaa2b;
     }
+
     .footer {
       background: #1a202c;
       color: #fff;
@@ -44,6 +50,7 @@
     }
   </style>
 </head>
+
 <body>
   <!-- Navbar -->
   <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
@@ -202,4 +209,5 @@
   </footer>
 
 </body>
+
 </html>
