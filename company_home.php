@@ -124,7 +124,7 @@
             <a class="nav-link" href="company_profile.php">Profile</a>
           </li>
           <li class="nav-item">
-            <a class="nav-link" href="company_dashboard.php">Dashboard</a>
+            <a class="nav-link" href="c_dashboard.php">Dashboard</a>
           </li>
           <li class="nav-item">
             <a class="btn btn-warning ms-2 text-white fw-bold" href="post_job.php" style="border-radius:0.6rem;">Post Job</a>
