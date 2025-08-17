@@ -315,11 +315,13 @@ try {
       display: inline-block;
     }
 
+    /* ====== Tables ====== */
     .dark-table {
       background: #22223b;
       color: #ffc107;
       border-radius: 0.7rem;
       overflow: hidden;
+      width: 100%;
     }
 
     .dark-table th,
@@ -331,6 +333,11 @@ try {
       font-size: 0.9rem;
       vertical-align: middle !important;
       padding: 0.5rem 0.8rem;
+      /* >>> Force JUSTIFY for all table text <<< */
+      text-align: justify !important;
+      text-justify: inter-word;
+      word-break: break-word;
+      white-space: normal;
     }
 
     .dark-table th {
@@ -338,7 +345,6 @@ try {
       font-size: 0.95rem;
       letter-spacing: 0.03rem;
       border-bottom: 2px solid #ffc107 !important;
-      text-align: left;
     }
 
     .logo-cell {
@@ -416,13 +422,11 @@ try {
     .profile-card {
       max-width: 740px;
       margin: 10px auto 0;
-      /* <— centers horizontally */
       background: #fff;
       border-radius: 1.1rem;
       box-shadow: 0 3px 16px rgba(30, 30, 60, .07);
       padding: 1.5rem;
     }
-
 
     .profile-img {
       width: 112px;
@@ -455,6 +459,19 @@ try {
       border: none;
       cursor: pointer;
       font-size: 1.05rem;
+    }
+
+    /* ====== Jobs table row highlighting ====== */
+    /* We use a second class on the jobs table so we can safely override dark theme cell colors */
+    .jobs-table tr.row-inactive td {
+      background: #fde7e7 !important;   /* light red */
+      color: #842029 !important;        /* bootstrap danger text */
+      border-color: #f5c2c7 !important;
+    }
+    .jobs-table tr.row-closed td {
+      background: #e9ecef !important;   /* grey */
+      color: #495057 !important;
+      border-color: #d3d6d8 !important;
     }
   </style>
 
@@ -580,7 +597,7 @@ try {
         <div class="alert alert-info">No companies found.</div>
       <?php else: ?>
         <div class="table-responsive">
-          <table class="table dark-table align-middle" style="font-weight:bold; text-align:center;">
+          <table class="table dark-table align-middle" style="font-weight:bold;">
             <thead>
               <tr>
                 <th>Company Id</th>
@@ -633,7 +650,7 @@ try {
         <div class="alert alert-info">No seekers found.</div>
       <?php else: ?>
         <div class="table-responsive">
-          <table class="table dark-table align-middle" style="font-weight:bold; text-align:center;">
+          <table class="table dark-table align-middle" style="font-weight:bold;">
             <thead>
               <tr>
                 <th>User Id</th>
@@ -691,7 +708,8 @@ try {
         <div class="alert alert-info">No jobs found.</div>
       <?php else: ?>
         <div class="table-responsive">
-          <table class="table dark-table align-middle" style="font-weight:bold; text-align:center;">
+          <!-- Added jobs-table class for targeted row coloring -->
+          <table class="table dark-table jobs-table align-middle" style="font-weight:bold;">
             <thead>
               <tr>
                 <th>Job Id</th>
@@ -709,7 +727,16 @@ try {
             </thead>
             <tbody>
               <?php foreach ($jobs as $job): ?>
-                <tr>
+                <?php
+                  $statusRaw = strtolower(trim((string)($job['status'] ?? '')));
+                  $rowClass = '';
+                  if ($statusRaw === 'inactive') {
+                    $rowClass = 'row-inactive';
+                  } elseif ($statusRaw === 'closed') {
+                    $rowClass = 'row-closed';
+                  }
+                ?>
+                <tr class="<?php echo $rowClass; ?>">
                   <td><?php echo htmlspecialchars($job['job_id'] ?? ''); ?></td>
                   <td><?php echo htmlspecialchars(!empty($job['company_name']) ? $job['company_name'] : ($job['company_id'] ?? '')); ?></td>
                   <td><?php echo htmlspecialchars($job['job_title'] ?? ''); ?></td>
@@ -717,17 +744,19 @@ try {
                   <td><?php echo htmlspecialchars($job['salary'] ?? ''); ?></td>
                   <td><?php echo htmlspecialchars($job['location'] ?? ''); ?></td>
                   <td title="<?php echo htmlspecialchars((string)($job['job_description'] ?? '')); ?>">
-                    <?php $full = (string)($job['job_description'] ?? '');
-                    echo htmlspecialchars(strlen($full) > 60 ? substr($full, 0, 60) . '…' : $full); ?>
+                    <?php
+                      $full = (string)($job['job_description'] ?? '');
+                      echo htmlspecialchars(strlen($full) > 60 ? substr($full, 0, 60) . '…' : $full);
+                    ?>
                   </td>
                   <td title="<?php echo htmlspecialchars((string)($job['requirements'] ?? '')); ?>">
-                    <?php $fullReq = (string)($job['requirements'] ?? '');
-                    echo htmlspecialchars(strlen($fullReq) > 60 ? substr($fullReq, 0, 60) . '…' : $fullReq); ?>
+                    <?php
+                      $fullReq = (string)($job['requirements'] ?? '');
+                      echo htmlspecialchars(strlen($fullReq) > 60 ? substr($fullReq, 0, 60) . '…' : $fullReq);
+                    ?>
                   </td>
-                  <td><?php $p = $job['posted_at'] ?? '';
-                      echo htmlspecialchars($p ? date('M d, Y', strtotime($p)) : ''); ?></td>
-                  <td><?php $d = $job['deadline'] ?? '';
-                      echo htmlspecialchars($d ? date('M d, Y', strtotime($d)) : ''); ?></td>
+                  <td><?php $p = $job['posted_at'] ?? ''; echo htmlspecialchars($p ? date('M d, Y', strtotime($p)) : ''); ?></td>
+                  <td><?php $d = $job['deadline'] ?? ''; echo htmlspecialchars($d ? date('M d, Y', strtotime($d)) : ''); ?></td>
                   <td><?php echo htmlspecialchars($job['status'] ?? ''); ?></td>
                 </tr>
               <?php endforeach; ?>
@@ -803,7 +832,7 @@ try {
         <div class="alert alert-info">No admins yet.</div>
       <?php else: ?>
         <div class="table-responsive">
-          <table class="table dark-table align-middle" style="font-weight:bold; text-align:center;">
+          <table class="table dark-table align-middle" style="font-weight:bold;">
             <thead>
               <tr>
                 <th>User Id</th>

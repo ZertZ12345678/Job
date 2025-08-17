@@ -26,25 +26,31 @@ $error = '';
 $form_data = $_POST ?? [];
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $job_title = trim($_POST['job_title'] ?? '');
-    $job_description = trim($_POST['job_description'] ?? '');
-    $employment_type = $_POST['employment_type'] ?? '';
-    $salary = trim($_POST['salary'] ?? '');
-    $requirements = trim($_POST['requirements'] ?? '');
-    $deadline = $_POST['deadline'] ?? '';
-    $posted_at = date("Y-m-d H:i:s");
-    $status = 'Active';
-    $payment_method = $_POST['payment_method'] ?? '';
+    $job_title         = trim($_POST['job_title'] ?? '');
+    $job_description   = trim($_POST['job_description'] ?? '');
+    $description_detail = trim($_POST['description_detail'] ?? '');  // NEW
+    $employment_type   = $_POST['employment_type'] ?? '';
+    $salary            = trim($_POST['salary'] ?? '');
+    $requirements      = trim($_POST['requirements'] ?? '');
+    $deadline          = $_POST['deadline'] ?? '';
+    $posted_at         = date("Y-m-d H:i:s");
+    $status            = 'Active';
+    $payment_method    = $_POST['payment_method'] ?? '';
 
-    if ($job_title && $job_description && $employment_type && $salary && $requirements && $deadline && $payment_method) {
+    if ($job_title && $job_description && $description_detail && $employment_type && $salary && $requirements && $deadline && $payment_method) {
         try {
-            // Insert into jobs table
-            $stmt = $pdo->prepare("INSERT INTO jobs (company_id, job_title, job_description, location, salary, employment_type, requirements, posted_at, deadline, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            // Insert into jobs table (description_detail included)
+            $stmt = $pdo->prepare("
+                INSERT INTO jobs
+                    (company_id, job_title, job_description, description_detail, location, salary, employment_type, requirements, posted_at, deadline, status)
+                VALUES
+                    (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ");
             $stmt->execute([
                 $company_id,
                 $job_title,
                 $job_description,
+                $description_detail,              // NEW
                 $company['address'],
                 $salary,
                 $employment_type,
@@ -57,8 +63,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
             // Insert payment record (NO remarks column)
             $payment_status = 'Completed';
-            $payment_stmt = $pdo->prepare("INSERT INTO post_payment (company_id, amount, payment_date, payment_status, job_id, payment_method)
-                VALUES (?, ?, NOW(), ?, ?, ?)");
+            $payment_stmt = $pdo->prepare("
+                INSERT INTO post_payment (company_id, amount, payment_date, payment_status, job_id, payment_method)
+                VALUES (?, ?, NOW(), ?, ?, ?)
+            ");
             $payment_stmt->execute([
                 $company_id,
                 $payment_amount,
@@ -68,13 +76,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             ]);
 
             $success = "Job posted successfully!";
-            // Clear form data on success
             $form_data = [];
         } catch (PDOException $e) {
             $error = "Error posting job/payment: " . $e->getMessage();
         }
     } else {
-        $error = "Please fill in all required fields and select payment method.";
+        $error = "Please fill in all required fields (including Description Detail) and select payment method.";
     }
 }
 ?>
@@ -97,7 +104,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             max-width: 520px;
             margin: 60px auto 0 auto;
             background: #fff;
-            padding: 35px 30px 30px 30px;
+            padding: 35px 30px 30px;
             border-radius: 22px;
             box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
         }
@@ -105,7 +112,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         h3 {
             font-weight: 700;
             color: #ffb200;
-            letter-spacing: 0.5px;
+            letter-spacing: .5px;
             margin-bottom: 32px;
             text-align: center;
         }
@@ -130,7 +137,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             width: 100%;
             background-color: #ffb200;
             border: none;
-            box-shadow: 0 2px 8px rgba(255, 178, 0, 0.10);
+            box-shadow: 0 2px 8px rgba(255, 178, 0, .10);
             transition: background .2s;
         }
 
@@ -152,13 +159,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             border-radius: 12px;
             cursor: pointer;
             border: 2px solid transparent;
-            transition: border-color 0.2s;
+            transition: border-color .2s;
             background: #fff;
         }
 
         .pay-method-img.selected {
             border: 2px solid #ffb200;
-            box-shadow: 0 2px 10px rgba(255, 178, 0, 0.18);
+            box-shadow: 0 2px 10px rgba(255, 178, 0, .18);
         }
 
         #payInfoBox {
@@ -168,14 +175,14 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         }
 
         .copy-btn {
-            font-size: 0.98rem;
+            font-size: .98rem;
             padding: 1px 8px;
             margin-left: 6px;
         }
 
         @media (max-width: 600px) {
             .post-job-container {
-                padding: 20px 7px 20px 7px;
+                padding: 20px 7px;
             }
 
             .pay-method-img {
@@ -194,6 +201,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         <?php elseif ($error): ?>
             <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
         <?php endif; ?>
+
         <form method="post" autocomplete="off">
             <div class="mb-3">
                 <label>Company Name</label>
@@ -203,15 +211,25 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 <label>Location</label>
                 <input type="text" class="form-control" value="<?= htmlspecialchars($company['address']) ?>" readonly>
             </div>
+
             <div class="mb-3">
                 <label>Job Title <span style="color:#dc3545;">*</span></label>
                 <input type="text" class="form-control" name="job_title" required
                     value="<?= htmlspecialchars($form_data['job_title'] ?? '') ?>">
             </div>
+
             <div class="mb-3">
                 <label>Job Description <span style="color:#dc3545;">*</span></label>
                 <textarea class="form-control" name="job_description" rows="4" required><?= htmlspecialchars($form_data['job_description'] ?? '') ?></textarea>
             </div>
+
+            <!-- NEW: Description Detail under Job Description -->
+            <div class="mb-3">
+                <label>Description Detail <span style="color:#dc3545;">*</span></label>
+                <textarea class="form-control" name="description_detail" rows="4" required><?= htmlspecialchars($form_data['description_detail'] ?? '') ?></textarea>
+                <div class="form-text">Add a richer, longer description (e.g., team, project scope, benefits, tech stack, interview process).</div>
+            </div>
+
             <div class="mb-3">
                 <label>Employment Type <span style="color:#dc3545;">*</span></label>
                 <select class="form-select" name="employment_type" required>
@@ -220,15 +238,18 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     <option value="Part Time" <?= (($form_data['employment_type'] ?? '') == 'Part Time') ? 'selected' : '' ?>>Part Time</option>
                 </select>
             </div>
+
             <div class="mb-3">
                 <label>Salary <span style="color:#dc3545;">*</span></label>
                 <input type="text" class="form-control" name="salary" required
                     value="<?= htmlspecialchars($form_data['salary'] ?? '') ?>">
             </div>
+
             <div class="mb-3">
                 <label>Requirement <span style="color:#dc3545;">*</span></label>
                 <textarea class="form-control" name="requirements" rows="2" required><?= htmlspecialchars($form_data['requirements'] ?? '') ?></textarea>
             </div>
+
             <div class="mb-3">
                 <label>Deadline <span style="color:#dc3545;">*</span></label>
                 <input type="date" class="form-control" name="deadline" required
@@ -294,7 +315,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     payInfoBox.classList.remove('d-none');
                 });
             });
-            // Show payment info box if payment method is already set (after form error)
             if (paymentInput.value !== '') {
                 payInfoBox.classList.remove('d-none');
             }
