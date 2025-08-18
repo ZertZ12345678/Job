@@ -190,10 +190,11 @@
   <section class="container py-5">
     <h2 class="mb-4 fw-semibold text-center">Featured Companies</h2>
     <div class="d-flex flex-wrap justify-content-center gap-4">
-      <img src="https://via.placeholder.com/90x40?text=ABC+Tech" class="company-logo" alt="ABC Tech">
-      <img src="https://via.placeholder.com/90x40?text=Bright+Marketing" class="company-logo" alt="Bright Marketing">
-      <img src="https://via.placeholder.com/90x40?text=Golden+Finance" class="company-logo" alt="Golden Finance">
-      <img src="https://via.placeholder.com/90x40?text=NextGen" class="company-logo" alt="NextGen">
+       <a href="https://ayabank.com/"><img src="company_logos\logo_688bd678d33ad.png" class="company-logo"></a>
+       <a href="https://www.kbzbank.com/en/"><img src="company_logos\logo_688bd4015182f.png" class="company-logo"></a>
+       <a href="https://shwebank.com/"><img src="company_logos\logo_6894abc08379b.png" class="company-logo"></a>
+       <a href="https://www.uab.com.mm/"><img src="company_logos\logo_6894ab92e37cb.jpg" class="company-logo"></a>
+     
       <!-- Add more logos -->
     </div>
   </section>

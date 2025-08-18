@@ -464,12 +464,16 @@ try {
     /* ====== Jobs table row highlighting ====== */
     /* We use a second class on the jobs table so we can safely override dark theme cell colors */
     .jobs-table tr.row-inactive td {
-      background: #fde7e7 !important;   /* light red */
-      color: #842029 !important;        /* bootstrap danger text */
+      background: #fde7e7 !important;
+      /* light red */
+      color: #842029 !important;
+      /* bootstrap danger text */
       border-color: #f5c2c7 !important;
     }
+
     .jobs-table tr.row-closed td {
-      background: #e9ecef !important;   /* grey */
+      background: #e9ecef !important;
+      /* grey */
       color: #495057 !important;
       border-color: #d3d6d8 !important;
     }
@@ -728,13 +732,13 @@ try {
             <tbody>
               <?php foreach ($jobs as $job): ?>
                 <?php
-                  $statusRaw = strtolower(trim((string)($job['status'] ?? '')));
-                  $rowClass = '';
-                  if ($statusRaw === 'inactive') {
-                    $rowClass = 'row-inactive';
-                  } elseif ($statusRaw === 'closed') {
-                    $rowClass = 'row-closed';
-                  }
+                $statusRaw = strtolower(trim((string)($job['status'] ?? '')));
+                $rowClass = '';
+                if ($statusRaw === 'inactive') {
+                  $rowClass = 'row-inactive';
+                } elseif ($statusRaw === 'closed') {
+                  $rowClass = 'row-closed';
+                }
                 ?>
                 <tr class="<?php echo $rowClass; ?>">
                   <td><?php echo htmlspecialchars($job['job_id'] ?? ''); ?></td>
@@ -745,18 +749,20 @@ try {
                   <td><?php echo htmlspecialchars($job['location'] ?? ''); ?></td>
                   <td title="<?php echo htmlspecialchars((string)($job['job_description'] ?? '')); ?>">
                     <?php
-                      $full = (string)($job['job_description'] ?? '');
-                      echo htmlspecialchars(strlen($full) > 60 ? substr($full, 0, 60) . '…' : $full);
+                    $full = (string)($job['job_description'] ?? '');
+                    echo htmlspecialchars(strlen($full) > 60 ? substr($full, 0, 60) . '…' : $full);
                     ?>
                   </td>
                   <td title="<?php echo htmlspecialchars((string)($job['requirements'] ?? '')); ?>">
                     <?php
-                      $fullReq = (string)($job['requirements'] ?? '');
-                      echo htmlspecialchars(strlen($fullReq) > 60 ? substr($fullReq, 0, 60) . '…' : $fullReq);
+                    $fullReq = (string)($job['requirements'] ?? '');
+                    echo htmlspecialchars(strlen($fullReq) > 60 ? substr($fullReq, 0, 60) . '…' : $fullReq);
                     ?>
                   </td>
-                  <td><?php $p = $job['posted_at'] ?? ''; echo htmlspecialchars($p ? date('M d, Y', strtotime($p)) : ''); ?></td>
-                  <td><?php $d = $job['deadline'] ?? ''; echo htmlspecialchars($d ? date('M d, Y', strtotime($d)) : ''); ?></td>
+                  <td><?php $p = $job['posted_at'] ?? '';
+                      echo htmlspecialchars($p ? date('M d, Y', strtotime($p)) : ''); ?></td>
+                  <td><?php $d = $job['deadline'] ?? '';
+                      echo htmlspecialchars($d ? date('M d, Y', strtotime($d)) : ''); ?></td>
                   <td><?php echo htmlspecialchars($job['status'] ?? ''); ?></td>
                 </tr>
               <?php endforeach; ?>
