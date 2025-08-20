@@ -2,7 +2,6 @@
 // job_detail.php
 require_once "connect.php"; // provides $pdo (PDO)
 
-
 $LOGO_DIR = "company_logos/";
 
 // --- Helpers ---
@@ -30,8 +29,7 @@ if (empty($error)) {
         $today = date('Y-m-d');
         $up = $pdo->prepare("UPDATE jobs SET status='Inactive' WHERE job_id=? AND status='Active' AND deadline < ?");
         $up->execute([$job_id, $today]);
-    } catch (PDOException $e) {
-        // Optionally log $e->getMessage()
+    } catch (PDOException $e) { /* optionally log */
     }
 }
 
@@ -40,27 +38,27 @@ $job = null;
 if (empty($error)) {
     try {
         $sql = "
-      SELECT
-        j.job_id,
-        j.job_title,
-        j.description_detail,
-        j.employment_type,
-        j.requirements,
-        j.salary,
-        j.location,
-        j.deadline,
-        j.status,
-        j.posted_at,
-        c.company_id,
-        c.company_name,
-        c.email   AS company_email,
-        c.phone   AS company_phone,
-        c.logo    AS company_logo
-      FROM jobs j
-      JOIN companies c ON c.company_id = j.company_id
-      WHERE j.job_id = ?
-      LIMIT 1
-    ";
+          SELECT
+            j.job_id,
+            j.job_title,
+            j.description_detail,
+            j.employment_type,
+            j.requirements,
+            j.salary,
+            j.location,
+            j.deadline,
+            j.status,
+            j.posted_at,
+            c.company_id,
+            c.company_name,
+            c.email   AS company_email,
+            c.phone   AS company_phone,
+            c.logo    AS company_logo
+          FROM jobs j
+          JOIN companies c ON c.company_id = j.company_id
+          WHERE j.job_id = ?
+          LIMIT 1
+        ";
         $stmt = $pdo->prepare($sql);
         $stmt->execute([$job_id]);
         $job = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -77,11 +75,9 @@ if (empty($error)) {
 // --- 4) Determine badge class for status ---
 $badgeClass = "bg-secondary";
 if ($job && isset($job['status'])) {
-    $badgeClass = ($job['status'] === 'Active') ? 'bg-success' : (($job['status'] === 'Closed') ? 'bg-danger' : 'bg-secondary');
+    $badgeClass = ($job['status'] === 'Active') ? 'bg-success'
+        : (($job['status'] === 'Closed') ? 'bg-danger' : 'bg-secondary');
 }
-
-// Disable apply button if not Active
-$applyDisabled = ($job && $job['status'] !== 'Active');
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -125,7 +121,6 @@ $applyDisabled = ($job && $job['status'] !== 'Active');
 
 <body>
 
-    <!-- Navbar -->
     <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
         <div class="container">
             <a class="navbar-brand fw-bold text-warning" href="home.php">JobHive</a>
@@ -142,7 +137,6 @@ $applyDisabled = ($job && $job['status'] !== 'Active');
         </div>
     </nav>
 
-    <!-- Header -->
     <header class="page-header py-4">
         <div class="container">
             <h1 class="h3 fw-bold mt-2 mb-0">Job Details</h1>
@@ -159,8 +153,7 @@ $applyDisabled = ($job && $job['status'] !== 'Active');
                     <div class="col-12 col-lg-8">
                         <div class="card p-4">
                             <div class="d-flex align-items-start">
-                                <img
-                                    class="logo"
+                                <img class="logo"
                                     src="<?= e($LOGO_DIR . $job['company_logo']) ?>"
                                     alt="Company Logo"
                                     onerror="this.src='https://via.placeholder.com/72'">
@@ -188,7 +181,7 @@ $applyDisabled = ($job && $job['status'] !== 'Active');
                                 </div>
                                 <div class="col-12 col-md-6 mb-3">
                                     <div class="fw-semibold">Salary</div>
-                                    <div><?= e($job['salary'])?> MMK</div>
+                                    <div><?= e($job['salary']) ?> MMK</div>
                                 </div>
                                 <div class="col-12 col-md-6 mb-3">
                                     <div class="fw-semibold">Deadline</div>
@@ -204,16 +197,13 @@ $applyDisabled = ($job && $job['status'] !== 'Active');
                                 <div class="fw-semibold mb-1">Job Description</div>
                                 <p class="mb-3" style="text-align: justify;"><?= nl2br(e($job['description_detail'])) ?></p>
 
-
-
                                 <div class="fw-semibold mb-1">Requirements</div>
                                 <p class="mb-0" style="text-align: justify;"><?= nl2br(e($job['requirements'])) ?></p>
                             </div>
 
-                            <div class="mt-4 d-flex gap-2">
-                                <a href="resume.php?job_id=<?= (int)$job['job_id'] ?>"
-                                    class="btn btn-warning <?= $applyDisabled ? 'disabled' : '' ?>"
-                                    <?= $applyDisabled ? 'aria-disabled="true" tabindex="-1"' : '' ?>>
+                            <div class="mt-4 d-flex gap-2 align-items-center">
+                                <!-- Always go to resume.php with job_id -->
+                                <a href="#" class="btn btn-warning">
                                     I’m interested
                                 </a>
 
@@ -221,11 +211,10 @@ $applyDisabled = ($job && $job['status'] !== 'Active');
                                     Back
                                 </button>
 
-                                <?php if ($applyDisabled): ?>
-                                    <span class="align-self-center text-muted small">This job is not active.</span>
+                                <?php if ($job['status'] !== 'Active'): ?>
+                                    <span class="align-self-center text-muted small">This job is not active (you can still view/apply).</span>
                                 <?php endif; ?>
                             </div>
-
                         </div>
                     </div>
 
@@ -246,7 +235,6 @@ $applyDisabled = ($job && $job['status'] !== 'Active');
         </div>
     </main>
 
-    <!-- Footer -->
     <footer class="mt-5 py-4 bg-dark text-white">
         <div class="container d-flex flex-column align-items-center">
             <div class="mb-2">
@@ -257,7 +245,6 @@ $applyDisabled = ($job && $job['status'] !== 'Active');
             <small>&copy; 2025 JobHive. All rights reserved.</small>
         </div>
     </footer>
-
 </body>
 
 </html>
