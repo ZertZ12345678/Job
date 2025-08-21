@@ -246,7 +246,7 @@ if ($pp > 85) $barClass = 'bg-success';   // 86–100% green
     <!-- Sidebar -->
     <aside id="sidebar" class="sidebar d-flex flex-column">
         <div class="d-flex align-items-center justify-content-between mb-3">
-            <a class="brand" href="home.php">JobHive</a>
+            <a class="brand" href="user_home.php">JobHive</a>
             <button class="btn btn-sm btn-light d-lg-none" id="closeSidebar"><i class="bi bi-x-lg"></i></button>
         </div>
 

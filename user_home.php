@@ -1,62 +1,100 @@
 <?php
 require_once "connect.php";
-
-if (!isset($_SESSION)) {
+if (session_status() === PHP_SESSION_NONE) {
   session_start();
 }
 
-$LOGO_DIR = "company_logos/";
+/* ===== Guard: require logged-in user ===== */
+if (!isset($_SESSION['user_id'])) {
+  header("Location: login.php");
+  exit;
+}
+$user_id   = (int)($_SESSION['user_id'] ?? 0);
+$full_name = trim($_SESSION['full_name'] ?? '');
+$email     = trim($_SESSION['email'] ?? '');
 
-// --- Helper: safe text truncation (for display only) ---
+/* ===== Paths & helpers ===== */
+$LOGO_DIR    = "company_logos/";
+$PROFILE_DIR = "profile_pics/";
+
+/* Safe truncate (for display only) */
 if (!function_exists('safe_truncate')) {
   function safe_truncate($text, $limit = 160, $ellipsis = '…')
   {
     $text = (string)($text ?? '');
-    if (function_exists('mb_strimwidth')) {
-      return mb_strimwidth($text, 0, $limit, $ellipsis);
-    }
-    return (strlen($text) > $limit)
-      ? substr($text, 0, $limit - strlen($ellipsis)) . $ellipsis
-      : $text;
+    if (function_exists('mb_strimwidth')) return mb_strimwidth($text, 0, $limit, $ellipsis);
+    return (strlen($text) > $limit) ? substr($text, 0, $limit - strlen($ellipsis)) . $ellipsis : $text;
   }
 }
 
-// --- 1) Auto-update jobs whose deadline has passed -> Inactive ---
+/* Helper for initials (avatar fallback) */
+function initials($name)
+{
+  $parts = preg_split('/\s+/', trim((string)$name));
+  $ini = '';
+  foreach ($parts as $p) {
+    if ($p !== '') $ini .= mb_strtoupper(mb_substr($p, 0, 1));
+    if (mb_strlen($ini) >= 2) break;
+  }
+  return $ini ?: 'U';
+}
+
+/* ===== Fetch fresh user row (source of truth) ===== */
+$profile_picture = $_SESSION['profile_picture'] ?? null;
+try {
+  $u = $pdo->prepare("SELECT full_name, email, profile_picture FROM users WHERE user_id = ? LIMIT 1");
+  $u->execute([$user_id]);
+  $row = $u->fetch(PDO::FETCH_ASSOC);
+
+  if ($row) {
+    $full_name        = $row['full_name'] ?: $full_name;
+    $email            = $row['email'] ?: $email;
+    $profile_picture  = $row['profile_picture'] ?? null;
+
+    // Keep session in sync so other pages also show correct user
+    $_SESSION['full_name']        = $full_name;
+    $_SESSION['email']            = $email;
+    $_SESSION['profile_picture']  = $profile_picture;
+  } else {
+    // User row missing (deleted?) -> log out safely
+    header("Location: index.php");
+    exit;
+  }
+} catch (PDOException $e) {
+  // optional: log
+}
+
+/* ===== 1) Auto-set past-deadline jobs to Inactive ===== */
 try {
   $today = date('Y-m-d');
   $up = $pdo->prepare("UPDATE jobs SET status='Inactive' WHERE status='Active' AND deadline < ?");
   $up->execute([$today]);
 } catch (PDOException $e) {
-  // optional: log
 }
 
-// --- 2) Build search filters (NO DESCRIPTION SEARCH) ---
+/* ===== 2) Build search filters (NO DESCRIPTION SEARCH) ===== */
 $q        = '';
 $loc      = '';
 $isSearch = false;
 
 if (isset($_GET['csearch'])) {
-  // Form’s Search button pressed
   $q   = trim($_GET['q']   ?? '');
   $loc = trim($_GET['loc'] ?? '');
   $isSearch = true;
 } elseif (isset($_GET['q'])) {
-  // Popular quick tag (only q)
-  $q = trim($_GET['q']);
+  $q = trim($_GET['q'] ?? '');
   $isSearch = true;
 }
 
 $conds  = [];
 $params = [];
 
-/* Only job title and company name */
 if ($q !== '') {
   $conds[] = "(j.job_title LIKE ? OR c.company_name LIKE ?)";
   $like = "%{$q}%";
   array_push($params, $like, $like);
 }
 
-/* Location filter (partial match allowed) */
 if ($loc !== '') {
   $conds[] = "j.location LIKE ?";
   $params[] = "%{$loc}%";
@@ -64,18 +102,12 @@ if ($loc !== '') {
 
 $whereSql = $conds ? "WHERE " . implode(" AND ", $conds) : "";
 
-// --- 3) Fetch jobs: Active first; Inactive & Closed last; newest first within each group ---
+/* ===== 3) Fetch jobs: Active → Inactive → Closed; newest first in each ===== */
 try {
   $sql = "
     SELECT
-      j.job_id,
-      j.job_title,
-      j.job_description,
-      j.location,
-      j.status,
-      j.posted_at,
-      c.company_name,
-      c.logo
+      j.job_id, j.job_title, j.job_description, j.location,
+      j.status, j.posted_at, c.company_name, c.logo
     FROM jobs j
     JOIN companies c ON c.company_id = j.company_id
     $whereSql
@@ -83,10 +115,11 @@ try {
       CASE j.status
         WHEN 'Active' THEN 1
         WHEN 'Inactive' THEN 2
-        WHEN 'Closed' THEN 2
-        ELSE 3
+        WHEN 'Closed' THEN 3
+        ELSE 4
       END,
       j.posted_at DESC
+    LIMIT 60
   ";
   $stmt = $pdo->prepare($sql);
   $stmt->execute($params);
@@ -99,91 +132,124 @@ try {
 <html lang="en">
 
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>JobHive | User Home</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <style>
     body {
       background: #f8fafc;
     }
 
+    .navbar .avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: #fff3cd;
+      color: #ff8c00;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid rgba(0, 0, 0, .06);
+    }
+
     .hero-section {
       background: #f8fafc;
-      padding: 70px 0 50px 0;
+      padding: 64px 0 44px;
       text-align: center;
     }
 
+    .hero-section h1 {
+      font-weight: 700;
+    }
+
+    .hero-section .lead {
+      color: #556;
+    }
+
+    /* === Search area sizing & look === */
     .search-bar {
-      max-width: 700px;
-      margin: 0 auto;
-      margin-top: 30px;
-      box-shadow: 0 2px 16px rgba(0, 0, 0, .06);
-      border-radius: 1.5rem;
+      max-width: 920px;
+      margin: 26px auto 0;
+      padding: 1rem 1.25rem;
       background: #fff;
-      padding: 1.5rem 2rem;
+      border-radius: 2rem;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, .06);
       display: flex;
       flex-direction: column;
-      gap: 1rem;
+      gap: .9rem;
     }
 
     .search-row {
       display: flex;
       flex-wrap: wrap;
-      gap: 1rem;
+      gap: .75rem;
       align-items: center;
-      margin-top: .3rem;
+      margin-top: .1rem;
     }
 
-    .search-bar input[type="text"] {
-      flex: 1 1 auto;
-      min-width: 180px;
+    .search-bar .form-control {
+      min-height: 52px;
+      border-radius: .8rem;
+      font-size: 1rem;
+      padding: .65rem .9rem;
     }
 
-    .search-bar select {
-      min-width: 170px;
-      max-width: 230px;
+    .search-row .form-select {
+      min-width: 220px;
+      max-width: 260px;
+      min-height: 48px;
+      border-radius: .8rem;
+      font-size: .98rem;
     }
 
     .btn-search {
-      min-width: 110px;
+      min-width: 140px;
+      min-height: 48px;
+      border-radius: .8rem;
       background: #ffc107;
       color: #fff;
       border: none;
-      border-radius: .7rem;
-      font-weight: 500;
+      font-weight: 600;
       font-size: 1rem;
-      padding: .45rem 0;
+      padding: 0 .9rem;
       transition: background .18s;
     }
 
     .btn-search:hover {
-      background: #ff8800;
+      background: #ff9800;
       color: #fff;
     }
 
+    .search-bar input[type="text"] {
+      flex: 1 1 auto;
+      min-width: 280px;
+    }
+
     .popular-label {
-      font-size: 1.12rem;
+      font-size: 1.05rem;
       color: #22223b;
-      font-weight: 500;
-      margin-right: 50px;
+      font-weight: 600;
+      margin-right: 36px;
     }
 
     .popular-tags {
       margin-top: 1rem;
       display: flex;
-      gap: .7rem;
+      gap: .6rem;
       justify-content: center;
+      flex-wrap: wrap;
     }
 
     .popular-btn {
-      border: 1.7px solid #ffc107;
+      border: 1.6px solid #ffc107;
       color: #ffc107;
       background: #fff;
-      font-size: 1.01rem;
+      font-size: .98rem;
       border-radius: .55rem;
-      padding: .33rem 1.25rem;
+      padding: .3rem 1.15rem;
       font-weight: 500;
       transition: background .12s, color .12s, border-color .12s;
     }
@@ -215,7 +281,7 @@ try {
     .footer {
       background: #1a202c;
       color: #fff;
-      padding: 30px 0 10px 0;
+      padding: 30px 0 10px;
       text-align: center;
     }
   </style>
@@ -223,34 +289,55 @@ try {
 
 <body>
   <!-- Navbar -->
-  <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
+  <nav class="navbar navbar-expand-lg bg-white shadow-sm">
     <div class="container">
-      <a class="navbar-brand fw-bold text-warning" href="home.php">JobHive</a>
+      <a class="navbar-brand fw-bold text-warning" href="user_home.php">JobHive</a>
       <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
         <span class="navbar-toggler-icon"></span>
       </button>
+
       <div class="collapse navbar-collapse justify-content-end" id="navbarNav">
-        <ul class="navbar-nav">
-          <li class="nav-item"><a class="nav-link active" aria-current="page" href="home.php">Home</a></li>
+        <ul class="navbar-nav align-items-lg-center">
+          <li class="nav-item"><a class="nav-link active" aria-current="page" href="user_home.php">Home</a></li>
           <li class="nav-item"><a class="nav-link" href="user_dashboard.php">Dashboard</a></li>
           <li class="nav-item"><a class="nav-link" href="recommended.php">Recommended Jobs</a></li>
           <li class="nav-item"><a class="nav-link" href="companies.php">All Companies</a></li>
-          <li class="nav-item"><a class="btn btn-outline-warning ms-2" href="index.php">Logout</a></li>
+
+          <!-- User dropdown -->
+          <li class="nav-item dropdown ms-lg-2">
+            <a class="nav-link dropdown-toggle d-flex align-items-center gap-2" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+              <?php if (!empty($profile_picture)): ?>
+                <img src="<?= htmlspecialchars($PROFILE_DIR . $profile_picture) ?>" alt="Me"
+                  style="width:32px;height:32px;border-radius:50%;border:1px solid rgba(0,0,0,.06);object-fit:cover;">
+              <?php else: ?>
+                <span class="avatar"><?= htmlspecialchars(initials($full_name)) ?></span>
+              <?php endif; ?>
+              <span class="d-none d-lg-inline"><?= htmlspecialchars($full_name ?: $email) ?></span>
+            </a>
+            <ul class="dropdown-menu dropdown-menu-end">
+              <li><a class="dropdown-item" href="user_profile.php">My Profile</a></li>
+              <li><a class="dropdown-item" href="user_dashboard.php">My Dashboard</a></li>
+              <li>
+                <hr class="dropdown-divider">
+              </li>
+              <li><a class="dropdown-item text-danger" href="logout.php">Logout</a></li>
+            </ul>
+          </li>
         </ul>
       </div>
+
     </div>
   </nav>
 
-  <!-- Hero Section -->
+  <!-- Hero -->
   <section class="hero-section">
     <div class="container">
-      <h1 class="display-5 fw-bold">Welcome back to JobHive!</h1>
+      <h1 class="display-6 fw-bold">Welcome back<?= $full_name ? ', ' . htmlspecialchars($full_name) : '' ?>!</h1>
       <p class="lead mb-4">Ready to discover your next opportunity?</p>
 
-      <!-- Search form (returns to this page) -->
+      <!-- Search form -->
       <form class="search-bar" autocomplete="off" method="get" action="user_home.php">
-        <input class="form-control mb-2" type="text" name="q" placeholder="Job title or company..."
-          value="<?= htmlspecialchars($q) ?>">
+        <input class="form-control mb-2" type="text" name="q" placeholder="Job title or company..." value="<?= htmlspecialchars($q) ?>">
         <div class="search-row">
           <select class="form-select" name="loc" style="max-width:230px;">
             <?php
@@ -262,12 +349,11 @@ try {
             }
             ?>
           </select>
-          <!-- submit button named csearch -->
           <button class="btn btn-search" type="submit" name="csearch" value="1">Search</button>
         </div>
       </form>
 
-      <!-- Popular quick tags -->
+      <!-- Popular tags -->
       <div class="popular-tags">
         <span class="popular-label">Popular:</span>
         <form method="get" action="user_home.php" style="display:inline;">
@@ -289,12 +375,10 @@ try {
 
       <?php if (empty($jobs)): ?>
         <?php if ($isSearch): ?>
-          <!-- RED warning when a search returns nothing -->
           <div class="alert alert-danger text-center" role="alert">
             No jobs to show for your search.
           </div>
         <?php else: ?>
-          <!-- Neutral info when simply no data yet -->
           <div class="alert alert-light border text-center" role="alert">
             No jobs to show yet.
           </div>
@@ -306,9 +390,12 @@ try {
               <div class="card job-card h-100 shadow-sm">
                 <div class="card-body">
                   <div class="d-flex align-items-center mb-3">
-                    <img
-                      class="logo"
-                      src="<?= htmlspecialchars($LOGO_DIR . $job['logo']) ?>"
+                    <?php
+                    $logoFile = trim((string)$job['logo']);
+                    $logoPath = $logoFile !== '' ? ($LOGO_DIR . $logoFile) : '';
+                    ?>
+                    <img class="logo"
+                      src="<?= htmlspecialchars($logoPath !== '' ? $logoPath : 'https://via.placeholder.com/56') ?>"
                       alt="Company logo"
                       onerror="this.src='https://via.placeholder.com/56'">
                     <div class="ms-3">
@@ -326,13 +413,15 @@ try {
                   </p>
 
                   <div class="d-flex justify-content-between align-items-center">
-                    <span class="badge job-badge 
-                      <?= $job['status'] === 'Active' ? 'bg-success' : ($job['status'] === 'Inactive' ? 'bg-secondary' : 'bg-danger') ?>">
-                      <?= htmlspecialchars($job['status']) ?>
+                    <?php
+                    $status = (string)$job['status'];
+                    $statusClass = ($status === 'Active') ? 'bg-success'
+                      : (($status === 'Inactive') ? 'bg-secondary' : 'bg-danger');
+                    ?>
+                    <span class="badge job-badge <?= $statusClass ?>">
+                      <?= htmlspecialchars($status) ?>
                     </span>
-                    <a class="btn btn-outline-warning" href="job_detail.php?id=<?= (int)$job['job_id'] ?>">
-                      Detail
-                    </a>
+                    <a class="btn btn-outline-warning" href="job_detail.php?id=<?= (int)$job['job_id'] ?>">Detail</a>
                   </div>
                 </div>
               </div>
@@ -351,7 +440,7 @@ try {
         <a href="#" class="text-white text-decoration-none me-3">Contact</a>
         <a href="#" class="text-white text-decoration-none">Privacy Policy</a>
       </div>
-      <small>&copy; 2025 JobHive. All rights reserved.</small>
+      <small>&copy; <?= date('Y') ?> JobHive. All rights reserved.</small>
     </div>
   </footer>
 </body>

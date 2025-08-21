@@ -63,7 +63,6 @@
       </button>
       <div class="collapse navbar-collapse justify-content-end" id="navbarNav">
         <ul class="navbar-nav">
-          <li class="nav-item"><a class="nav-link" href="#">Jobs</a></li>
           <li class="nav-item"><a class="nav-link" href="#">Companies</a></li>
           <li class="nav-item"><a class="nav-link" href="login.php">Login</a></li>
           <li class="nav-item">
@@ -119,7 +118,7 @@
             </div>
             <div class="mb-2"><span class="badge bg-light text-dark">Hleden, Yangon</span></div>
             <p class="card-text">Build and maintain web applications with a dynamic team.</p>
-            <a href="#" class="btn btn-outline-warning btn-sm">Apply</a>
+            <a href="login.php" class="btn btn-outline-warning btn-sm">Apply</a>
           </div>
         </div>
       </div>
@@ -136,7 +135,7 @@
             </div>
             <div class="mb-2"><span class="badge bg-light text-dark">Ahlone, Yangon</span></div>
             <p class="card-text">Plan and execute marketing campaigns across channels.</p>
-            <a href="#" class="btn btn-outline-warning btn-sm">Apply</a>
+            <a href="login.php" class="btn btn-outline-warning btn-sm">Apply</a>
           </div>
         </div>
       </div>
@@ -152,7 +151,7 @@
             </div>
             <div class="mb-2"><span class="badge bg-light text-dark">Ahlone, Yangon</span></div>
             <p class="card-text">Manage financial records and prepare monthly reports.</p>
-            <a href="#" class="btn btn-outline-warning btn-sm">Apply</a>
+            <a href="login.php" class="btn btn-outline-warning btn-sm">Apply</a>
           </div>
         </div>
       </div>

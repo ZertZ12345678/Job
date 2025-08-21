@@ -203,7 +203,7 @@ if ($job && isset($job['status'])) {
 
                             <div class="mt-4 d-flex gap-2 align-items-center">
                                 <!-- Always go to resume.php with job_id -->
-                                <a href="#" class="btn btn-warning">
+                                <a href="resume_premium.php" class="btn btn-warning">
                                     I’m interested
                                 </a>
 
