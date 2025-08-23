@@ -1,14 +1,19 @@
 <?php
 // resume.php
 require_once "connect.php"; // provides $pdo (PDO)
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 
-// OPTIONAL: require login for applicants
-// if (!isset($_SESSION['user_id'])) {
-//     header("Location: login.php?next=" . urlencode($_SERVER['REQUEST_URI']));
-//     exit;
-// }
+/* ===== Require login ===== */
+if (!isset($_SESSION['user_id'])) {
+    $next = 'resume.php' . (isset($_GET['job_id']) ? ('?job_id=' . (int)$_GET['job_id']) : '');
+    header("Location: login.php?next=" . urlencode($next));
+    exit;
+}
+$user_id = (int)$_SESSION['user_id'];
 
+/* ===== Helpers ===== */
 function e($v)
 {
     return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
@@ -20,47 +25,126 @@ function fmt_date($d)
     return $ts ? date('M d, Y', $ts) : $d;
 }
 
-$job_id = isset($_GET['job_id']) ? (int)$_GET['job_id'] : 0;
+/* ===== Resolve job_id (GET/POST) ===== */
+$job_id = isset($_GET['job_id']) ? (int)$_GET['job_id']
+    : (isset($_POST['job_id']) ? (int)$_POST['job_id'] : 0);
 if ($job_id <= 0) {
-    http_response_code(400);
-    $error = "Invalid job id.";
+    header("Location: user_home.php?msg=" . urlencode("Please choose a job first."));
+    exit;
 }
 
+/* ===== Fetch job ===== */
 $job = null;
-if (empty($error)) {
-    try {
-        $sql = "
-          SELECT
-            j.job_id, j.job_title, j.employment_type, j.salary, j.location,
-            j.deadline, j.status, c.company_name
-          FROM jobs j
-          JOIN companies c ON c.company_id = j.company_id
-          WHERE j.job_id = ?
-          LIMIT 1
-        ";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([$job_id]);
-        $job = $stmt->fetch(PDO::FETCH_ASSOC);
-        if (!$job) {
-            http_response_code(404);
-            $error = "Job not found.";
+$error = '';
+try {
+    $stmt = $pdo->prepare("
+      SELECT j.job_id, j.job_title, j.employment_type, j.salary, j.location,
+             j.deadline, j.status, c.company_name
+      FROM jobs j
+      JOIN companies c ON c.company_id = j.company_id
+      WHERE j.job_id = ?
+      LIMIT 1
+    ");
+    $stmt->execute([$job_id]);
+    $job = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$job) {
+        http_response_code(404);
+        $error = "Job not found.";
+    }
+} catch (PDOException $e) {
+    http_response_code(500);
+    $error = "Failed to load job.";
+}
+
+/* ===== Apply (file upload -> DB insert/update, status = Pending) ===== */
+$notice = '';
+$form_error = '';
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($error)) {
+
+    // Upload settings
+    $upload_dir_fs  = __DIR__ . "/uploads/applications"; // filesystem path
+    $upload_dir_web = "uploads/applications";             // web path for links
+    if (!is_dir($upload_dir_fs)) {
+        @mkdir($upload_dir_fs, 0775, true);
+    }
+
+    if (!isset($_FILES['attachment']) || $_FILES['attachment']['error'] === UPLOAD_ERR_NO_FILE) {
+        $form_error = "Please select a photo or PDF file.";
+    } else {
+        $f = $_FILES['attachment'];
+
+        if ($f['error'] !== UPLOAD_ERR_OK) {
+            $form_error = "Upload failed (error code {$f['error']}).";
+        } else {
+            $max_bytes = 5 * 1024 * 1024; // 5MB
+            if (($f['size'] ?? 0) > $max_bytes) {
+                $form_error = "File too large. Max 5MB.";
+            } else {
+                $orig = $f['name'] ?? 'file';
+                $ext  = strtolower(pathinfo($orig, PATHINFO_EXTENSION));
+                $allowed_ext  = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf'];
+                $allowed_mime = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'];
+
+                $finfo = new finfo(FILEINFO_MIME_TYPE);
+                $mime  = $finfo->file($f['tmp_name']);
+
+                if (!in_array($ext, $allowed_ext, true) || !in_array($mime, $allowed_mime, true)) {
+                    $form_error = "Invalid type. Allowed: JPG, PNG, GIF, WEBP, or PDF.";
+                } else {
+                    $filename = "app_u{$user_id}_j{$job_id}_" . time() . "." . $ext;
+                    $dest_fs  = $upload_dir_fs . "/" . $filename;
+                    $dest_web = $upload_dir_web . "/" . $filename;
+
+                    if (!move_uploaded_file($f['tmp_name'], $dest_fs)) {
+                        $form_error = "Could not save the uploaded file.";
+                    } else {
+                        // Write to DB (table: application) with status = 'Pending'
+                        try {
+                            $pdo->beginTransaction();
+
+                            // Optional: enforce uniqueness at DB level
+                            // ALTER TABLE application ADD UNIQUE KEY uq_user_job (user_id, job_id);
+
+                            $q = $pdo->prepare("SELECT application_id FROM application WHERE user_id=? AND job_id=? LIMIT 1");
+                            $q->execute([$user_id, $job_id]);
+                            $row = $q->fetch(PDO::FETCH_ASSOC);
+
+                            if ($row) {
+                                $upd = $pdo->prepare("
+                                    UPDATE application
+                                    SET resume = ?, applied_at = NOW(), status = 'Pending'
+                                    WHERE application_id = ?
+                                ");
+                                $upd->execute([$dest_web, $row['application_id']]);
+                                $notice = "Application updated. ";
+                            } else {
+                                $ins = $pdo->prepare("
+                                    INSERT INTO application (user_id, job_id, resume, applied_at, status)
+                                    VALUES (?,?,?,?,?)
+                                ");
+                                $ins->execute([$user_id, $job_id, $dest_web, date('Y-m-d H:i:s'), 'Pending']);
+                                $notice = "Application submitted. ";
+                            }
+
+                            $pdo->commit();
+                            $notice .= "File: {$dest_web}";
+                        } catch (PDOException $e) {
+                            if ($pdo->inTransaction()) {
+                                $pdo->rollBack();
+                            }
+                            $form_error = "Database error: " . e($e->getMessage());
+                        }
+                    }
+                }
+            }
         }
-    } catch (PDOException $e) {
-        http_response_code(500);
-        $error = "Failed to load job.";
     }
 }
 
-// Demo “submit” handler (replace with your real application insertion)
-$notice = '';
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($error)) {
-    // Example: save to applications table here...
-    // $user_id = $_SESSION['user_id'];
-    // $cover   = trim($_POST['cover'] ?? '');
-    // $stmt = $pdo->prepare("INSERT INTO applications (user_id, job_id, cover_letter, applied_at) VALUES (?,?,?,NOW())");
-    // $stmt->execute([$user_id, $job_id, $cover]);
-
-    $notice = "Your interest has been recorded (demo). Implement DB insert here.";
+/* ===== Badge class ===== */
+$badgeClass = "bg-secondary";
+if ($job && isset($job['status'])) {
+    $badgeClass = ($job['status'] === 'Active') ? 'bg-success' : (($job['status'] === 'Closed') ? 'bg-danger' : 'bg-secondary');
 }
 ?>
 <!DOCTYPE html>
@@ -112,6 +196,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($error)) {
             <?php if (!empty($error)): ?>
                 <div class="alert alert-warning"><?= e($error) ?></div>
             <?php else: ?>
+                <?php if (!empty($form_error)): ?>
+                    <div class="alert alert-danger"><?= e($form_error) ?></div>
+                <?php endif; ?>
                 <?php if (!empty($notice)): ?>
                     <div class="alert alert-success"><?= e($notice) ?></div>
                 <?php endif; ?>
@@ -139,18 +226,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($error)) {
                                 </div>
                                 <div class="col-md-6 mb-2">
                                     <div class="fw-semibold">Status</div>
-                                    <span class="badge <?= $job['status'] === 'Active' ? 'bg-success' : ($job['status'] === 'Closed' ? 'bg-danger' : 'bg-secondary') ?>">
-                                        <?= e($job['status']) ?>
-                                    </span>
+                                    <span class="badge <?= $badgeClass ?>"><?= e($job['status']) ?></span>
                                 </div>
                             </div>
 
-                            <form method="post">
+                            <!-- FILE UPLOAD ONLY -->
+                            <form method="post" enctype="multipart/form-data">
                                 <input type="hidden" name="job_id" value="<?= (int)$job_id ?>">
+
                                 <div class="mb-3">
-                                    <label class="form-label fw-semibold">Short note / cover (optional)</label>
-                                    <textarea class="form-control" name="cover" rows="4" placeholder="Write a short note to the employer..."></textarea>
+                                    <label class="form-label fw-semibold">Attach a resume file (photo or PDF)</label>
+                                    <input class="form-control" type="file" name="attachment" accept="image/*,application/pdf" required>
+                                    <div class="form-text">Allowed: JPG, PNG, GIF, WEBP, or PDF (max 5MB).</div>
                                 </div>
+
                                 <div class="d-flex gap-2">
                                     <button type="submit" class="btn btn-warning">Apply Now</button>
                                     <a href="job_detail.php?id=<?= (int)$job_id ?>" class="btn btn-outline-secondary">Back to Job</a>
@@ -161,11 +250,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($error)) {
 
                     <div class="col-12 col-lg-5">
                         <div class="card p-4">
-                            <h3 class="h6 fw-bold mb-3">Next steps</h3>
+                            <h3 class="h6 fw-bold mb-3">Resume Requirements</h3>
                             <ol class="mb-0">
-                                <li>Review the job information.</li>
-                                <li>Write your resume and all your information.</li>
-                                <li>Click on the "Apply Now" button.</li>
+                                <li>Upload your resume (PDF) or a clear image of it.</li>
+                                <li>Click “Apply Now”.</li>
                                 <li>Wait for a reply from the company.</li>
                             </ol>
                         </div>

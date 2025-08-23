@@ -1,6 +1,9 @@
 <?php
 // job_detail.php
 require_once "connect.php"; // provides $pdo (PDO)
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 
 $LOGO_DIR = "company_logos/";
 
@@ -29,7 +32,7 @@ if (empty($error)) {
         $today = date('Y-m-d');
         $up = $pdo->prepare("UPDATE jobs SET status='Inactive' WHERE job_id=? AND status='Active' AND deadline < ?");
         $up->execute([$job_id, $today]);
-    } catch (PDOException $e) { /* optionally log */
+    } catch (PDOException $e) { /* log if needed */
     }
 }
 
@@ -38,27 +41,14 @@ $job = null;
 if (empty($error)) {
     try {
         $sql = "
-          SELECT
-            j.job_id,
-            j.job_title,
-            j.description_detail,
-            j.employment_type,
-            j.requirements,
-            j.salary,
-            j.location,
-            j.deadline,
-            j.status,
-            j.posted_at,
-            c.company_id,
-            c.company_name,
-            c.email   AS company_email,
-            c.phone   AS company_phone,
-            c.logo    AS company_logo
-          FROM jobs j
-          JOIN companies c ON c.company_id = j.company_id
-          WHERE j.job_id = ?
-          LIMIT 1
-        ";
+      SELECT j.job_id, j.job_title, j.description_detail, j.employment_type, j.requirements,
+             j.salary, j.location, j.deadline, j.status, j.posted_at,
+             c.company_id, c.company_name, c.email AS company_email, c.phone AS company_phone, c.logo AS company_logo
+      FROM jobs j
+      JOIN companies c ON c.company_id = j.company_id
+      WHERE j.job_id = ?
+      LIMIT 1
+    ";
         $stmt = $pdo->prepare($sql);
         $stmt->execute([$job_id]);
         $job = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -75,8 +65,7 @@ if (empty($error)) {
 // --- 4) Determine badge class for status ---
 $badgeClass = "bg-secondary";
 if ($job && isset($job['status'])) {
-    $badgeClass = ($job['status'] === 'Active') ? 'bg-success'
-        : (($job['status'] === 'Closed') ? 'bg-danger' : 'bg-secondary');
+    $badgeClass = ($job['status'] === 'Active') ? 'bg-success' : (($job['status'] === 'Closed') ? 'bg-danger' : 'bg-secondary');
 }
 ?>
 <!DOCTYPE html>
@@ -120,7 +109,6 @@ if ($job && isset($job['status'])) {
 </head>
 
 <body>
-
     <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
         <div class="container">
             <a class="navbar-brand fw-bold text-warning" href="home.php">JobHive</a>
@@ -149,14 +137,10 @@ if ($job && isset($job['status'])) {
                 <div class="alert alert-warning"><?= e($error) ?></div>
             <?php else: ?>
                 <div class="row g-4">
-                    <!-- Job + Company Overview -->
                     <div class="col-12 col-lg-8">
                         <div class="card p-4">
                             <div class="d-flex align-items-start">
-                                <img class="logo"
-                                    src="<?= e($LOGO_DIR . $job['company_logo']) ?>"
-                                    alt="Company Logo"
-                                    onerror="this.src='https://via.placeholder.com/72'">
+                                <img class="logo" src="<?= e($LOGO_DIR . $job['company_logo']) ?>" alt="Company Logo" onerror="this.src='https://via.placeholder.com/72'">
                                 <div class="ms-3">
                                     <h2 class="h4 mb-1"><?= e($job['job_title']) ?></h2>
                                     <div class="d-flex align-items-center gap-2">
@@ -165,9 +149,7 @@ if ($job && isset($job['status'])) {
                                     </div>
                                     <div class="meta mt-1">
                                         <small>Location: <?= e($job['location']) ?></small><br>
-                                        <?php if (!empty($job['posted_at'])): ?>
-                                            <small>Posted: <?= e(fmt_date($job['posted_at'])) ?></small>
-                                        <?php endif; ?>
+                                        <?php if (!empty($job['posted_at'])): ?><small>Posted: <?= e(fmt_date($job['posted_at'])) ?></small><?php endif; ?>
                                     </div>
                                 </div>
                             </div>
@@ -196,20 +178,25 @@ if ($job && isset($job['status'])) {
                             <div class="mt-3">
                                 <div class="fw-semibold mb-1">Job Description</div>
                                 <p class="mb-3" style="text-align: justify;"><?= nl2br(e($job['description_detail'])) ?></p>
-
                                 <div class="fw-semibold mb-1">Requirements</div>
                                 <p class="mb-0" style="text-align: justify;"><?= nl2br(e($job['requirements'])) ?></p>
                             </div>
 
+                            <!-- >>> FIXED BUTTON BLOCK <<< -->
                             <div class="mt-4 d-flex gap-2 align-items-center">
-                                <!-- Always go to resume.php with job_id -->
-                                <a href="resume_premium.php" class="btn btn-warning">
-                                    I’m interested
-                                </a>
+                                <?php if (!isset($_SESSION['user_id'])): ?>
+                                    <a class="btn btn-warning"
+                                        href="login.php?next=<?= urlencode('resume.php?job_id=' . (int)$job['job_id']) ?>">
+                                        I’m interested
+                                    </a>
+                                <?php else: ?>
+                                    <a class="btn btn-warning"
+                                        href="resume.php?job_id=<?= (int)$job['job_id'] ?>">
+                                        I’m interested
+                                    </a>
+                                <?php endif; ?>
 
-                                <button type="button" class="btn btn-outline-secondary" onclick="history.back()">
-                                    Back
-                                </button>
+                                <button type="button" class="btn btn-outline-secondary" onclick="history.back()">Back</button>
 
                                 <?php if ($job['status'] !== 'Active'): ?>
                                     <span class="align-self-center text-muted small">This job is not active (you can still view/apply).</span>
