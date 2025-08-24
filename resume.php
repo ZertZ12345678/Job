@@ -24,6 +24,21 @@ function fmt_date($d)
     $ts = strtotime($d);
     return $ts ? date('M d, Y', $ts) : $d;
 }
+function push_session_notification($type, $title, $message, $link = null)
+{
+    if (!isset($_SESSION['notifications']) || !is_array($_SESSION['notifications'])) {
+        $_SESSION['notifications'] = [];
+    }
+    $_SESSION['notifications'][] = [
+        'id'         => uniqid('n_', true),
+        'type'       => $type,
+        'title'      => $title,
+        'message'    => $message,
+        'link'       => $link,
+        'created_at' => date('Y-m-d H:i:s'),
+        'read'       => 0
+    ];
+}
 
 /* ===== Resolve job_id (GET/POST) ===== */
 $job_id = isset($_GET['job_id']) ? (int)$_GET['job_id']
@@ -56,11 +71,11 @@ try {
     $error = "Failed to load job.";
 }
 
-/* ===== Apply (file upload -> DB insert/update, status = Pending) ===== */
+/* ===== Apply (ALWAYS a NEW RECORD) ===== */
 $notice = '';
 $form_error = '';
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($error)) {
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($error)) {
     // Upload settings
     $upload_dir_fs  = __DIR__ . "/uploads/applications"; // filesystem path
     $upload_dir_web = "uploads/applications";             // web path for links
@@ -98,40 +113,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($error)) {
                     if (!move_uploaded_file($f['tmp_name'], $dest_fs)) {
                         $form_error = "Could not save the uploaded file.";
                     } else {
-                        // Write to DB (table: application) with status = 'Pending'
                         try {
                             $pdo->beginTransaction();
 
-                            // Optional: enforce uniqueness at DB level
-                            // ALTER TABLE application ADD UNIQUE KEY uq_user_job (user_id, job_id);
+                            // ALWAYS INSERT a new record (no SELECT/UPDATE)
+                            $ins = $pdo->prepare("
+                                INSERT INTO application (user_id, job_id, resume, applied_at, status)
+                                VALUES (?,?,?,?,?)
+                            ");
+                            $ins->execute([
+                                $user_id,
+                                $job_id,
+                                $dest_web,
+                                date('Y-m-d H:i:s'),
+                                'Pending'
+                            ]);
 
-                            $q = $pdo->prepare("SELECT application_id FROM application WHERE user_id=? AND job_id=? LIMIT 1");
-                            $q->execute([$user_id, $job_id]);
-                            $row = $q->fetch(PDO::FETCH_ASSOC);
+                            // Notification
+                            $title = "Application Submitted";
+                            $msg   = "You applied to “{$job['job_title']}” at {$job['company_name']}.";
+                            $link  = "job_detail.php?id=" . (int)$job_id;
 
-                            if ($row) {
-                                $upd = $pdo->prepare("
-                                    UPDATE application
-                                    SET resume = ?, applied_at = NOW(), status = 'Pending'
-                                    WHERE application_id = ?
-                                ");
-                                $upd->execute([$dest_web, $row['application_id']]);
-                                $notice = "Application updated. ";
-                            } else {
-                                $ins = $pdo->prepare("
-                                    INSERT INTO application (user_id, job_id, resume, applied_at, status)
-                                    VALUES (?,?,?,?,?)
-                                ");
-                                $ins->execute([$user_id, $job_id, $dest_web, date('Y-m-d H:i:s'), 'Pending']);
-                                $notice = "Application submitted. ";
-                            }
+                            push_session_notification('success', $title, $msg, $link);
 
                             $pdo->commit();
-                            $notice .= "File: {$dest_web}";
+
+                            $notice = "Application submitted. File: {$dest_web}";
+                            // Optional redirect back to home if you want the envelope to show instantly:
+                            // header("Location: user_home.php?applied=1");
+                            // exit;
+
                         } catch (PDOException $e) {
-                            if ($pdo->inTransaction()) {
-                                $pdo->rollBack();
-                            }
+                            if ($pdo->inTransaction()) $pdo->rollBack();
                             $form_error = "Database error: " . e($e->getMessage());
                         }
                     }
@@ -144,7 +157,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($error)) {
 /* ===== Badge class ===== */
 $badgeClass = "bg-secondary";
 if ($job && isset($job['status'])) {
-    $badgeClass = ($job['status'] === 'Active') ? 'bg-success' : (($job['status'] === 'Closed') ? 'bg-danger' : 'bg-secondary');
+    $badgeClass = ($job['status'] === 'Active') ? 'bg-success'
+        : (($job['status'] === 'Closed') ? 'bg-danger' : 'bg-secondary');
 }
 ?>
 <!DOCTYPE html>

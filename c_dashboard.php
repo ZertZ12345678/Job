@@ -3,51 +3,59 @@
 include("connect.php");
 session_start();
 
-/* ===== Auth guard (same as user) ===== */
+/* ===== Auth guard ===== */
 $company_id = $_SESSION['company_id'] ?? null;
 if (!$company_id) {
     header("Location: login.php");
     exit;
 }
 
-/* ===== Shared helper: identical flow for avatar/logo ===== */
+/* ===== Helpers ===== */
+function h($s)
+{
+    return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
+}
+
 function buildImageUrl(string $dir, ?string $filename, ?string $fallbackName, string $fallbackInitial): string
 {
     $dir = rtrim($dir, '/');
     $file = trim((string)$filename);
-
     if ($file !== '') {
         $file = basename($file);
         $webPath = "{$dir}/{$file}";
         $fsPath  = __DIR__ . "/{$webPath}";
-        if (is_file($fsPath)) {
-            return htmlspecialchars($webPath, ENT_QUOTES, 'UTF-8');
-        }
+        if (is_file($fsPath)) return htmlspecialchars($webPath, ENT_QUOTES, 'UTF-8');
     }
     $name = trim((string)$fallbackName);
     if ($name === '') $name = $fallbackInitial;
     return "https://ui-avatars.com/api/?name=" . urlencode($name) . "&background=FFC107&color=22223b";
 }
 
+function job_badge($status)
+{
+    $s = strtolower(trim((string)$status));
+    $map = [
+        'active'   => 'bg-success',
+        'open'     => 'bg-success',
+        'paused'   => 'bg-warning',
+        'inactive' => 'bg-secondary',
+        'closed'   => 'bg-secondary'
+    ];
+    $cls = $map[$s] ?? 'bg-secondary';
+    return '<span class="badge ' . $cls . '">' . h(ucfirst($s)) . '</span>';
+}
 
-
-/* ===== Fetch current company + computed profile % (mirrors user query) ===== */
+/* ===== Load company + profile % ===== */
 try {
     $stmt = $pdo->prepare("
-        SELECT
-          c.company_id,
-          c.company_name,
-          c.email,
-          c.phone,
-          c.address,
-          c.logo,
-          ROUND((
-            IF(c.company_name IS NULL OR c.company_name='',0,1) +
-            IF(c.email        IS NULL OR c.email='',0,1) +
-            IF(c.phone        IS NULL OR c.phone='',0,1) +
-            IF(c.address      IS NULL OR c.address='',0,1) +
-            IF(c.logo         IS NULL OR c.logo='',0,1)
-          ) / 5 * 100) AS profile_pct
+        SELECT c.company_id, c.company_name, c.email, c.phone, c.address, c.logo,
+               ROUND((
+                 IF(c.company_name IS NULL OR c.company_name='',0,1) +
+                 IF(c.email        IS NULL OR c.email='',0,1) +
+                 IF(c.phone        IS NULL OR c.phone='',0,1) +
+                 IF(c.address      IS NULL OR c.address='',0,1) +
+                 IF(c.logo         IS NULL OR c.logo='',0,1)
+               ) / 5 * 100) AS profile_pct
         FROM companies c
         WHERE c.company_id = ?
         LIMIT 1
@@ -58,51 +66,31 @@ try {
     $company = [];
 }
 
-/* ===== Logo URL (same flow as user avatar) ===== */
-$logo_url = buildImageUrl(
-    'company_logos',
-    $company['logo'] ?? '',
-    $company['company_name'] ?? '',
-    'C'
-);
+$logo_url = buildImageUrl('company_logos', $company['logo'] ?? '', $company['company_name'] ?? '', 'C');
 
-/* ===== KPI counts (names parallel to user KPIs) ===== */
-$counts = [
-    'active_jobs'      => 0,
-    'total_applicants' => 0,
-    'interviews'       => 0
-];
-
+/* ===== KPIs (no Interviews) ===== */
+$counts = ['active_jobs' => 0, 'total_applicants' => 0];
 try {
-    // Active jobs
-    $stmt = $pdo->prepare("SELECT COUNT(*) FROM jobs WHERE company_id=? AND status='open'");
+    $stmt = $pdo->prepare("
+        SELECT COUNT(*) FROM jobs
+        WHERE company_id = ? AND LOWER(status) IN ('active','open')
+    ");
     $stmt->execute([$company_id]);
     $counts['active_jobs'] = (int)$stmt->fetchColumn();
 
-    // Applicants across ALL company jobs
+    // applications table = application (singular)
     $stmt = $pdo->prepare("
         SELECT COUNT(*)
-        FROM applications a
+        FROM application a
         JOIN jobs j ON j.job_id = a.job_id
         WHERE j.company_id = ?
     ");
     $stmt->execute([$company_id]);
     $counts['total_applicants'] = (int)$stmt->fetchColumn();
-
-    // Interviews (same statuses as user dashboard)
-    $stmt = $pdo->prepare("
-        SELECT COUNT(*)
-        FROM applications a
-        JOIN jobs j ON j.job_id = a.job_id
-        WHERE j.company_id = ? AND a.status IN ('Interview','Phone Screen')
-    ");
-    $stmt->execute([$company_id]);
-    $counts['interviews'] = (int)$stmt->fetchColumn();
-} catch (PDOException $e) {
-    // keep defaults
+} catch (PDOException $e) { /* keep defaults */
 }
 
-/* ===== Recent Jobs (last 5) — mirrors user's recent apps table structure ===== */
+/* ===== Recent Jobs (any status) — uses posted_at in your schema ===== */
 $recent_jobs = [];
 try {
     $stmt = $pdo->prepare("
@@ -113,10 +101,10 @@ try {
           j.location,
           j.deadline,
           j.status,
-          (SELECT COUNT(*) FROM applications a WHERE a.job_id=j.job_id) AS applicants
+          (SELECT COUNT(*) FROM application a WHERE a.job_id = j.job_id) AS applicants
         FROM jobs j
         WHERE j.company_id = ?
-        ORDER BY j.created_at DESC
+        ORDER BY (j.posted_at IS NULL), j.posted_at DESC, (j.deadline IS NULL), j.deadline DESC, j.job_id DESC
         LIMIT 5
     ");
     $stmt->execute([$company_id]);
@@ -125,18 +113,18 @@ try {
     $recent_jobs = [];
 }
 
-/* ===== Recent Applicants (last 5) — mirrors user's saved jobs block ===== */
+/* ===== Recent Applicants — from application (singular) ===== */
 $recent_apps = [];
 try {
     $stmt = $pdo->prepare("
-        SELECT a.application_id, a.status AS app_status, a.created_at,
+        SELECT a.application_id, a.status AS app_status, a.applied_at AS created_at,
                u.user_id, u.full_name, u.email, u.phone,
                j.job_id, j.job_title
-        FROM applications a
+        FROM application a
         JOIN jobs j  ON j.job_id = a.job_id
         JOIN users u ON u.user_id = a.user_id
         WHERE j.company_id = ?
-        ORDER BY a.created_at DESC
+        ORDER BY a.applied_at DESC
         LIMIT 5
     ");
     $stmt->execute([$company_id]);
@@ -145,24 +133,12 @@ try {
     $recent_apps = [];
 }
 
-/* ===== Progress bar color (IDENTICAL thresholds) ===== */
+/* ===== Progress bar color ===== */
 $pp = (int)($company['profile_pct'] ?? 0);
-$barClass = 'bg-danger';        // 0–30% red
-if ($pp > 30) $barClass = 'bg-warning';   // 31–60% yellow
-if ($pp > 60) $barClass = 'bg-info';      // 61–85% blue
-if ($pp > 85) $barClass = 'bg-success';   // 86–100% green
-
-/* ===== Small helpers ===== */
-function h($s)
-{
-    return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
-}
-function job_badge($status)
-{
-    $map = ['open' => 'bg-success', 'paused' => 'bg-warning', 'closed' => 'bg-secondary'];
-    $cls = $map[$status] ?? 'bg-secondary';
-    return '<span class="badge ' . $cls . '">' . h(ucfirst($status)) . '</span>';
-}
+$barClass = 'bg-danger';
+if ($pp > 30) $barClass = 'bg-warning';
+if ($pp > 60) $barClass = 'bg-info';
+if ($pp > 85) $barClass = 'bg-success';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -289,7 +265,6 @@ function job_badge($status)
             <div class="small text-white-50 mb-2 px-2">Company Menu</div>
             <nav class="nav flex-column">
                 <a class="nav-link active" href="#overview"><i class="bi bi-speedometer2 me-2"></i> Overview</a>
-                <a class="nav-link" href="#jobs"><i class="bi bi-megaphone me-2"></i> Jobs</a>
                 <a class="nav-link" href="#applicants"><i class="bi bi-people me-2"></i> Applicants</a>
                 <a class="nav-link" href="company_profile.php"><i class="bi bi-building me-2"></i> Company Profile</a>
                 <a class="nav-link" href="post_job.php"><i class="bi bi-plus-square me-2"></i> Post Job</a>
@@ -324,10 +299,10 @@ function job_badge($status)
         </div>
 
         <main class="container py-4">
-            <!-- Overview (mirrors user overview) -->
+            <!-- Overview with KPIs + Recent Jobs table -->
             <section id="overview" class="mb-4">
                 <div class="row g-3">
-                    <div class="col-12 col-sm-6 col-xl-3">
+                    <div class="col-12 col-sm-6 col-xl-4">
                         <div class="card kpi-card">
                             <div class="card-body">
                                 <div class="d-flex justify-content-between">
@@ -340,7 +315,7 @@ function job_badge($status)
                             </div>
                         </div>
                     </div>
-                    <div class="col-12 col-sm-6 col-xl-3">
+                    <div class="col-12 col-sm-6 col-xl-4">
                         <div class="card kpi-card">
                             <div class="card-body">
                                 <div class="d-flex justify-content-between">
@@ -353,30 +328,17 @@ function job_badge($status)
                             </div>
                         </div>
                     </div>
-                    <div class="col-12 col-sm-6 col-xl-3">
-                        <div class="card kpi-card">
-                            <div class="card-body">
-                                <div class="d-flex justify-content-between">
-                                    <div>
-                                        <div class="text-muted small">Interviews</div>
-                                        <div class="h4 mb-0"><?= $counts['interviews'] ?></div>
-                                    </div>
-                                    <i class="bi bi-calendar-event fs-2 text-warning"></i>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-12 col-sm-6 col-xl-3">
+                    <div class="col-12 col-sm-12 col-xl-4">
                         <div class="card kpi-card">
                             <div class="card-body">
                                 <div class="d-flex justify-content-between align-items-center w-100">
                                     <div class="w-100">
                                         <div class="d-flex justify-content-between">
                                             <div class="text-muted small">Profile Completion</div>
-                                            <div class="small fw-semibold"><?= $pp; ?>%</div>
+                                            <div class="small fw-semibold"><?= (int)($company['profile_pct'] ?? 0); ?>%</div>
                                         </div>
-                                        <div class="progress mt-2" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="<?= $pp; ?>">
-                                            <div class="progress-bar <?= $barClass; ?>" style="width: <?= $pp; ?>%; transition: width .4s ease;"></div>
+                                        <div class="progress mt-2" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="<?= (int)($company['profile_pct'] ?? 0); ?>">
+                                            <div class="progress-bar <?= $barClass; ?>" style="width: <?= (int)($company['profile_pct'] ?? 0); ?>%; transition: width .4s;"></div>
                                         </div>
                                     </div>
                                     <i class="bi bi-building fs-2 text-warning ms-2"></i>
@@ -385,19 +347,9 @@ function job_badge($status)
                         </div>
                     </div>
                 </div>
-            </section>
 
-            <!-- Quick actions (parallel to user quick actions) -->
-            <div class="mb-4 d-flex flex-wrap gap-2">
-                <a href="post_job.php" class="btn btn-warning text-white">+ Post a new job</a>
-                <a href="manage_jobs.php" class="btn btn-outline-secondary">Manage jobs</a>
-                <a href="company_profile.php" class="btn btn-outline-secondary">Edit company profile</a>
-                <a href="seekers_browse.php" class="btn btn-outline-secondary">Find candidates</a>
-            </div>
-
-            <!-- Recent Jobs (mirrors table style/columns) -->
-            <section id="jobs" class="mb-4">
-                <div class="card border-0 shadow-sm rounded-4">
+                <!-- Recent Jobs (inside Overview) -->
+                <div class="card border-0 shadow-sm rounded-4 mt-3">
                     <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
                         <h6 class="mb-0">Recent Jobs</h6>
                         <a href="manage_jobs.php" class="btn btn-sm btn-outline-secondary">View all</a>
@@ -419,7 +371,9 @@ function job_badge($status)
                                 <tbody>
                                     <?php if (empty($recent_jobs)): ?>
                                         <tr>
-                                            <td colspan="7" class="text-center text-muted py-4">No jobs yet. <a href="post_job.php">Post your first job</a>.</td>
+                                            <td colspan="7" class="text-center text-muted py-4">
+                                                No jobs yet. <a href="post_job.php">Post your first job</a>.
+                                            </td>
                                         </tr>
                                         <?php else: foreach ($recent_jobs as $j): ?>
                                             <tr>
@@ -443,7 +397,7 @@ function job_badge($status)
                 </div>
             </section>
 
-            <!-- Recent Applicants (mirrors user's saved/jobs list styling) -->
+            <!-- Recent Applicants -->
             <section id="applicants" class="mb-4">
                 <div class="card border-0 shadow-sm rounded-4">
                     <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
@@ -489,7 +443,7 @@ function job_badge($status)
                                                 </td>
                                                 <td><?= h(date('Y-m-d', strtotime($a['created_at']))) ?></td>
                                                 <td class="text-end">
-                                                    <a class="btn btn-sm btn-outline-warning" href="view_application.php?application_id=<?= (int)$a['application_id'] ?>">Open</a>
+                                                    <a class="btn btn-sm btn-outline-warning" href="app_user_detail.php">Open</a>
                                                     <a class="btn btn-sm btn-outline-secondary ms-1" href="candidate_profile.php?user_id=<?= (int)$a['user_id'] ?>">Profile</a>
                                                 </td>
                                             </tr>
@@ -501,7 +455,6 @@ function job_badge($status)
                     </div>
                 </div>
             </section>
-
         </main>
     </div>
 

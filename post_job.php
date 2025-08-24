@@ -26,31 +26,37 @@ $error = '';
 $form_data = $_POST ?? [];
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $job_title         = trim($_POST['job_title'] ?? '');
-    $job_description   = trim($_POST['job_description'] ?? '');
-    $description_detail = trim($_POST['description_detail'] ?? '');  // NEW
-    $employment_type   = $_POST['employment_type'] ?? '';
-    $salary            = trim($_POST['salary'] ?? '');
-    $requirements      = trim($_POST['requirements'] ?? '');
-    $deadline          = $_POST['deadline'] ?? '';
-    $posted_at         = date("Y-m-d H:i:s");
-    $status            = 'Active';
-    $payment_method    = $_POST['payment_method'] ?? '';
+    $job_title           = trim($_POST['job_title'] ?? '');
+    $job_description     = trim($_POST['job_description'] ?? '');
+    $description_detail  = trim($_POST['description_detail'] ?? '');
+    $job_type            = $_POST['job_type'] ?? ''; // NEW
+    $employment_type     = $_POST['employment_type'] ?? '';
+    $salary              = trim($_POST['salary'] ?? '');
+    $requirements        = trim($_POST['requirements'] ?? '');
+    $deadline            = $_POST['deadline'] ?? '';
+    $posted_at           = date("Y-m-d H:i:s");
+    $status              = 'Active';
+    $payment_method      = $_POST['payment_method'] ?? '';
 
-    if ($job_title && $job_description && $description_detail && $employment_type && $salary && $requirements && $deadline && $payment_method) {
+    if (
+        $job_title && $job_description && $description_detail &&
+        $job_type && $employment_type && $salary && $requirements &&
+        $deadline && $payment_method
+    ) {
         try {
-            // Insert into jobs table (description_detail included)
+            // Insert into jobs table (job_type placed after description_detail)
             $stmt = $pdo->prepare("
                 INSERT INTO jobs
-                    (company_id, job_title, job_description, description_detail, location, salary, employment_type, requirements, posted_at, deadline, status)
+                    (company_id, job_title, job_description, description_detail, job_type, location, salary, employment_type, requirements, posted_at, deadline, status)
                 VALUES
-                    (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (?,          ?,          ?,               ?,                 ?,        ?,        ?,      ?,               ?,            ?,        ?,        ?)
             ");
             $stmt->execute([
                 $company_id,
                 $job_title,
                 $job_description,
-                $description_detail,              // NEW
+                $description_detail,
+                $job_type,                 // NEW
                 $company['address'],
                 $salary,
                 $employment_type,
@@ -81,7 +87,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $error = "Error posting job/payment: " . $e->getMessage();
         }
     } else {
-        $error = "Please fill in all required fields (including Description Detail) and select payment method.";
+        $error = "Please fill in all required fields (including Description Detail and Job Type) and select payment method.";
     }
 }
 ?>
@@ -223,11 +229,21 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 <textarea class="form-control" name="job_description" rows="4" required><?= htmlspecialchars($form_data['job_description'] ?? '') ?></textarea>
             </div>
 
-            <!-- NEW: Description Detail under Job Description -->
+            <!-- Description Detail -->
             <div class="mb-3">
                 <label>Description Detail <span style="color:#dc3545;">*</span></label>
                 <textarea class="form-control" name="description_detail" rows="4" required><?= htmlspecialchars($form_data['description_detail'] ?? '') ?></textarea>
                 <div class="form-text">Add a richer, longer description (e.g., team, project scope, benefits, tech stack, interview process).</div>
+            </div>
+
+            <!-- NEW: Job Type (placed immediately after Description Detail) -->
+            <div class="mb-3">
+                <label>Job Type <span style="color:#dc3545;">*</span></label>
+                <select class="form-select" name="job_type" required>
+                    <option value="">Select Job Type</option>
+                    <option value="Software" <?= (($form_data['job_type'] ?? '') === 'Software') ? 'selected' : '' ?>>Software</option>
+                    <option value="Network" <?= (($form_data['job_type'] ?? '') === 'Network')  ? 'selected' : '' ?>>Network</option>
+                </select>
             </div>
 
             <div class="mb-3">
@@ -307,6 +323,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             const payMethods = document.querySelectorAll('.pay-method-img');
             const paymentInput = document.getElementById('payment_method_input');
             const payInfoBox = document.getElementById('payInfoBox');
+
             payMethods.forEach(img => {
                 img.addEventListener('click', function() {
                     payMethods.forEach(i => i.classList.remove('selected'));
@@ -328,7 +345,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         }
 
         function clearForm() {
-            // Clear all input and textarea fields except readonly fields
+            // Clear text inputs & textareas except readonly & hidden
             document.querySelectorAll('.post-job-container input:not([readonly]):not([type=hidden]), .post-job-container textarea').forEach(function(el) {
                 el.value = '';
             });

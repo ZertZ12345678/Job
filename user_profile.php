@@ -1,14 +1,59 @@
 <?php
+// user_profile.php
 include("connect.php");
 session_start();
 
-// ====== 0) Auth / session ======
-$user_id = $_SESSION['user_id'] ?? 1;
+/* ===== 0) Auth / session ===== */
+$user_id = $_SESSION['user_id'] ?? 1; // In production, redirect to login if missing
 
-// TODO: replace fallback with redirect if desired
-// if (!isset($_SESSION['user_id'])) { header("Location: login.php"); exit; }
+/* ===== Helpers ===== */
+function e($v)
+{
+    return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
+}
 
-// ====== 1) Fetch current user (also used for old photo cleanup) ======
+/** Return 1–2 letter initials from a full name */
+function initials_from_name($name): string
+{
+    $name = trim((string)$name);
+    if ($name === '') return 'U';
+    $parts = preg_split('/\s+/u', $name, -1, PREG_SPLIT_NO_EMPTY);
+    $ini = '';
+    foreach ($parts as $p) {
+        $ini .= mb_strtoupper(mb_substr($p, 0, 1));
+        if (mb_strlen($ini) >= 2) break;
+    }
+    return $ini ?: 'U';
+}
+
+/**
+ * Build a square SVG avatar (as data: URI) showing initials.
+ * Keeps the same visual size you use (default 112px).
+ */
+function svg_avatar_data_uri(string $name, int $size = 112): string
+{
+    $ini    = initials_from_name($name);
+    $bg     = '#FFF8E6';   // soft background
+    $ring   = '#FFC107';   // yellow ring (JobHive)
+    $txt    = '#FF8A00';   // warm orange letters
+    $font   = (int) round($size * 0.42);
+    $radius = 16;          // rounded-corner square like your UI
+    $inner  = $size - 4;   // <-- compute first; can't do {$size-4} inside heredoc
+
+    $svg = <<<SVG
+<svg xmlns="http://www.w3.org/2000/svg" width="$size" height="$size" viewBox="0 0 $size $size">
+  <rect x="2" y="2" width="$inner" height="$inner" rx="$radius" ry="$radius"
+        fill="$bg" stroke="$ring" stroke-width="4"/>
+  <text x="50%" y="50%" dy="0.32em" text-anchor="middle"
+        font-family="Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif"
+        font-weight="700" font-size="$font" fill="$txt">$ini</text>
+</svg>
+SVG;
+
+    return 'data:image/svg+xml;base64,' . base64_encode($svg);
+}
+
+/* ===== 1) Fetch current user ===== */
 $user = [];
 $error_message = '';
 try {
@@ -19,10 +64,9 @@ try {
     $error_message = "Could not load profile: " . $e->getMessage();
 }
 
-// ====== 2) Handle POST (update) ======
+/* ===== 2) Handle POST (update) ===== */
 $success_message = '';
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
-    // Collect fields
     $full_name        = trim($_POST['full_name'] ?? '');
     $email            = trim($_POST['email'] ?? '');
     $phone            = trim($_POST['phone'] ?? '');
@@ -30,35 +74,30 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $job_category     = trim($_POST['job_category'] ?? '');
     $current_position = trim($_POST['current_position'] ?? '');
 
-    // ---- File upload (optional) ----
+    // ---- Optional: photo upload ----
     $profile_picture = null;
-    if (isset($_FILES['profile_picture']) && $_FILES['profile_picture']['error'] === UPLOAD_ERR_OK) {
+    if (isset($_FILES['profile_picture']) && ($_FILES['profile_picture']['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK) {
         $allowed = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
-        $ext = strtolower(pathinfo($_FILES['profile_picture']['name'], PATHINFO_EXTENSION));
-        $size = $_FILES['profile_picture']['size'] ?? 0;
+        $ext  = strtolower(pathinfo($_FILES['profile_picture']['name'], PATHINFO_EXTENSION));
+        $sizeB = $_FILES['profile_picture']['size'] ?? 0;
 
         if (!in_array($ext, $allowed, true)) {
             $error_message = "Invalid image type. Allowed: " . implode(', ', $allowed);
-        } elseif ($size > 3 * 1024 * 1024) {
+        } elseif ($sizeB > 3 * 1024 * 1024) {
             $error_message = "Image too large. Max 3MB.";
         } else {
             $dir = __DIR__ . "/profile_pics";
-            if (!is_dir($dir)) {
-                @mkdir($dir, 0775, true);
-            }
+            if (!is_dir($dir)) @mkdir($dir, 0775, true);
+
             $filename = "user_" . $user_id . "_" . time() . "." . $ext;
-            $destFS   = $dir . "/" . $filename;        // filesystem path
-            $destWeb  = "profile_pics/" . $filename;   // web path to save in DB
+            $destFS   = $dir . "/" . $filename;
 
             if (move_uploaded_file($_FILES['profile_picture']['tmp_name'], $destFS)) {
                 $profile_picture = $filename;
-
-                // Optional: remove old picture if exists and different
+                // Remove old photo if any
                 if (!empty($user['profile_picture'])) {
                     $oldFS = $dir . "/" . $user['profile_picture'];
-                    if (is_file($oldFS)) {
-                        @unlink($oldFS);
-                    }
+                    if (is_file($oldFS)) @unlink($oldFS);
                 }
             } else {
                 $error_message = "Failed to upload image.";
@@ -66,15 +105,14 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         }
     }
 
-    // ---- Update DB if no upload error ----
     if ($error_message === '') {
         $sql = "UPDATE users SET 
-            full_name = :full_name,
-            email = :email,
-            phone = :phone,
-            address = :address,
-            job_category = :job_category,
-            current_position = :current_position";
+                  full_name = :full_name,
+                  email = :email,
+                  phone = :phone,
+                  address = :address,
+                  job_category = :job_category,
+                  current_position = :current_position";
         $params = [
             ':full_name'        => $full_name,
             ':email'            => $email,
@@ -92,10 +130,9 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
         try {
             $upd = $pdo->prepare($sql);
-            $ok = $upd->execute($params);
-            if ($ok) {
+            if ($upd->execute($params)) {
                 $success_message = "Profile updated successfully!";
-                // Reload user after update
+                // Reload user so the new image (or fields) show immediately
                 $stmt = $pdo->prepare("SELECT * FROM users WHERE user_id = ?");
                 $stmt->execute([$user_id]);
                 $user = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
@@ -108,7 +145,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     }
 }
 
-// ====== 3) Options / helpers ======
+/* ===== 3) Options / helpers ===== */
 $job_categories = [
     "IT&Hardware" => "IT & Hardware",
     "Finance"     => "Finance",
@@ -116,12 +153,17 @@ $job_categories = [
     "Marketing"   => "Marketing"
 ];
 
-// Helper for readonly/disabled if value exists
 function field_edit_attr($val, $type = 'input')
 {
     if (empty($val)) return '';
     return $type === 'select' ? 'disabled' : 'readonly';
 }
+
+/* ===== 4) Compute avatar source (photo OR initials SVG) ===== */
+$hasPhoto  = !empty($user['profile_picture']) && is_file(__DIR__ . '/profile_pics/' . $user['profile_picture']);
+$avatarSrc = $hasPhoto ? ('profile_pics/' . e($user['profile_picture']))
+    : svg_avatar_data_uri($user['full_name'] ?? '', 112);
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -142,15 +184,16 @@ function field_edit_attr($val, $type = 'input')
             margin: 40px auto;
             background: #fff;
             border-radius: 1.5rem;
-            box-shadow: 0 3px 16px rgba(30, 30, 60, 0.07);
-            padding: 2.5rem 2rem 2rem 2rem;
+            box-shadow: 0 3px 16px rgba(30, 30, 60, .07);
+            padding: 2.5rem 2rem 2rem;
         }
 
+        /* Square avatar, rounded corners, yellow border */
         .profile-img {
             width: 112px;
             height: 112px;
             object-fit: cover;
-            border-radius: 1.2rem;
+            border-radius: 16px;
             border: 3px solid #ffc107;
             background: #fafafa;
             margin-bottom: 1rem;
@@ -163,7 +206,6 @@ function field_edit_attr($val, $type = 'input')
             border: none;
             cursor: pointer;
             font-size: 1.12rem;
-            transition: color 0.13s;
         }
 
         .edit-btn:hover {
@@ -173,7 +215,7 @@ function field_edit_attr($val, $type = 'input')
         .field-label {
             font-weight: 600;
             color: #6c757d;
-            margin-bottom: 0.1rem;
+            margin-bottom: .1rem;
             font-size: 1.04rem;
         }
 
@@ -201,7 +243,7 @@ function field_edit_attr($val, $type = 'input')
             </button>
             <div class="collapse navbar-collapse justify-content-end" id="navbarNav">
                 <ul class="navbar-nav">
-                    <li class="nav-item"><a class="nav-link" aria-current="page" href="user_home.php">Home</a></li>
+                    <li class="nav-item"><a class="nav-link" href="user_home.php">Home</a></li>
                     <li class="nav-item"><a class="nav-link active" href="user_profile.php">Profile</a></li>
                     <li class="nav-item"><a class="nav-link" href="recommended.php">Recommended Jobs</a></li>
                     <li class="nav-item"><a class="nav-link" href="companies.php">All Companies</a></li>
@@ -216,19 +258,19 @@ function field_edit_attr($val, $type = 'input')
             <h3 class="fw-bold mb-3 text-center">Profile</h3>
 
             <?php if (!empty($success_message)): ?>
-                <div class="alert alert-success text-center"><?php echo htmlspecialchars($success_message); ?></div>
+                <div class="alert alert-success text-center"><?= e($success_message) ?></div>
             <?php endif; ?>
-
             <?php if (!empty($error_message)): ?>
-                <div class="alert alert-danger text-center"><?php echo htmlspecialchars($error_message); ?></div>
+                <div class="alert alert-danger text-center"><?= e($error_message) ?></div>
             <?php endif; ?>
 
             <form class="profile-form" method="POST" enctype="multipart/form-data" action="user_profile.php">
-                <!-- Profile Picture -->
+                <!-- Avatar (photo or initials) -->
                 <div class="text-center mb-3">
-                    <img src="<?php echo !empty($user['profile_picture']) ? 'profile_pics/' . htmlspecialchars($user['profile_picture']) : 'default_user.png'; ?>" class="profile-img" id="profilePreview" alt="Profile">
+                    <img src="<?= $avatarSrc ?>" class="profile-img" id="profilePreview" alt="Profile">
                     <div>
-                        <input type="file" name="profile_picture" accept="image/*" class="form-control mt-2" style="max-width:260px; margin:0 auto;" onchange="previewProfilePic(this)">
+                        <input type="file" name="profile_picture" accept="image/*" class="form-control mt-2" style="max-width:260px; margin:0 auto;"
+                            onchange="previewProfilePic(this)">
                     </div>
                 </div>
 
@@ -237,8 +279,7 @@ function field_edit_attr($val, $type = 'input')
                     <div style="flex:1">
                         <div class="field-label">Full Name</div>
                         <input type="text" name="full_name" class="form-control"
-                            value="<?php echo htmlspecialchars($user['full_name'] ?? ''); ?>"
-                            <?php echo field_edit_attr($user['full_name']); ?> required>
+                            value="<?= e($user['full_name'] ?? '') ?>" <?= field_edit_attr($user['full_name']) ?> required>
                     </div>
                     <?php if (!empty($user['full_name'])): ?>
                         <button type="button" class="edit-btn" onclick="toggleEdit(this)">✎ Edit</button>
@@ -250,8 +291,7 @@ function field_edit_attr($val, $type = 'input')
                     <div style="flex:1">
                         <div class="field-label">Email</div>
                         <input type="email" name="email" class="form-control"
-                            value="<?php echo htmlspecialchars($user['email'] ?? ''); ?>"
-                            <?php echo field_edit_attr($user['email']); ?> required>
+                            value=" <?= e($user['email'] ?? '') ?>" <?= field_edit_attr($user['email']) ?> required>
                     </div>
                     <?php if (!empty($user['email'])): ?>
                         <button type="button" class="edit-btn" onclick="toggleEdit(this)">✎ Edit</button>
@@ -263,8 +303,7 @@ function field_edit_attr($val, $type = 'input')
                     <div style="flex:1">
                         <div class="field-label">Phone</div>
                         <input type="text" name="phone" class="form-control"
-                            value="<?php echo htmlspecialchars($user['phone'] ?? ''); ?>"
-                            <?php echo field_edit_attr($user['phone']); ?>>
+                            value="<?= e($user['phone'] ?? '') ?>" <?= field_edit_attr($user['phone']) ?>>
                     </div>
                     <?php if (!empty($user['phone'])): ?>
                         <button type="button" class="edit-btn" onclick="toggleEdit(this)">✎ Edit</button>
@@ -276,8 +315,7 @@ function field_edit_attr($val, $type = 'input')
                     <div style="flex:1">
                         <div class="field-label">Address</div>
                         <input type="text" name="address" class="form-control"
-                            value="<?php echo htmlspecialchars($user['address'] ?? ''); ?>"
-                            <?php echo field_edit_attr($user['address']); ?>>
+                            value="<?= e($user['address'] ?? '') ?>" <?= field_edit_attr($user['address']) ?>>
                     </div>
                     <?php if (!empty($user['address'])): ?>
                         <button type="button" class="edit-btn" onclick="toggleEdit(this)">✎ Edit</button>
@@ -289,17 +327,16 @@ function field_edit_attr($val, $type = 'input')
                     <div style="flex:1">
                         <div class="field-label">Job Category</div>
                         <select name="job_category" id="job_category_select" class="form-select"
-                            <?php echo field_edit_attr($user['job_category'], 'select'); ?>>
+                            <?= field_edit_attr($user['job_category'], 'select') ?>>
                             <option value="">Select Category</option>
                             <?php foreach ($job_categories as $val => $label): ?>
-                                <option value="<?php echo htmlspecialchars($val); ?>"
-                                    <?php if (($user['job_category'] ?? '') === $val) echo 'selected'; ?>>
-                                    <?php echo htmlspecialchars($label); ?>
+                                <option value="<?= e($val) ?>" <?= (($user['job_category'] ?? '') === $val) ? 'selected' : '' ?>>
+                                    <?= e($label) ?>
                                 </option>
                             <?php endforeach; ?>
                         </select>
                         <?php if (!empty($user['job_category'])): ?>
-                            <input type="hidden" name="job_category" id="job_category_hidden" value="<?php echo htmlspecialchars($user['job_category']); ?>">
+                            <input type="hidden" name="job_category" id="job_category_hidden" value="<?= e($user['job_category']) ?>">
                         <?php endif; ?>
                     </div>
                     <?php if (!empty($user['job_category'])): ?>
@@ -312,15 +349,13 @@ function field_edit_attr($val, $type = 'input')
                     <div style="flex:1">
                         <div class="field-label">Current Position</div>
                         <input type="text" name="current_position" class="form-control"
-                            value="<?php echo htmlspecialchars($user['current_position'] ?? ''); ?>"
-                            <?php echo field_edit_attr($user['current_position']); ?>>
+                            value="<?= e($user['current_position'] ?? '') ?>" <?= field_edit_attr($user['current_position']) ?>>
                     </div>
                     <?php if (!empty($user['current_position'])): ?>
                         <button type="button" class="edit-btn" onclick="toggleEdit(this)">✎ Edit</button>
                     <?php endif; ?>
                 </div>
 
-                <!-- Submit -->
                 <div class="mt-4 text-center">
                     <button type="submit" class="btn btn-warning px-4">Save Changes</button>
                 </div>
@@ -332,20 +367,17 @@ function field_edit_attr($val, $type = 'input')
         function toggleEdit(btn) {
             const input = btn.parentNode.querySelector("input, select");
             if (!input) return;
-
             if (input.hasAttribute("readonly")) input.removeAttribute("readonly");
             if (input.hasAttribute("disabled")) input.removeAttribute("disabled");
             input.focus();
             input.style.backgroundColor = "#fff8ec";
-
-            // For job category select: disable hidden field so only select value submits
             if (input.tagName === "SELECT" && input.name === "job_category") {
-                var hidden = document.getElementById('job_category_hidden');
+                const hidden = document.getElementById('job_category_hidden');
                 if (hidden) hidden.disabled = true;
             }
         }
 
-        // Preview chosen profile picture
+        // Live preview when choosing a real photo — keeps the square box
         function previewProfilePic(input) {
             if (input.files && input.files[0]) {
                 const reader = new FileReader();

@@ -1,5 +1,4 @@
 <?php
-
 require_once "connect.php";
 if (session_status() === PHP_SESSION_NONE) session_start();
 
@@ -59,47 +58,97 @@ try {
 } catch (PDOException $e) {
 }
 
-/* ===== Handle POST: mark all / mark one (session only) ===== */
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-  $_SESSION['app_seen_status'] = $_SESSION['app_seen_status'] ?? [];
+/* ===== Session state buckets ===== */
+$_SESSION['app_seen_status']    = $_SESSION['app_seen_status']    ?? []; // application_id => last seen status
+$_SESSION['session_notif_read'] = $_SESSION['session_notif_read'] ?? []; // notif_id => 1
+$seenApp  = &$_SESSION['app_seen_status'];
+$seenSess = &$_SESSION['session_notif_read'];
 
+/* ===== POST handlers (no DB) ===== */
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+
+  /* Mark all read */
   if (isset($_POST['mark_all'])) {
-    $_SESSION['mark_all_pending'] = 1; // apply after loading apps
+    $_SESSION['mark_all_pending'] = 1;
     header("Location: user_home.php?inbox=1");
     exit;
   }
 
-  if (isset($_POST['mark_one'])) {
-    $aid = (int)($_POST['mark_one'] ?? 0);
-    $status = trim($_POST['status_now'] ?? '');
-    if ($aid > 0 && ($status === 'Accepted' || $status === 'Rejected')) {
-      $_SESSION['app_seen_status'][$aid] = $status;
+  /* Mark one from button in list */
+  if (isset($_POST['mark_one']) && isset($_POST['type'])) {
+    $type = $_POST['type']; // 'A' or 'S'
+    if ($type === 'A') {
+      $aid    = (int)($_POST['mark_one'] ?? 0);
+      $status = trim($_POST['status_now'] ?? '');
+      if ($aid > 0 && ($status === 'Accepted' || $status === 'Rejected')) {
+        $seenApp[$aid] = $status;
+      }
+    } elseif ($type === 'S') {
+      $nid = trim($_POST['mark_one'] ?? '');
+      if ($nid !== '') $seenSess[$nid] = 1;
     }
     header("Location: user_home.php?inbox=1");
     exit;
   }
+
+  /* Mark read on "Open" (AJAX) */
+  if (isset($_POST['mark_open']) && isset($_POST['type']) && isset($_POST['id'])) {
+    $t = $_POST['type']; // 'A' or 'S'
+    if ($t === 'A') {
+      $aid    = (int)($_POST['id'] ?? 0);
+      $status = trim($_POST['status_now'] ?? '');
+      if ($aid > 0 && ($status === 'Accepted' || $status === 'Rejected')) {
+        $seenApp[$aid] = $status;
+      }
+    } else {
+      $nid = trim($_POST['id'] ?? '');
+      if ($nid !== '') $seenSess[$nid] = 1;
+    }
+    header("Content-Type: application/json");
+    echo json_encode(['ok' => 1]);
+    exit;
+  }
 }
 
-/* ===== Optional: auto-set past-deadline jobs to Inactive ===== */
+/* ===== Optional: set past-deadline jobs to Inactive ===== */
 try {
   $today = date('Y-m-d');
   $pdo->prepare("UPDATE jobs SET status='Inactive' WHERE status='Active' AND deadline<?")->execute([$today]);
 } catch (PDOException $e) {
 }
 
-/* ===== Search filters (jobs list) ===== */
-$q = '';
+/* ===== Search filters ===== */
+$q   = '';
 $loc = '';
+$jt  = ''; // NEW: job_type filter
 $isSearch = false;
+
 if (isset($_GET['csearch'])) {
-  $q = trim($_GET['q'] ?? '');
+  $q   = trim($_GET['q']   ?? '');
   $loc = trim($_GET['loc'] ?? '');
+  $jt  = trim($_GET['jt']  ?? ''); // keep jt if present when searching
   $isSearch = true;
-} elseif (isset($_GET['q'])) {
-  $q = trim($_GET['q'] ?? '');
-  $isSearch = true;
+} else {
+  if (isset($_GET['q'])) {
+    $q  = trim($_GET['q']  ?? '');
+    $isSearch = true;
+  }
+  if (isset($_GET['loc'])) {
+    $loc = trim($_GET['loc'] ?? '');
+    $isSearch = true;
+  }
+  if (isset($_GET['jt'])) {
+    $jt = trim($_GET['jt'] ?? '');
+    $isSearch = true;
+  }
 }
-$conds = [];
+
+/* Sanitize jt to enum values if provided */
+if ($jt !== '' && !in_array($jt, ['Software', 'Network'], true)) {
+  $jt = ''; // ignore unexpected values
+}
+
+$conds  = [];
 $params = [];
 if ($q !== '') {
   $conds[] = "(j.job_title LIKE ? OR c.company_name LIKE ?)";
@@ -110,16 +159,22 @@ if ($loc !== '') {
   $conds[] = "j.location LIKE ?";
   $params[] = "%{$loc}%";
 }
+/* ===== NEW: job_type filter ===== */
+if ($jt !== '') {
+  $conds[] = "j.job_type = ?";
+  $params[] = $jt;
+}
+
 $whereSql = $conds ? ("WHERE " . implode(" AND ", $conds)) : "";
 
 /* ===== Jobs ===== */
 try {
   $sql = "SELECT j.job_id,j.job_title,j.job_description,j.location,j.status,j.posted_at,c.company_name,c.logo
-        FROM jobs j JOIN companies c ON c.company_id=j.company_id
-        $whereSql
-        ORDER BY CASE j.status WHEN 'Active' THEN 1 WHEN 'Inactive' THEN 2 WHEN 'Closed' THEN 3 ELSE 4 END,
-                 j.posted_at DESC
-        LIMIT 60";
+          FROM jobs j JOIN companies c ON c.company_id=j.company_id
+          $whereSql
+          ORDER BY CASE j.status WHEN 'Active' THEN 1 WHEN 'Inactive' THEN 2 WHEN 'Closed' THEN 3 ELSE 4 END,
+                   j.posted_at DESC
+          LIMIT 60";
   $st = $pdo->prepare($sql);
   $st->execute($params);
   $jobs = $st->fetchAll(PDO::FETCH_ASSOC);
@@ -127,7 +182,7 @@ try {
   $jobs = [];
 }
 
-/* ===== Applications for this user (for notifications) ===== */
+/* ===== Applications for this user (status-change notifications) ===== */
 try {
   $apq = $pdo->prepare("
     SELECT a.application_id, a.status, a.applied_at, a.job_id,
@@ -144,34 +199,73 @@ try {
   $apps = [];
 }
 
-/* ===== Read/Unread state in SESSION (keep history) ===== */
-$_SESSION['app_seen_status'] = $_SESSION['app_seen_status'] ?? [];
-$seen  = &$_SESSION['app_seen_status']; // application_id => last seen status
-$items = [];                              // all Accepted/Rejected items with unread flag
+/* ===== Build unified inbox ===== */
+$items = [];
+date_default_timezone_set('Asia/Yangon');
 
 foreach ($apps as $a) {
-  $aid = (int)$a['application_id'];
-  $st  = (string)$a['status'];
-  if ($st === 'Accepted' || $st === 'Rejected') {
-    $a['_unread'] = !isset($seen[$aid]) || $seen[$aid] !== $st;
-    $items[] = $a;
+  $aid   = (int)$a['application_id'];
+  $stt   = (string)$a['status'];
+  if ($stt === 'Accepted' || $stt === 'Rejected') {
+    $unread = !isset($seenApp[$aid]) || $seenApp[$aid] !== $stt;
+    $items[] = [
+      '_type'     => 'A',
+      '_id'       => (string)$aid,
+      '_unread'   => $unread,
+      'title'     => $stt . " — " . $a['job_title'],
+      'body'      => ($stt === 'Accepted'
+        ? "Great news! Your application to {$a['company_name']} for “{$a['job_title']}” was accepted."
+        : "Update: Your application to {$a['company_name']} for “{$a['job_title']}” was rejected."),
+      'when'      => 'Applied: ' . date('M d, Y H:i', strtotime($a['applied_at'])),
+      'link'      => 'job_detail.php?id=' . (int)$a['job_id'],
+      'pill'      => $unread ? 'New' : 'Read',
+      'pillClass' => $unread ? 'text-bg-warning' : 'text-bg-secondary',
+      'status_now' => $stt,
+    ];
   }
 }
 
-/* Apply "Mark all read" (keeps history; just flips flags) */
+$sessList = $_SESSION['notifications'] ?? [];
+if (is_array($sessList) && $sessList) {
+  foreach ($sessList as $n) {
+    $nid    = (string)($n['id'] ?? '');
+    $title  = (string)($n['title'] ?? 'Notification');
+    $msg    = (string)($n['message'] ?? '');
+    $link   = (string)($n['link'] ?? '');
+    $when   = (string)($n['created_at'] ?? date('Y-m-d H:i:s'));
+    if ($nid === '') continue;
+
+    $unread = empty($seenSess[$nid]);
+    $items[] = [
+      '_type'     => 'S',
+      '_id'       => $nid,
+      '_unread'   => $unread,
+      'title'     => $title,
+      'body'      => $msg,
+      'when'      => date('M d, Y H:i', strtotime($when)),
+      'link'      => $link,
+      'pill'      => $unread ? 'New' : 'Read',
+      'pillClass' => $unread ? 'text-bg-primary' : 'text-bg-secondary',
+      'status_now' => null,
+    ];
+  }
+}
+
+/* Mark all pending */
 if (!empty($_SESSION['mark_all_pending'])) {
-  foreach ($items as &$it) {
-    $seen[(int)$it['application_id']] = (string)$it['status'];
-    $it['_unread'] = false;
+  foreach ($items as $it) {
+    if ($it['_type'] === 'A') {
+      $seenApp[(int)$it['_id']] = (string)$it['status_now'];
+    } else {
+      $seenSess[(string)$it['_id']] = 1;
+    }
   }
   unset($_SESSION['mark_all_pending']);
 }
 
 /* Badge + shake */
-$badge_count  = 0;
-foreach ($items as $it) {
-  if (!empty($it['_unread'])) $badge_count++;
-}
+$badge_count = 0;
+foreach ($items as $it) if (!empty($it['_unread'])) $badge_count++;
 $prev_badge   = (int)($_SESSION['prev_badge_count'] ?? 0);
 $should_shake = $badge_count > $prev_badge;
 $_SESSION['prev_badge_count'] = $badge_count;
@@ -191,7 +285,7 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <style>
     body {
-      background: #f8fafc;
+      background: #f8fafc
     }
 
     .navbar .avatar {
@@ -204,21 +298,21 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      border: 1px solid rgba(0, 0, 0, .06);
+      border: 1px solid rgba(0, 0, 0, .06)
     }
 
     .hero-section {
       background: #f8fafc;
       padding: 64px 0 44px;
-      text-align: center;
+      text-align: center
     }
 
     .hero-section h1 {
-      font-weight: 700;
+      font-weight: 700
     }
 
     .hero-section .lead {
-      color: #556;
+      color: #556
     }
 
     .search-bar {
@@ -230,7 +324,7 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
       box-shadow: 0 8px 32px rgba(0, 0, 0, .06);
       display: flex;
       flex-direction: column;
-      gap: .9rem;
+      gap: .9rem
     }
 
     .search-row {
@@ -238,14 +332,14 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
       flex-wrap: wrap;
       gap: .75rem;
       align-items: center;
-      margin-top: .1rem;
+      margin-top: .1rem
     }
 
     .search-bar .form-control {
       min-height: 52px;
       border-radius: .8rem;
       font-size: 1rem;
-      padding: .65rem .9rem;
+      padding: .65rem .9rem
     }
 
     .search-row .form-select {
@@ -253,7 +347,7 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
       max-width: 260px;
       min-height: 48px;
       border-radius: .8rem;
-      font-size: .98rem;
+      font-size: .98rem
     }
 
     .btn-search {
@@ -265,19 +359,19 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
       border: none;
       font-weight: 600;
       font-size: 1rem;
-      padding: 0 .9rem;
+      padding: 0 .9rem
     }
 
     .btn-search:hover {
       background: #ff9800;
-      color: #fff;
+      color: #fff
     }
 
     .popular-label {
       font-size: 1.05rem;
       color: #22223b;
       font-weight: 600;
-      margin-right: 36px;
+      margin-right: 36px
     }
 
     .popular-tags {
@@ -285,7 +379,7 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
       display: flex;
       gap: .6rem;
       justify-content: center;
-      flex-wrap: wrap;
+      flex-wrap: wrap
     }
 
     .popular-btn {
@@ -295,18 +389,18 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
       font-size: .98rem;
       border-radius: .55rem;
       padding: .3rem 1.15rem;
-      font-weight: 500;
+      font-weight: 500
     }
 
     .popular-btn:hover {
       background: #fff8ec;
       color: #ff8800;
-      border-color: #ff8800;
+      border-color: #ff8800
     }
 
     .job-card {
       border: 0;
-      border-radius: 1.25rem;
+      border-radius: 1.25rem
     }
 
     .job-card .logo {
@@ -315,26 +409,25 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
       object-fit: cover;
       border-radius: .75rem;
       background: #fff;
-      border: 1px solid rgba(0, 0, 0, .05);
+      border: 1px solid rgba(0, 0, 0, .05)
     }
 
     .job-badge {
-      font-size: .82rem;
+      font-size: .82rem
     }
 
     .footer {
       background: #1a202c;
       color: #fff;
       padding: 30px 0 10px;
-      text-align: center;
+      text-align: center
     }
 
-    /* Envelope + slide-in panel */
     .badge-dot {
       position: absolute;
       top: -6px;
       right: -6px;
-      font-size: .70rem;
+      font-size: .70rem
     }
 
     .inbox-panel {
@@ -349,11 +442,11 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
       transition: transform .28s ease;
       display: flex;
       flex-direction: column;
-      z-index: 1080;
+      z-index: 1080
     }
 
     .inbox-panel.open {
-      transform: translateX(0);
+      transform: translateX(0)
     }
 
     .inbox-header {
@@ -361,13 +454,13 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
       border-bottom: 1px solid #eef0f2;
       display: flex;
       align-items: center;
-      justify-content: space-between;
+      justify-content: space-between
     }
 
     .inbox-body {
       padding: 14px 16px;
       overflow-y: auto;
-      height: 100%;
+      height: 100%
     }
 
     .backdrop {
@@ -377,45 +470,43 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
       opacity: 0;
       pointer-events: none;
       transition: opacity .28s ease;
-      z-index: 1079;
+      z-index: 1079
     }
 
     .backdrop.show {
       opacity: 1;
-      pointer-events: auto;
+      pointer-events: auto
     }
 
     .notif-card {
       border: 1px solid #e9ecef;
-      border-radius: .75rem;
+      border-radius: .75rem
     }
 
     .notif-card .card-body {
-      padding: .85rem .9rem;
+      padding: .85rem .9rem
     }
 
     @media (max-width:992px) {
       .inbox-panel {
-        width: 100vw;
+        width: 100vw
       }
     }
 
-    /* Unread vs Read history styling */
     .notif-card.unread {
       background: #fffdf5;
-      border-left: 4px solid #ffc107;
+      border-left: 4px solid #ffc107
     }
 
     .notif-card.read {
       background: #f8f9fa;
-      border-left: 4px solid #e9ecef;
+      border-left: 4px solid #e9ecef
     }
 
     .notif-chip {
-      font-size: .72rem;
+      font-size: .72rem
     }
 
-    /* Shake when count increases (on page load only) */
     @keyframes bell {
       0% {
         transform: rotate(0)
@@ -516,19 +607,39 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
               <option value="<?= e($L) ?>" <?= $sel ?>><?= e($L === '' ? 'All Locations' : $L) ?></option>
             <?php endforeach; ?>
           </select>
+          <!-- keep current jt if any while searching -->
+          <?php if ($jt !== ''): ?><input type="hidden" name="jt" value="<?= e($jt) ?>"><?php endif; ?>
           <button class="btn btn-search" type="submit" name="csearch" value="1">Search</button>
         </div>
       </form>
 
+      <!-- Popular by Job Type -->
       <div class="popular-tags">
         <span class="popular-label">Popular:</span>
-        <form method="get" action="user_home.php" style="display:inline;"><input type="hidden" name="q" value="Software"><button type="submit" class="popular-btn">Software</button></form>
-        <form method="get" action="user_home.php" style="display:inline;"><input type="hidden" name="q" value="Network"><button type="submit" class="popular-btn">Network</button></form>
+
+        <!-- Software -->
+        <form method="get" action="user_home.php" style="display:inline;">
+          <input type="hidden" name="jt" value="Software">
+          <button type="submit" class="popular-btn<?= $jt === 'Software' ? ' border-2' : '' ?>">Software</button>
+        </form>
+
+        <!-- Network -->
+        <form method="get" action="user_home.php" style="display:inline;">
+          <input type="hidden" name="jt" value="Network">
+          <button type="submit" class="popular-btn<?= $jt === 'Network' ? ' border-2' : '' ?>">Network</button>
+        </form>
+
+        <!-- All Jobs -->
+        <form method="get" action="user_home.php" style="display:inline;">
+          <input type="hidden" name="jt" value="">
+          <button type="submit" class="popular-btn<?= $jt === '' ? ' border-2' : '' ?>">All Jobs</button>
+        </form>
       </div>
-    </div>
+
+
   </section>
 
-  <!-- Slide-in Notifications (history kept, color changes on read) -->
+  <!-- Slide-in Notifications -->
   <div id="backdrop" class="backdrop"></div>
   <aside id="inboxPanel" class="inbox-panel" aria-hidden="true">
     <div class="inbox-header">
@@ -545,32 +656,41 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
     </div>
     <div class="inbox-body">
       <?php if (empty($items)): ?>
-        <p class="text-muted mb-0">No application updates yet. When a company Accepts or Rejects, it will appear here.</p>
-        <?php else: foreach ($items as $n):
+        <p class="text-muted mb-0">No notifications yet. When you apply or when a company Accepts/Rejects, you'll see updates here.</p>
+        <?php else:
+        usort($items, fn($a, $b) => strtotime($b['when']) <=> strtotime($a['when']));
+        foreach ($items as $n):
           $isUnread = !empty($n['_unread']);
           $cardCls  = $isUnread ? 'unread' : 'read';
         ?>
           <div class="card notif-card <?= $cardCls ?> shadow-sm mb-2">
             <div class="card-body d-flex justify-content-between align-items-start">
-              <div>
-                <div class="fw-semibold">
-                  <?= e($n['status']) ?> — <?= e($n['job_title']) ?> (<?= e($n['company_name']) ?>)
-                  <?php if ($isUnread): ?>
-                    <span class="badge text-bg-warning notif-chip ms-2">New</span>
-                  <?php else: ?>
-                    <span class="badge text-bg-secondary notif-chip ms-2">Read</span>
-                  <?php endif; ?>
+              <div class="pe-2">
+                <div class="fw-semibold d-flex align-items-center flex-wrap gap-2">
+                  <span><?= e($n['title']) ?></span>
+                  <span class="badge <?= e($n['pillClass']) ?> notif-chip"><?= e($n['pill']) ?></span>
                 </div>
-                <div class="small text-muted">Applied: <?= e(date('M d, Y H:i', strtotime($n['applied_at']))) ?></div>
+                <div class="small text-muted mb-1"><?= e($n['when']) ?></div>
+                <div class="text-muted"><?= e($n['body']) ?></div>
               </div>
 
-              <div class="d-flex gap-2">
-                <a class="btn btn-sm btn-outline-warning" href="job_detail.php?id=<?= (int)$n['job_id'] ?>">Open</a>
+              <div class="d-flex flex-column gap-2">
+                <?php if (!empty($n['link'])): ?>
+                  <a href="<?= e($n['link']) ?>" class="btn btn-sm btn-outline-warning open-link"
+                    data-type="<?= e($n['_type']) ?>" data-id="<?= e($n['_id']) ?>"
+                    <?php if ($n['_type'] === 'A'): ?>data-status="<?= e($n['status_now']) ?>" <?php endif; ?>>Open</a>
+                <?php endif; ?>
 
                 <?php if ($isUnread): ?>
                   <form method="post" class="m-0">
-                    <input type="hidden" name="status_now" value="<?= e($n['status']) ?>">
-                    <button class="btn btn-sm btn-light" name="mark_one" value="<?= (int)$n['application_id'] ?>">Mark read</button>
+                    <?php if ($n['_type'] === 'A'): ?>
+                      <input type="hidden" name="type" value="A">
+                      <input type="hidden" name="status_now" value="<?= e($n['status_now']) ?>">
+                      <button class="btn btn-sm btn-light" name="mark_one" value="<?= e($n['_id']) ?>">Mark read</button>
+                    <?php else: ?>
+                      <input type="hidden" name="type" value="S">
+                      <button class="btn btn-sm btn-light" name="mark_one" value="<?= e($n['_id']) ?>">Mark read</button>
+                    <?php endif; ?>
                   </form>
                 <?php else: ?>
                   <button class="btn btn-sm btn-light" disabled>Marked</button>
@@ -589,7 +709,7 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
       <h2 class="text-center fw-bold mb-4">Featured Jobs</h2>
       <?php if (empty($jobs)): ?>
         <?= $isSearch
-          ? '<div class="alert alert-danger text-center" role="alert">No jobs to show for your search.</div>'
+          ? '<div class="alert alert-danger text-center" role="alert">No jobs to show for your selection.</div>'
           : '<div class="alert alert-light border text-center" role="alert">No jobs to show yet.</div>' ?>
       <?php else: ?>
         <div class="row g-4">
@@ -635,7 +755,7 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
     </div>
   </footer>
 
-  <!-- Panel toggling -->
+  <!-- Panel + Auto-mark-on-open JS -->
   <script>
     const panel = document.getElementById('inboxPanel');
     const backdrop = document.getElementById('backdrop');
@@ -665,16 +785,37 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
       if (e.key === 'Escape') closeInbox();
     });
 
-    // Auto-open once if ?inbox=1, then strip the param so future reloads won't re-open it
-    <?php if ($open_inbox): ?>
-      openInbox();
-      (function removeInboxParam() {
-        const url = new URL(window.location.href);
-        url.searchParams.delete('inbox');
-        const qs = url.searchParams.toString();
-        history.replaceState(null, "", url.pathname + (qs ? '?' + qs : ''));
-      })();
+    <?php if ($open_inbox): ?>openInbox();
+    (function() {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('inbox');
+      const qs = url.searchParams.toString();
+      history.replaceState(null, "", url.pathname + (qs ? ('?' + qs) : ''));
+    })();
     <?php endif; ?>
+
+    // Auto-mark read when clicking "Open"
+    document.querySelectorAll('.open-link').forEach(a => {
+      a.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const href = a.getAttribute('href');
+        const fd = new FormData();
+        fd.append('mark_open', '1');
+        fd.append('type', a.dataset.type);
+        fd.append('id', a.dataset.id);
+        if (a.dataset.status) fd.append('status_now', a.dataset.status);
+        try {
+          await fetch('user_home.php', {
+            method: 'POST',
+            body: fd,
+            credentials: 'same-origin'
+          });
+        } catch (err) {}
+        window.location.href = href;
+      }, {
+        passive: false
+      });
+    });
   </script>
 </body>
 
