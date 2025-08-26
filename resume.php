@@ -1,5 +1,5 @@
 <?php
-// resume.php
+
 require_once "connect.php"; // provides $pdo (PDO)
 if (session_status() === PHP_SESSION_NONE) {
     session_start();

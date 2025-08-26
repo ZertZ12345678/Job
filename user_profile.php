@@ -1,5 +1,5 @@
 <?php
-// user_profile.php
+
 include("connect.php");
 session_start();
 
@@ -386,7 +386,7 @@ $avatarSrc = $hasPhoto ? ('profile_pics/' . e($user['profile_picture']))
             }
         }
     </script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    
 </body>
 
 </html>

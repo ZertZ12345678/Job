@@ -1,5 +1,5 @@
 <?php
-// c_dashboard.php
+
 include("connect.php");
 session_start();
 
@@ -68,17 +68,15 @@ try {
 
 $logo_url = buildImageUrl('company_logos', $company['logo'] ?? '', $company['company_name'] ?? '', 'C');
 
-/* ===== KPIs (no Interviews) ===== */
-$counts = ['active_jobs' => 0, 'total_applicants' => 0];
+/* ===== KPIs ===== */
+$counts = ['active_jobs' => 0, 'total_applicants' => 0, 'employees' => 0];
 try {
-    $stmt = $pdo->prepare("
-        SELECT COUNT(*) FROM jobs
-        WHERE company_id = ? AND LOWER(status) IN ('active','open')
-    ");
+    // Active jobs (any case of 'active'/'open')
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM jobs WHERE company_id=? AND LOWER(status) IN ('active','open')");
     $stmt->execute([$company_id]);
     $counts['active_jobs'] = (int)$stmt->fetchColumn();
 
-    // applications table = application (singular)
+    // Total applicants to this company's jobs
     $stmt = $pdo->prepare("
         SELECT COUNT(*)
         FROM application a
@@ -87,33 +85,37 @@ try {
     ");
     $stmt->execute([$company_id]);
     $counts['total_applicants'] = (int)$stmt->fetchColumn();
-} catch (PDOException $e) { /* keep defaults */
+
+    // Employees = accepted applications for this company's jobs
+    $stmt = $pdo->prepare("
+        SELECT COUNT(*)
+        FROM application a
+        JOIN jobs j ON j.job_id = a.job_id
+        WHERE j.company_id = ?
+          AND UPPER(a.status) = 'ACCEPTED'
+    ");
+    $stmt->execute([$company_id]);
+    $counts['employees'] = (int)$stmt->fetchColumn();
+} catch (PDOException $e) {
 }
 
-/* ===== Recent Jobs (any status) — uses posted_at in your schema ===== */
+/* ===== Recent Jobs (any status) ===== */
 $recent_jobs = [];
 try {
     $stmt = $pdo->prepare("
-        SELECT
-          j.job_id,
-          j.job_title,
-          j.employment_type,
-          j.location,
-          j.deadline,
-          j.status,
-          (SELECT COUNT(*) FROM application a WHERE a.job_id = j.job_id) AS applicants
+        SELECT j.job_id, j.job_title, j.employment_type, j.location, j.deadline, j.status,
+               (SELECT COUNT(*) FROM application a WHERE a.job_id=j.job_id) AS applicants
         FROM jobs j
-        WHERE j.company_id = ?
+        WHERE j.company_id=?
         ORDER BY (j.posted_at IS NULL), j.posted_at DESC, (j.deadline IS NULL), j.deadline DESC, j.job_id DESC
         LIMIT 5
     ");
     $stmt->execute([$company_id]);
     $recent_jobs = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 } catch (PDOException $e) {
-    $recent_jobs = [];
 }
 
-/* ===== Recent Applicants — from application (singular) ===== */
+/* ===== Recent Applicants ===== */
 $recent_apps = [];
 try {
     $stmt = $pdo->prepare("
@@ -130,15 +132,10 @@ try {
     $stmt->execute([$company_id]);
     $recent_apps = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 } catch (PDOException $e) {
-    $recent_apps = [];
 }
 
-/* ===== Progress bar color ===== */
 $pp = (int)($company['profile_pct'] ?? 0);
-$barClass = 'bg-danger';
-if ($pp > 30) $barClass = 'bg-warning';
-if ($pp > 60) $barClass = 'bg-info';
-if ($pp > 85) $barClass = 'bg-success';
+$barClass = $pp > 85 ? 'bg-success' : ($pp > 60 ? 'bg-info' : ($pp > 30 ? 'bg-warning' : 'bg-danger'));
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -302,7 +299,7 @@ if ($pp > 85) $barClass = 'bg-success';
             <!-- Overview with KPIs + Recent Jobs table -->
             <section id="overview" class="mb-4">
                 <div class="row g-3">
-                    <div class="col-12 col-sm-6 col-xl-4">
+                    <div class="col-12 col-sm-6 col-xl-3">
                         <div class="card kpi-card">
                             <div class="card-body">
                                 <div class="d-flex justify-content-between">
@@ -315,7 +312,8 @@ if ($pp > 85) $barClass = 'bg-success';
                             </div>
                         </div>
                     </div>
-                    <div class="col-12 col-sm-6 col-xl-4">
+
+                    <div class="col-12 col-sm-6 col-xl-3">
                         <div class="card kpi-card">
                             <div class="card-body">
                                 <div class="d-flex justify-content-between">
@@ -328,7 +326,23 @@ if ($pp > 85) $barClass = 'bg-success';
                             </div>
                         </div>
                     </div>
-                    <div class="col-12 col-sm-12 col-xl-4">
+
+                    <!-- NEW KPI: Employees (Accepted) -->
+                    <div class="col-12 col-sm-6 col-xl-3">
+                        <div class="card kpi-card">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <div class="text-muted small">Employees</div>
+                                        <div class="h4 mb-0"><?= $counts['employees'] ?></div>
+                                    </div>
+                                    <i class="bi bi-person-check fs-2 text-warning"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-12 col-sm-6 col-xl-3">
                         <div class="card kpi-card">
                             <div class="card-body">
                                 <div class="d-flex justify-content-between align-items-center w-100">
@@ -348,11 +362,10 @@ if ($pp > 85) $barClass = 'bg-success';
                     </div>
                 </div>
 
-                <!-- Recent Jobs (inside Overview) -->
+                <!-- Recent Jobs (no action buttons) -->
                 <div class="card border-0 shadow-sm rounded-4 mt-3">
                     <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
                         <h6 class="mb-0">Recent Jobs</h6>
-                        <a href="manage_jobs.php" class="btn btn-sm btn-outline-secondary">View all</a>
                     </div>
                     <div class="card-body p-0">
                         <div class="table-responsive">
@@ -365,15 +378,12 @@ if ($pp > 85) $barClass = 'bg-success';
                                         <th>Applicants</th>
                                         <th>Deadline</th>
                                         <th>Status</th>
-                                        <th></th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     <?php if (empty($recent_jobs)): ?>
                                         <tr>
-                                            <td colspan="7" class="text-center text-muted py-4">
-                                                No jobs yet. <a href="post_job.php">Post your first job</a>.
-                                            </td>
+                                            <td colspan="6" class="text-center text-muted py-4">No jobs yet.</td>
                                         </tr>
                                         <?php else: foreach ($recent_jobs as $j): ?>
                                             <tr>
@@ -383,10 +393,6 @@ if ($pp > 85) $barClass = 'bg-success';
                                                 <td><?= (int)$j['applicants'] ?></td>
                                                 <td><?= h($j['deadline']) ?></td>
                                                 <td><?= job_badge($j['status']) ?></td>
-                                                <td class="text-end">
-                                                    <a class="btn btn-sm btn-outline-warning" href="applications.php?job_id=<?= (int)$j['job_id'] ?>">View</a>
-                                                    <a class="btn btn-sm btn-outline-secondary ms-1" href="edit_job.php?job_id=<?= (int)$j['job_id'] ?>">Edit</a>
-                                                </td>
                                             </tr>
                                     <?php endforeach;
                                     endif; ?>
@@ -397,12 +403,11 @@ if ($pp > 85) $barClass = 'bg-success';
                 </div>
             </section>
 
-            <!-- Recent Applicants -->
+            <!-- Recent Applicants (no buttons) -->
             <section id="applicants" class="mb-4">
                 <div class="card border-0 shadow-sm rounded-4">
                     <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
                         <h6 class="mb-0">Recent Applicants</h6>
-                        <a href="seekers_browse.php" class="btn btn-sm btn-outline-secondary">Find more</a>
                     </div>
                     <div class="card-body p-0">
                         <div class="table-responsive">
@@ -413,19 +418,20 @@ if ($pp > 85) $barClass = 'bg-success';
                                         <th>Job</th>
                                         <th>Status</th>
                                         <th>Applied</th>
-                                        <th></th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     <?php if (empty($recent_apps)): ?>
                                         <tr>
-                                            <td colspan="5" class="text-center text-muted py-4">No applications yet.</td>
+                                            <td colspan="4" class="text-center text-muted py-4">No applications yet.</td>
                                         </tr>
                                         <?php else: foreach ($recent_apps as $a): ?>
                                             <tr>
                                                 <td>
                                                     <div class="fw-semibold"><?= h($a['full_name']) ?></div>
-                                                    <div class="small text-muted"><?= h($a['email']) ?><?= !empty($a['phone']) ? ' • ' . h($a['phone']) : '' ?></div>
+                                                    <div class="small text-muted">
+                                                        <?= h($a['email']) ?><?= !empty($a['phone']) ? ' • ' . h($a['phone']) : '' ?>
+                                                    </div>
                                                 </td>
                                                 <td><?= h($a['job_title']) ?></td>
                                                 <td>
@@ -442,10 +448,6 @@ if ($pp > 85) $barClass = 'bg-success';
                                                     <span class="badge text-bg-<?= $badge ?>"><?= h($status) ?></span>
                                                 </td>
                                                 <td><?= h(date('Y-m-d', strtotime($a['created_at']))) ?></td>
-                                                <td class="text-end">
-                                                    <a class="btn btn-sm btn-outline-warning" href="app_user_detail.php">Open</a>
-                                                    <a class="btn btn-sm btn-outline-secondary ms-1" href="candidate_profile.php?user_id=<?= (int)$a['user_id'] ?>">Profile</a>
-                                                </td>
                                             </tr>
                                     <?php endforeach;
                                     endif; ?>

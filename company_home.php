@@ -1,5 +1,5 @@
 <?php
-// company_home.php — envelope opens 1/2-page slide-in panel (Detail only; no Accept/Reject)
+
 require_once "connect.php";
 session_start();
 
