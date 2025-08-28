@@ -1,5 +1,4 @@
 <?php
-
 include("connect.php");
 if (session_status() === PHP_SESSION_NONE) session_start();
 
@@ -78,6 +77,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $email        = trim($_POST['email'] ?? '');
     $phone        = trim($_POST['phone'] ?? '');
     $address      = trim($_POST['address'] ?? '');
+    $c_detail     = trim($_POST['c_detail'] ?? '');   // <-- NEW: Detail Company
 
     // ---- Optional: logo upload ----
     $logo = null;
@@ -115,12 +115,14 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                   company_name = :company_name,
                   email        = :email,
                   phone        = :phone,
-                  address      = :address";
+                  address      = :address,
+                  c_detail     = :c_detail";          // <-- include detail
         $params = [
             ':company_name' => $company_name,
             ':email'        => $email,
             ':phone'        => $phone,
             ':address'      => $address,
+            ':c_detail'     => $c_detail,
             ':company_id'   => $company_id
         ];
         if ($logo) {
@@ -137,8 +139,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                 $stmt = $pdo->prepare("SELECT * FROM companies WHERE company_id = ?");
                 $stmt->execute([$company_id]);
                 $company = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
-                $_SESSION['company_name'] = $company['company_name'] ?? $_SESSION['company_name'] ?? null;
-                $_SESSION['email']        = $company['email'] ?? $_SESSION['email'] ?? null;
+                $_SESSION['company_name'] = $company['company_name'] ?? ($_SESSION['company_name'] ?? null);
+                $_SESSION['email']        = $company['email'] ?? ($_SESSION['email'] ?? null);
             } else {
                 $error_message = "Failed to update. Please try again.";
             }
@@ -150,8 +152,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
 /* ===== 3) Compute avatar source (logo OR initials SVG) ===== */
 $hasLogo  = !empty($company['logo']) && is_file(__DIR__ . '/company_logos/' . $company['logo']);
-$avatarSrc = $hasLogo ? ('company_logos/' . e($company['logo']))
-    : svg_avatar_data_uri($company['company_name'] ?? '', 112);
+$avatarSrc = $hasLogo ? ('company_logos/' . e($company['logo'])) : svg_avatar_data_uri($company['company_name'] ?? '', 112);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -206,7 +207,32 @@ $avatarSrc = $hasLogo ? ('company_logos/' . e($company['logo']))
             font-size: 1.04rem;
         }
 
-        .profile-form input[readonly] {
+
+        /* ===== Navbar link underline on hover ===== */
+        .navbar-nav .nav-link {
+            position: relative;
+            padding-bottom: 4px;
+            /* space for underline */
+            transition: color 0.2s ease-in-out;
+        }
+
+        .navbar-nav .nav-link::after {
+            content: "";
+            position: absolute;
+            left: 0;
+            bottom: 0;
+            width: 0%;
+            height: 2px;
+            background-color: #ffaa2b;
+            transition: width 0.25s ease-in-out;
+        }
+
+        .navbar-nav .nav-link:hover::after {
+            width: 100%;
+        }
+
+        .profile-form input[readonly],
+        .profile-form textarea[readonly] {
             background: #f7f7fa;
             cursor: not-allowed;
         }
@@ -216,6 +242,10 @@ $avatarSrc = $hasLogo ? ('company_logos/' . e($company['logo']))
             align-items: center;
             gap: 1rem;
             margin-bottom: 1.2rem;
+        }
+
+        textarea.form-control {
+            min-height: 120px;
         }
     </style>
 </head>
@@ -230,9 +260,9 @@ $avatarSrc = $hasLogo ? ('company_logos/' . e($company['logo']))
             <div class="collapse navbar-collapse justify-content-end" id="navbarNav">
                 <ul class="navbar-nav">
                     <li class="nav-item"><a class="nav-link" href="c_dashboard.php">Dashboard</a></li>
-                    <li class="nav-item"><a class="nav-link active" href="company_profile.php">Company Profile</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="company_profile.php">Profile</a></li>
                     <li class="nav-item"><a class="nav-link" href="post_job.php">Post Job</a></li>
-                    <li class="nav-item"><a class="btn btn-outline-warning ms-2" href="index.php">Logout</a></li>
+                    <li class="nav-item"><a class="btn btn-outline-warning ms-2" href="logout.php">Logout</a></li>
                 </ul>
             </div>
         </div>
@@ -266,9 +296,7 @@ $avatarSrc = $hasLogo ? ('company_logos/' . e($company['logo']))
                         <input type="text" name="company_name" class="form-control"
                             value="<?= e($company['company_name'] ?? '') ?>" <?= field_edit_attr($company['company_name']) ?> required>
                     </div>
-                    <?php if (!empty($company['company_name'])): ?>
-                        <button type="button" class="edit-btn" onclick="toggleEdit(this)">✎ Edit</button>
-                    <?php endif; ?>
+                    <?php if (!empty($company['company_name'])): ?><button type="button" class="edit-btn" onclick="toggleEdit(this)">✎ Edit</button><?php endif; ?>
                 </div>
 
                 <!-- Email -->
@@ -278,9 +306,7 @@ $avatarSrc = $hasLogo ? ('company_logos/' . e($company['logo']))
                         <input type="email" name="email" class="form-control"
                             value="<?= e($company['email'] ?? '') ?>" <?= field_edit_attr($company['email']) ?> required>
                     </div>
-                    <?php if (!empty($company['email'])): ?>
-                        <button type="button" class="edit-btn" onclick="toggleEdit(this)">✎ Edit</button>
-                    <?php endif; ?>
+                    <?php if (!empty($company['email'])): ?><button type="button" class="edit-btn" onclick="toggleEdit(this)">✎ Edit</button><?php endif; ?>
                 </div>
 
                 <!-- Phone -->
@@ -290,9 +316,7 @@ $avatarSrc = $hasLogo ? ('company_logos/' . e($company['logo']))
                         <input type="text" name="phone" class="form-control"
                             value="<?= e($company['phone'] ?? '') ?>" <?= field_edit_attr($company['phone']) ?>>
                     </div>
-                    <?php if (!empty($company['phone'])): ?>
-                        <button type="button" class="edit-btn" onclick="toggleEdit(this)">✎ Edit</button>
-                    <?php endif; ?>
+                    <?php if (!empty($company['phone'])): ?><button type="button" class="edit-btn" onclick="toggleEdit(this)">✎ Edit</button><?php endif; ?>
                 </div>
 
                 <!-- Address -->
@@ -302,9 +326,17 @@ $avatarSrc = $hasLogo ? ('company_logos/' . e($company['logo']))
                         <input type="text" name="address" class="form-control"
                             value="<?= e($company['address'] ?? '') ?>" <?= field_edit_attr($company['address']) ?>>
                     </div>
-                    <?php if (!empty($company['address'])): ?>
-                        <button type="button" class="edit-btn" onclick="toggleEdit(this)">✎ Edit</button>
-                    <?php endif; ?>
+                    <?php if (!empty($company['address'])): ?><button type="button" class="edit-btn" onclick="toggleEdit(this)">✎ Edit</button><?php endif; ?>
+                </div>
+
+                <!-- Detail Company (c_detail) -->
+                <div class="form-edit-row" style="align-items:flex-start">
+                    <div style="flex:1">
+                        <div class="field-label">Detail Company</div>
+                        <textarea name="c_detail" class="form-control" <?= field_edit_attr($company['c_detail']) ?>><?= e($company['c_detail'] ?? '') ?></textarea>
+                        <small class="text-muted">Brief description, services, branches, mission, etc.</small>
+                    </div>
+                    <?php if (!empty($company['c_detail'])): ?><button type="button" class="edit-btn" onclick="toggleEdit(this)">✎ Edit</button><?php endif; ?>
                 </div>
 
                 <div class="mt-4 text-center">
@@ -316,7 +348,7 @@ $avatarSrc = $hasLogo ? ('company_logos/' . e($company['logo']))
 
     <script>
         function toggleEdit(btn) {
-            const input = btn.parentNode.querySelector("input, select");
+            const input = btn.parentNode.querySelector("input, select, textarea");
             if (!input) return;
             if (input.hasAttribute("readonly")) input.removeAttribute("readonly");
             if (input.hasAttribute("disabled")) input.removeAttribute("disabled");

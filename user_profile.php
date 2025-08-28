@@ -1,5 +1,4 @@
 <?php
-
 include("connect.php");
 session_start();
 
@@ -38,7 +37,7 @@ function svg_avatar_data_uri(string $name, int $size = 112): string
     $txt    = '#FF8A00';   // warm orange letters
     $font   = (int) round($size * 0.42);
     $radius = 16;          // rounded-corner square like your UI
-    $inner  = $size - 4;   // <-- compute first; can't do {$size-4} inside heredoc
+    $inner  = $size - 4;   // compute first; can't do {$size-4} inside heredoc
 
     $svg = <<<SVG
 <svg xmlns="http://www.w3.org/2000/svg" width="$size" height="$size" viewBox="0 0 $size $size">
@@ -71,14 +70,22 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $email            = trim($_POST['email'] ?? '');
     $phone            = trim($_POST['phone'] ?? '');
     $address          = trim($_POST['address'] ?? '');
+    $b_date           = trim($_POST['b_date'] ?? ''); // <-- Birth Date
     $job_category     = trim($_POST['job_category'] ?? '');
     $current_position = trim($_POST['current_position'] ?? '');
+
+    // Normalize date to YYYY-MM-DD or empty
+    if ($b_date !== '') {
+        // Acceptable inputs like 2025-08-28; if invalid, set empty to avoid DB errors
+        $ts = strtotime($b_date);
+        $b_date = $ts ? date('Y-m-d', $ts) : '';
+    }
 
     // ---- Optional: photo upload ----
     $profile_picture = null;
     if (isset($_FILES['profile_picture']) && ($_FILES['profile_picture']['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK) {
         $allowed = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
-        $ext  = strtolower(pathinfo($_FILES['profile_picture']['name'], PATHINFO_EXTENSION));
+        $ext   = strtolower(pathinfo($_FILES['profile_picture']['name'], PATHINFO_EXTENSION));
         $sizeB = $_FILES['profile_picture']['size'] ?? 0;
 
         if (!in_array($ext, $allowed, true)) {
@@ -111,6 +118,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                   email = :email,
                   phone = :phone,
                   address = :address,
+                  b_date = :b_date,                 -- <-- save birth date
                   job_category = :job_category,
                   current_position = :current_position";
         $params = [
@@ -118,6 +126,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             ':email'            => $email,
             ':phone'            => $phone,
             ':address'          => $address,
+            ':b_date'           => ($b_date === '' ? null : $b_date), // NULL if empty
             ':job_category'     => $job_category,
             ':current_position' => $current_position,
             ':user_id'          => $user_id
@@ -161,9 +170,7 @@ function field_edit_attr($val, $type = 'input')
 
 /* ===== 4) Compute avatar source (photo OR initials SVG) ===== */
 $hasPhoto  = !empty($user['profile_picture']) && is_file(__DIR__ . '/profile_pics/' . $user['profile_picture']);
-$avatarSrc = $hasPhoto ? ('profile_pics/' . e($user['profile_picture']))
-    : svg_avatar_data_uri($user['full_name'] ?? '', 112);
-
+$avatarSrc = $hasPhoto ? ('profile_pics/' . e($user['profile_picture'])) : svg_avatar_data_uri($user['full_name'] ?? '', 112);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -188,7 +195,6 @@ $avatarSrc = $hasPhoto ? ('profile_pics/' . e($user['profile_picture']))
             padding: 2.5rem 2rem 2rem;
         }
 
-        /* Square avatar, rounded corners, yellow border */
         .profile-img {
             width: 112px;
             height: 112px;
@@ -269,8 +275,8 @@ $avatarSrc = $hasPhoto ? ('profile_pics/' . e($user['profile_picture']))
                 <div class="text-center mb-3">
                     <img src="<?= $avatarSrc ?>" class="profile-img" id="profilePreview" alt="Profile">
                     <div>
-                        <input type="file" name="profile_picture" accept="image/*" class="form-control mt-2" style="max-width:260px; margin:0 auto;"
-                            onchange="previewProfilePic(this)">
+                        <input type="file" name="profile_picture" accept="image/*" class="form-control mt-2"
+                            style="max-width:260px; margin:0 auto;" onchange="previewProfilePic(this)">
                     </div>
                 </div>
 
@@ -291,7 +297,7 @@ $avatarSrc = $hasPhoto ? ('profile_pics/' . e($user['profile_picture']))
                     <div style="flex:1">
                         <div class="field-label">Email</div>
                         <input type="email" name="email" class="form-control"
-                            value=" <?= e($user['email'] ?? '') ?>" <?= field_edit_attr($user['email']) ?> required>
+                            value="<?= e($user['email'] ?? '') ?>" <?= field_edit_attr($user['email']) ?> required>
                     </div>
                     <?php if (!empty($user['email'])): ?>
                         <button type="button" class="edit-btn" onclick="toggleEdit(this)">✎ Edit</button>
@@ -318,6 +324,18 @@ $avatarSrc = $hasPhoto ? ('profile_pics/' . e($user['profile_picture']))
                             value="<?= e($user['address'] ?? '') ?>" <?= field_edit_attr($user['address']) ?>>
                     </div>
                     <?php if (!empty($user['address'])): ?>
+                        <button type="button" class="edit-btn" onclick="toggleEdit(this)">✎ Edit</button>
+                    <?php endif; ?>
+                </div>
+
+                <!-- Birth Date (AFTER Address) -->
+                <div class="form-edit-row">
+                    <div style="flex:1">
+                        <div class="field-label">Birth Date</div>
+                        <input type="date" name="b_date" class="form-control"
+                            value="<?= e($user['b_date'] ?? '') ?>" <?= field_edit_attr($user['b_date']) ?>>
+                    </div>
+                    <?php if (!empty($user['b_date'])): ?>
                         <button type="button" class="edit-btn" onclick="toggleEdit(this)">✎ Edit</button>
                     <?php endif; ?>
                 </div>
@@ -386,7 +404,6 @@ $avatarSrc = $hasPhoto ? ('profile_pics/' . e($user['profile_picture']))
             }
         }
     </script>
-    
 </body>
 
 </html>

@@ -80,6 +80,30 @@ $LOGO_DIR = "company_logos/";
       border-width: 2px;
     }
 
+    /* ===== Navbar link underline on hover ===== */
+    .navbar-nav .nav-link {
+      position: relative;
+      padding-bottom: 4px;
+      /* space for underline */
+      transition: color 0.2s ease-in-out;
+    }
+
+    .navbar-nav .nav-link::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      bottom: 0;
+      width: 0%;
+      height: 2px;
+      background-color: #ffaa2b;
+      transition: width 0.25s ease-in-out;
+    }
+
+    .navbar-nav .nav-link:hover::after {
+      width: 100%;
+    }
+
+
     .hero-section {
       background: #f8fafc;
       padding: 70px 0 30px;
@@ -205,7 +229,7 @@ $LOGO_DIR = "company_logos/";
       <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"><span class="navbar-toggler-icon"></span></button>
       <div class="collapse navbar-collapse justify-content-end" id="navbarNav">
         <ul class="navbar-nav">
-          <li class="nav-item"><a class="nav-link" href="#">Companies</a></li>
+          <li class="nav-item"><a class="nav-link" href="index_all_companies.php">All Companies</a></li>
           <li class="nav-item"><a class="nav-link" href="login.php">Login</a></li>
           <li class="nav-item"><a class="btn btn-warning ms-2 text-white" href="sign_up.php">Register</a></li>
           <li class="nav-item"><a class="btn btn-outline-warning ms-2" href="c_sign_up.php">Company Register</a></li>

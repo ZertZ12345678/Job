@@ -47,9 +47,10 @@ $is_premium = true;
 /* ----------------- LOAD USER FROM DB ----------------- */
 try {
     $stmt = $pdo->prepare("
-        SELECT user_id, full_name, email, phone, address, job_category, current_position, profile_picture
-        FROM users WHERE user_id=? LIMIT 1
-    ");
+    SELECT user_id, full_name, email, phone, address, job_category, current_position, profile_picture, b_date
+    FROM users WHERE user_id=? LIMIT 1
+");
+
     $stmt->execute([$user_id]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
@@ -73,6 +74,7 @@ $addr  = $user['address'] ?? '';
 $cat   = $user['job_category'] ?? '';
 $pos   = $user['current_position'] ?? '';
 $photo = $user['profile_picture'] ?? '';
+$birth = $user['b_date'] ?? '';
 $ini   = initials($name);
 
 $photo_src = '';
@@ -366,6 +368,7 @@ if ($photo) {
                                     <div class="fw-semibold"><?= e($email) ?></div>
                                     <div class="muted"><?= e($phone) ?></div>
                                     <div class="muted"><?= e($addr) ?></div>
+                                    <div class="muted"><?= e($birth) ?></div>
                                 </div>
                                 <div>
                                     <div class="section-title">Key Info</div>
@@ -422,6 +425,12 @@ if ($photo) {
                                     <div class="fw-semibold">Category</div>
                                     <div class="muted"><?= e($cat) ?></div>
                                 </div>
+                                <div class="col-md-6">
+                                    <div class="fw-semibold">Birth Date</div>
+                                    <div class="muted"><?= e($birth) ?></div>
+                                </div>
+
+
                             </div>
                             <div class="divider"></div>
                             <div>
@@ -445,6 +454,7 @@ if ($photo) {
                                 <div><?= e($email) ?></div>
                                 <div><?= e($phone) ?></div>
                                 <div><?= e($addr) ?></div>
+                                <div><?= e($birth) ?></div>
                             </div>
                             <div class="mt-4">
                                 <?php if ($cat): ?><span class="chip"><?= e($cat) ?></span><?php endif; ?>

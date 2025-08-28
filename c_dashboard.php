@@ -271,7 +271,7 @@ $barClass = $pp > 85 ? 'bg-success' : ($pp > 60 ? 'bg-info' : ($pp > 30 ? 'bg-wa
 
         <div class="mt-3">
             <hr class="border-secondary my-2" />
-            <a class="nav-link text-danger" href="index.php"><i class="bi bi-box-arrow-right me-2"></i> Logout</a>
+            <a class="nav-link text-danger" href="logout.php"><i class="bi bi-box-arrow-right me-2"></i> Logout</a>
         </div>
     </aside>
 

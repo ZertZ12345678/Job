@@ -1,5 +1,4 @@
 <?php
-
 include("connect.php");
 session_start();
 
@@ -11,7 +10,7 @@ if (!$user_id) {
 }
 
 /* ===== Fetch current user with computed profile % =====
-   (fields counted: full_name, email, phone, address, current_position) */
+   (fields counted: full_name, email, phone, address, current_position, b_date) */
 try {
     $stmt = $pdo->prepare("
         SELECT 
@@ -22,14 +21,16 @@ try {
           u.address,
           u.job_category,
           u.current_position,
+          u.b_date,
           u.profile_picture AS photo,
           ROUND((
             IF(u.full_name IS NULL OR u.full_name='',0,1) +
             IF(u.email IS NULL OR u.email='',0,1) +
             IF(u.phone IS NULL OR u.phone='',0,1) +
             IF(u.address IS NULL OR u.address='',0,1) +
-            IF(u.current_position IS NULL OR u.current_position='',0,1)
-          ) / 5 * 100) AS profile_pct
+            IF(u.current_position IS NULL OR u.current_position='',0,1) +
+            IF(u.b_date IS NULL OR u.b_date='',0,1)
+          ) / 6 * 100) AS profile_pct
         FROM users u
         WHERE u.user_id = ?
         LIMIT 1

@@ -66,6 +66,29 @@ function name_initials($name)
       background: #f8fafc;
     }
 
+    /* ===== Navbar link underline on hover ===== */
+    .navbar-nav .nav-link {
+      position: relative;
+      padding-bottom: 4px;
+      /* space for underline */
+      transition: color 0.2s ease-in-out;
+    }
+
+    .navbar-nav .nav-link::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      bottom: 0;
+      width: 0%;
+      height: 2px;
+      background-color: #ffaa2b;
+      transition: width 0.25s ease-in-out;
+    }
+
+    .navbar-nav .nav-link:hover::after {
+      width: 100%;
+    }
+
     /* Hero/search */
     .hero-section {
       padding: 56px 0 30px;
@@ -279,7 +302,7 @@ function name_initials($name)
             </button>
           </li>
 
-          <li class="nav-item"><a class="btn btn-outline-warning ms-2" href="index.php">Logout</a></li>
+          <li class="nav-item"><a class="btn btn-outline-warning ms-2" href="logout.php">Logout</a></li>
         </ul>
       </div>
     </div>

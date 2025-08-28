@@ -301,6 +301,30 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
       border: 1px solid rgba(0, 0, 0, .06)
     }
 
+    /* ===== Navbar link underline on hover ===== */
+    .navbar-nav .nav-link {
+      position: relative;
+      padding-bottom: 4px;
+      /* space for underline */
+      transition: color 0.2s ease-in-out;
+    }
+
+    .navbar-nav .nav-link::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      bottom: 0;
+      width: 0%;
+      height: 2px;
+      background-color: #ffaa2b;
+      transition: width 0.25s ease-in-out;
+    }
+
+    .navbar-nav .nav-link:hover::after {
+      width: 100%;
+    }
+
+
     .hero-section {
       background: #f8fafc;
       padding: 64px 0 44px;
@@ -555,8 +579,7 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
         <ul class="navbar-nav align-items-lg-center">
           <li class="nav-item"><a class="nav-link active" aria-current="page" href="user_home.php">Home</a></li>
           <li class="nav-item"><a class="nav-link" href="user_dashboard.php">Dashboard</a></li>
-          <li class="nav-item"><a class="nav-link" href="recommended.php">Recommended Jobs</a></li>
-          <li class="nav-item"><a class="nav-link" href="companies.php">All Companies</a></li>
+          <li class="nav-item"><a class="nav-link" href="all_companies.php">All Companies</a></li>
 
           <!-- Envelope -->
           <li class="nav-item ms-lg-2">
@@ -583,7 +606,7 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
               <li>
                 <hr class="dropdown-divider">
               </li>
-              <li><a class="dropdown-item text-danger" href="index.php">Logout</a></li>
+              <li><a class="dropdown-item text-danger" href="logout.php">Logout</a></li>
             </ul>
           </li>
         </ul>
