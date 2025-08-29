@@ -259,6 +259,7 @@ $avatarSrc = $hasLogo ? ('company_logos/' . e($company['logo'])) : svg_avatar_da
             </button>
             <div class="collapse navbar-collapse justify-content-end" id="navbarNav">
                 <ul class="navbar-nav">
+                    <li class="nav-item"><a class="nav-link" href="company_home.php">Home</a></li>
                     <li class="nav-item"><a class="nav-link" href="c_dashboard.php">Dashboard</a></li>
                     <li class="nav-item"><a class="nav-link active" href="company_profile.php">Profile</a></li>
                     <li class="nav-item"><a class="nav-link" href="post_job.php">Post Job</a></li>

@@ -48,8 +48,8 @@ try {
     $full_name = $row['full_name'] ?: $full_name;
     $email = $row['email'] ?: $email;
     $profile_picture = $row['profile_picture'] ?? null;
-    $_SESSION['full_name'] = $full_name;
-    $_SESSION['email'] = $email;
+    $_SESSION['full_name']       = $full_name;
+    $_SESSION['email']           = $email;
     $_SESSION['profile_picture'] = $profile_picture;
   } else {
     header("Location: index.php");
@@ -58,54 +58,62 @@ try {
 } catch (PDOException $e) {
 }
 
-/* ===== Session state buckets ===== */
-$_SESSION['app_seen_status']    = $_SESSION['app_seen_status']    ?? []; // application_id => last seen status
-$_SESSION['session_notif_read'] = $_SESSION['session_notif_read'] ?? []; // notif_id => 1
+/* ===== Profile completion (must be 100% to upgrade) ===== */
+$REQUIRED = [
+  'full_name'        => 'Full name',
+  'email'            => 'Email',
+  'password'         => 'Password',
+  'gender'           => 'Gender',
+  'education'        => 'Education',
+  'phone'            => 'Phone',
+  'address'          => 'Address',
+  'b_date'           => 'Birth date',
+  'job_category'     => 'Job category',
+  'current_position' => 'Current position',
+  'profile_picture'  => 'Profile picture'
+];
+$missing_fields = [];
+try {
+  $cols = implode(',', array_map(fn($c) => "`$c`", array_keys($REQUIRED)));
+  $u = $pdo->prepare("SELECT $cols FROM users WHERE user_id=? LIMIT 1");
+  $u->execute([$user_id]);
+  $ud = $u->fetch(PDO::FETCH_ASSOC) ?: [];
+  foreach ($REQUIRED as $col => $label) {
+    $val = $ud[$col] ?? null;
+    $ok  = !is_null($val) && trim((string)$val) !== '';
+    if (!$ok) $missing_fields[] = $label;
+  }
+} catch (PDOException $e) {
+}
+$can_upgrade = empty($missing_fields);
+
+/* ===== POST handlers (server-side mark states kept for this session UI only) ===== */
+$_SESSION['app_seen_status']    = $_SESSION['app_seen_status']    ?? []; // application_id => last seen status (chip)
+$_SESSION['session_notif_read'] = $_SESSION['session_notif_read'] ?? []; // custom session notifs read state
 $seenApp  = &$_SESSION['app_seen_status'];
 $seenSess = &$_SESSION['session_notif_read'];
 
-/* ===== POST handlers (no DB) ===== */
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-
-  /* Mark all read */
+  // Mark all (session)
   if (isset($_POST['mark_all'])) {
     $_SESSION['mark_all_pending'] = 1;
     header("Location: user_home.php?inbox=1");
     exit;
   }
-
-  /* Mark one from button in list */
+  // Mark one (session)
   if (isset($_POST['mark_one']) && isset($_POST['type'])) {
     $type = $_POST['type']; // 'A' or 'S'
     if ($type === 'A') {
       $aid    = (int)($_POST['mark_one'] ?? 0);
       $status = trim($_POST['status_now'] ?? '');
       if ($aid > 0 && ($status === 'Accepted' || $status === 'Rejected')) {
-        $seenApp[$aid] = $status;
+        $seenApp[$aid] = $status;  // remembers read/marked for this session
       }
     } elseif ($type === 'S') {
       $nid = trim($_POST['mark_one'] ?? '');
       if ($nid !== '') $seenSess[$nid] = 1;
     }
     header("Location: user_home.php?inbox=1");
-    exit;
-  }
-
-  /* Mark read on "Open" (AJAX) */
-  if (isset($_POST['mark_open']) && isset($_POST['type']) && isset($_POST['id'])) {
-    $t = $_POST['type']; // 'A' or 'S'
-    if ($t === 'A') {
-      $aid    = (int)($_POST['id'] ?? 0);
-      $status = trim($_POST['status_now'] ?? '');
-      if ($aid > 0 && ($status === 'Accepted' || $status === 'Rejected')) {
-        $seenApp[$aid] = $status;
-      }
-    } else {
-      $nid = trim($_POST['id'] ?? '');
-      if ($nid !== '') $seenSess[$nid] = 1;
-    }
-    header("Content-Type: application/json");
-    echo json_encode(['ok' => 1]);
     exit;
   }
 }
@@ -118,15 +126,14 @@ try {
 }
 
 /* ===== Search filters ===== */
-$q   = '';
+$q = '';
 $loc = '';
-$jt  = ''; // NEW: job_type filter
+$jt = '';
 $isSearch = false;
-
 if (isset($_GET['csearch'])) {
   $q   = trim($_GET['q']   ?? '');
   $loc = trim($_GET['loc'] ?? '');
-  $jt  = trim($_GET['jt']  ?? ''); // keep jt if present when searching
+  $jt  = trim($_GET['jt']  ?? '');
   $isSearch = true;
 } else {
   if (isset($_GET['q'])) {
@@ -138,19 +145,15 @@ if (isset($_GET['csearch'])) {
     $isSearch = true;
   }
   if (isset($_GET['jt'])) {
-    $jt = trim($_GET['jt'] ?? '');
+    $jt = trim($_GET['jt']  ?? '');
     $isSearch = true;
   }
 }
+if ($jt !== '' && !in_array($jt, ['Software', 'Network'], true)) $jt = '';
 
-/* Sanitize jt to enum values if provided */
-if ($jt !== '' && !in_array($jt, ['Software', 'Network'], true)) {
-  $jt = ''; // ignore unexpected values
-}
-
-$conds  = [];
+$conds = [];
 $params = [];
-if ($q !== '') {
+if ($q   !== '') {
   $conds[] = "(j.job_title LIKE ? OR c.company_name LIKE ?)";
   $like = "%{$q}%";
   array_push($params, $like, $like);
@@ -159,17 +162,16 @@ if ($loc !== '') {
   $conds[] = "j.location LIKE ?";
   $params[] = "%{$loc}%";
 }
-/* ===== NEW: job_type filter ===== */
-if ($jt !== '') {
+if ($jt  !== '') {
   $conds[] = "j.job_type = ?";
   $params[] = $jt;
 }
-
 $whereSql = $conds ? ("WHERE " . implode(" AND ", $conds)) : "";
 
 /* ===== Jobs ===== */
 try {
-  $sql = "SELECT j.job_id,j.job_title,j.job_description,j.location,j.status,j.posted_at,c.company_name,c.logo
+  $sql = "SELECT j.job_id,j.job_title,j.job_description,j.location,j.status,j.posted_at,
+                 c.company_name,c.logo
           FROM jobs j JOIN companies c ON c.company_id=j.company_id
           $whereSql
           ORDER BY CASE j.status WHEN 'Active' THEN 1 WHEN 'Inactive' THEN 2 WHEN 'Closed' THEN 3 ELSE 4 END,
@@ -182,7 +184,7 @@ try {
   $jobs = [];
 }
 
-/* ===== Applications for this user (status-change notifications) ===== */
+/* ===== Applications for this user (for notifications) ===== */
 try {
   $apq = $pdo->prepare("
     SELECT a.application_id, a.status, a.applied_at, a.job_id,
@@ -199,40 +201,50 @@ try {
   $apps = [];
 }
 
-/* ===== Build unified inbox ===== */
+/* ===== Build unified inbox (history + session unread) ===== */
 $items = [];
 date_default_timezone_set('Asia/Yangon');
 
+if (!isset($_SESSION['already_notified'])) {
+  $_SESSION['already_notified'] = []; // [application_id] => 'Accepted'|'Rejected'
+}
+$alreadyNotified = &$_SESSION['already_notified'];
+
 foreach ($apps as $a) {
-  $aid   = (int)$a['application_id'];
-  $stt   = (string)$a['status'];
+  $aid = (int)$a['application_id'];
+  $stt = (string)$a['status'];
+
   if ($stt === 'Accepted' || $stt === 'Rejected') {
-    $unread = !isset($seenApp[$aid]) || $seenApp[$aid] !== $stt;
+    // First time this decision appears in THIS session?
+    $isFirstThisSession = !(isset($alreadyNotified[$aid]) && $alreadyNotified[$aid] === $stt);
+    if ($isFirstThisSession) {
+      $alreadyNotified[$aid] = $stt; // prevent "New" again this session
+    }
+    // Unread only the first time in this session AND if user hasn't clicked "Mark read" yet
+    $unread = $isFirstThisSession && (!isset($seenApp[$aid]) || $seenApp[$aid] !== $stt);
+
     $items[] = [
-      '_type'     => 'A',
-      '_id'       => (string)$aid,
-      '_unread'   => $unread,
-      'title'     => $stt . " — " . $a['job_title'],
-      'body'      => ($stt === 'Accepted'
+      '_type'      => 'A',
+      '_id'        => (string)$aid,
+      '_unread'    => $unread,
+      'title'      => $stt . " — " . $a['job_title'],
+      'body'       => ($stt === 'Accepted'
         ? "Great news! Your application to {$a['company_name']} for “{$a['job_title']}” was accepted."
         : "Update: Your application to {$a['company_name']} for “{$a['job_title']}” was rejected."),
-      'when'      => 'Applied: ' . date('M d, Y H:i', strtotime($a['applied_at'])),
-      'link'      => 'job_detail.php?id=' . (int)$a['job_id'],
-      'pill'      => $unread ? 'New' : 'Read',
-      'pillClass' => $unread ? 'text-bg-warning' : 'text-bg-secondary',
+      'when'       => 'Applied: ' . date('M d, Y H:i', strtotime($a['applied_at'])),
+      'link'       => '',
+      'pill'       => $unread ? 'New' : 'Read',
+      'pillClass'  => $unread ? 'text-bg-warning' : 'text-bg-secondary',
       'status_now' => $stt,
     ];
   }
 }
 
+/* Session-scoped custom notifications (e.g., Application Submitted) */
 $sessList = $_SESSION['notifications'] ?? [];
 if (is_array($sessList) && $sessList) {
   foreach ($sessList as $n) {
     $nid    = (string)($n['id'] ?? '');
-    $title  = (string)($n['title'] ?? 'Notification');
-    $msg    = (string)($n['message'] ?? '');
-    $link   = (string)($n['link'] ?? '');
-    $when   = (string)($n['created_at'] ?? date('Y-m-d H:i:s'));
     if ($nid === '') continue;
 
     $unread = empty($seenSess[$nid]);
@@ -240,10 +252,10 @@ if (is_array($sessList) && $sessList) {
       '_type'     => 'S',
       '_id'       => $nid,
       '_unread'   => $unread,
-      'title'     => $title,
-      'body'      => $msg,
-      'when'      => date('M d, Y H:i', strtotime($when)),
-      'link'      => $link,
+      'title'     => (string)($n['title'] ?? 'Notification'),
+      'body'      => (string)($n['message'] ?? ''),
+      'when'      => date('M d, Y H:i', strtotime((string)($n['created_at'] ?? date('Y-m-d H:i:s')))),
+      'link'      => (string)($n['link'] ?? ''),
       'pill'      => $unread ? 'New' : 'Read',
       'pillClass' => $unread ? 'text-bg-primary' : 'text-bg-secondary',
       'status_now' => null,
@@ -251,7 +263,7 @@ if (is_array($sessList) && $sessList) {
   }
 }
 
-/* Mark all pending */
+/* Mark all pending (session only; localStorage will persist across logins on this device) */
 if (!empty($_SESSION['mark_all_pending'])) {
   foreach ($items as $it) {
     if ($it['_type'] === 'A') {
@@ -263,7 +275,7 @@ if (!empty($_SESSION['mark_all_pending'])) {
   unset($_SESSION['mark_all_pending']);
 }
 
-/* Badge + shake */
+/* Badge + shake (server guess; JS will adjust after applying localStorage) */
 $badge_count = 0;
 foreach ($items as $it) if (!empty($it['_unread'])) $badge_count++;
 $prev_badge   = (int)($_SESSION['prev_badge_count'] ?? 0);
@@ -301,29 +313,26 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
       border: 1px solid rgba(0, 0, 0, .06)
     }
 
-    /* ===== Navbar link underline on hover ===== */
-    .navbar-nav .nav-link {
+    .navbar-nav .nav-item:not(.dropdown) .nav-link {
       position: relative;
       padding-bottom: 4px;
-      /* space for underline */
-      transition: color 0.2s ease-in-out;
+      transition: color .2s
     }
 
-    .navbar-nav .nav-link::after {
+    .navbar-nav .nav-item:not(.dropdown) .nav-link::after {
       content: "";
       position: absolute;
       left: 0;
       bottom: 0;
-      width: 0%;
+      width: 0;
       height: 2px;
       background-color: #ffaa2b;
-      transition: width 0.25s ease-in-out;
+      transition: width .25s
     }
 
-    .navbar-nav .nav-link:hover::after {
-      width: 100%;
+    .navbar-nav .nav-item:not(.dropdown) .nav-link:hover::after {
+      width: 100%
     }
-
 
     .hero-section {
       background: #f8fafc;
@@ -463,7 +472,7 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
       background: #fff;
       box-shadow: -12px 0 28px rgba(0, 0, 0, .08);
       transform: translateX(100%);
-      transition: transform .28s ease;
+      transition: transform .28s;
       display: flex;
       flex-direction: column;
       z-index: 1080
@@ -493,7 +502,7 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
       background: rgba(0, 0, 0, .25);
       opacity: 0;
       pointer-events: none;
-      transition: opacity .28s ease;
+      transition: opacity .28s;
       z-index: 1079
     }
 
@@ -563,7 +572,97 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
 
     .btn-bell-shake {
       animation: bell .6s ease-in-out 1;
-      transform-origin: 50% 0%;
+      transform-origin: 50% 0%
+    }
+
+    /* Premium modal styling */
+    .premium-highlight {
+      background: linear-gradient(135deg, #fff9e6, #fff);
+      border: 1px solid #ffe08a;
+      border-radius: 1rem;
+    }
+
+    .modal.fade .modal-dialog {
+      transform: translateY(18px);
+      transition: transform .28s ease, opacity .28s ease;
+    }
+
+    .modal.show .modal-dialog {
+      transform: none;
+    }
+
+    .sparkle {
+      background: linear-gradient(90deg, rgba(255, 193, 7, .25), rgba(255, 193, 7, .65), rgba(255, 193, 7, .25));
+      background-size: 200% 100%;
+      animation: shine 2.2s ease-in-out infinite;
+      border-radius: .6rem;
+      padding: .25rem .5rem;
+      display: inline-block;
+    }
+
+    @keyframes shine {
+      0% {
+        background-position: 200% 0
+      }
+
+      100% {
+        background-position: 0 0
+      }
+    }
+
+    .price-wrap {
+      display: flex;
+      align-items: baseline;
+      gap: .6rem
+    }
+
+    .price-old {
+      text-decoration: line-through;
+      color: #6c757d
+    }
+
+    .price-new {
+      font-weight: 800;
+      font-size: 1.35rem;
+      color: #198754
+    }
+
+    .badge-save {
+      background: #198754;
+      color: #fff;
+      border-radius: .5rem;
+      padding: .2rem .5rem;
+      font-size: .75rem;
+      font-weight: 600
+    }
+
+    /* subtle shake for inline warning */
+    @keyframes shakeX {
+
+      0%,
+      100% {
+        transform: translateX(0)
+      }
+
+      20% {
+        transform: translateX(-4px)
+      }
+
+      40% {
+        transform: translateX(4px)
+      }
+
+      60% {
+        transform: translateX(-3px)
+      }
+
+      80% {
+        transform: translateX(3px)
+      }
+    }
+
+    #upgradeWarn.shake {
+      animation: shakeX .35s ease-in-out 1;
     }
   </style>
 </head>
@@ -587,7 +686,16 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
               <i class="bi bi-envelope"></i>
               <?php if ($badge_count > 0): ?>
                 <span id="notifBadge" class="badge rounded-pill text-bg-danger badge-dot"><?= $badge_count > 99 ? '99+' : $badge_count ?></span>
+              <?php else: ?>
+                <span id="notifBadge" class="badge rounded-pill text-bg-danger badge-dot" style="display:none"></span>
               <?php endif; ?>
+            </button>
+          </li>
+
+          <!-- Go Premium button -->
+          <li class="nav-item ms-lg-2 d-none d-lg-block">
+            <button id="btnPremium" class="btn btn-warning">
+              <i class="bi bi-star-fill me-1"></i> Go Premium
             </button>
           </li>
 
@@ -611,7 +719,6 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
           </li>
         </ul>
       </div>
-
     </div>
   </nav>
 
@@ -630,7 +737,6 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
               <option value="<?= e($L) ?>" <?= $sel ?>><?= e($L === '' ? 'All Locations' : $L) ?></option>
             <?php endforeach; ?>
           </select>
-          <!-- keep current jt if any while searching -->
           <?php if ($jt !== ''): ?><input type="hidden" name="jt" value="<?= e($jt) ?>"><?php endif; ?>
           <button class="btn btn-search" type="submit" name="csearch" value="1">Search</button>
         </div>
@@ -639,27 +745,19 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
       <!-- Popular by Job Type -->
       <div class="popular-tags">
         <span class="popular-label">Popular:</span>
-
-        <!-- Software -->
         <form method="get" action="user_home.php" style="display:inline;">
           <input type="hidden" name="jt" value="Software">
           <button type="submit" class="popular-btn<?= $jt === 'Software' ? ' border-2' : '' ?>">Software</button>
         </form>
-
-        <!-- Network -->
         <form method="get" action="user_home.php" style="display:inline;">
           <input type="hidden" name="jt" value="Network">
           <button type="submit" class="popular-btn<?= $jt === 'Network' ? ' border-2' : '' ?>">Network</button>
         </form>
-
-        <!-- All Jobs -->
         <form method="get" action="user_home.php" style="display:inline;">
           <input type="hidden" name="jt" value="">
           <button type="submit" class="popular-btn<?= $jt === '' ? ' border-2' : '' ?>">All Jobs</button>
         </form>
       </div>
-
-
   </section>
 
   <!-- Slide-in Notifications -->
@@ -672,7 +770,7 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
       </div>
       <div class="d-flex gap-2">
         <form method="post" class="m-0">
-          <button name="mark_all" value="1" class="btn btn-light btn-sm">Mark all read</button>
+          <button name="mark_all" value="1" class="btn btn-light btn-sm js-mark-all">Mark all read</button>
         </form>
         <button id="btnCloseInbox" class="btn btn-light btn-sm"><i class="bi bi-x-lg"></i></button>
       </div>
@@ -686,34 +784,28 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
           $isUnread = !empty($n['_unread']);
           $cardCls  = $isUnread ? 'unread' : 'read';
         ?>
-          <div class="card notif-card <?= $cardCls ?> shadow-sm mb-2">
+          <div class="card notif-card <?= $cardCls ?> shadow-sm mb-2"
+            data-ntype="<?= e($n['_type']) ?>"
+            data-id="<?= e($n['_id']) ?>"
+            data-status="<?= e($n['status_now'] ?? '') ?>"
+            data-unread="<?= $isUnread ? '1' : '0' ?>">
             <div class="card-body d-flex justify-content-between align-items-start">
               <div class="pe-2">
                 <div class="fw-semibold d-flex align-items-center flex-wrap gap-2">
                   <span><?= e($n['title']) ?></span>
-                  <span class="badge <?= e($n['pillClass']) ?> notif-chip"><?= e($n['pill']) ?></span>
+                  <span class="badge <?= e($n['pillClass']) ?> notif-chip js-pill"><?= e($n['pill']) ?></span>
                 </div>
                 <div class="small text-muted mb-1"><?= e($n['when']) ?></div>
                 <div class="text-muted"><?= e($n['body']) ?></div>
               </div>
-
               <div class="d-flex flex-column gap-2">
-                <?php if (!empty($n['link'])): ?>
-                  <a href="<?= e($n['link']) ?>" class="btn btn-sm btn-outline-warning open-link"
-                    data-type="<?= e($n['_type']) ?>" data-id="<?= e($n['_id']) ?>"
-                    <?php if ($n['_type'] === 'A'): ?>data-status="<?= e($n['status_now']) ?>" <?php endif; ?>>Open</a>
-                <?php endif; ?>
-
                 <?php if ($isUnread): ?>
                   <form method="post" class="m-0">
+                    <input type="hidden" name="type" value="<?= e($n['_type']) ?>">
                     <?php if ($n['_type'] === 'A'): ?>
-                      <input type="hidden" name="type" value="A">
                       <input type="hidden" name="status_now" value="<?= e($n['status_now']) ?>">
-                      <button class="btn btn-sm btn-light" name="mark_one" value="<?= e($n['_id']) ?>">Mark read</button>
-                    <?php else: ?>
-                      <input type="hidden" name="type" value="S">
-                      <button class="btn btn-sm btn-light" name="mark_one" value="<?= e($n['_id']) ?>">Mark read</button>
                     <?php endif; ?>
+                    <button class="btn btn-sm btn-light js-mark-one" name="mark_one" value="<?= e($n['_id']) ?>">Mark read</button>
                   </form>
                 <?php else: ?>
                   <button class="btn btn-sm btn-light" disabled>Marked</button>
@@ -725,6 +817,56 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
       endif; ?>
     </div>
   </aside>
+
+  <!-- Premium Promo Modal -->
+  <div class="modal fade" id="premiumModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content premium-highlight shadow">
+        <div class="modal-header border-0 pb-0">
+          <h5 class="modal-title">
+            <span class="sparkle"><i class="bi bi-stars me-1"></i> Premium — 40% OFF</span>
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+
+        <div class="modal-body pt-2">
+          <p class="mb-3">
+            Unlock <strong>Premium Resume</strong>: beautiful templates + <strong>uto-fill</strong> from your profile. Apply faster and look professional.
+          </p>
+
+          <div class="d-flex align-items-center justify-content-between p-3 bg-white rounded-3 border">
+            <div class="price-wrap">
+              <span class="price-old">50,000 MMK</span>
+              <span class="price-new">30,000 MMK</span>
+            </div>
+            <span class="badge-save">You save 20,000 MMK</span>
+          </div>
+
+          <ul class="mt-3 mb-0 small text-muted">
+            <li>Premium resume templates (ATS-friendly)</li>
+            <li>One-click auto-fill from your JobHive profile</li>
+            <li>Download as PDF/PNG anytime</li>
+          </ul>
+
+          <!-- Inline warning if incomplete -->
+          <div id="upgradeWarn" class="alert alert-warning mt-3 mb-0 p-2" style="display: <?= $can_upgrade ? 'none' : 'block' ?>;">
+            <small>
+              <strong>Fill all data…</strong>
+              Missing: <?= e(implode(', ', $missing_fields)) ?>.
+              <a href="user_profile.php" class="alert-link">Update profile</a>
+            </small>
+          </div>
+        </div>
+
+        <div class="modal-footer border-0 pt-0">
+          <a id="upgradeNow" href="premium.php" class="btn btn-warning" data-can="<?= $can_upgrade ? '1' : '0' ?>">
+            <i class="bi bi-lightning-charge-fill me-1"></i> Upgrade Now
+          </a>
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Maybe later</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- Featured Jobs -->
   <section class="py-5">
@@ -778,8 +920,9 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
     </div>
   </footer>
 
-  <!-- Panel + Auto-mark-on-open JS -->
+  <!-- Panel + Premium + Notification Persistence JS -->
   <script>
+    // Inbox Panel
     const panel = document.getElementById('inboxPanel');
     const backdrop = document.getElementById('backdrop');
     const btnInbox = document.getElementById('btnInbox');
@@ -817,28 +960,183 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
     })();
     <?php endif; ?>
 
-    // Auto-mark read when clicking "Open"
-    document.querySelectorAll('.open-link').forEach(a => {
-      a.addEventListener('click', async (e) => {
-        e.preventDefault();
-        const href = a.getAttribute('href');
-        const fd = new FormData();
-        fd.append('mark_open', '1');
-        fd.append('type', a.dataset.type);
-        fd.append('id', a.dataset.id);
-        if (a.dataset.status) fd.append('status_now', a.dataset.status);
+      // === Premium modal logic (NO alerts) ===
+      (function() {
+        const promoKey = 'jobhive_premium_shown';
+        const modalEl = document.getElementById('premiumModal');
+        if (!modalEl) return;
+        const premiumModal = new bootstrap.Modal(modalEl, {
+          backdrop: 'static',
+          keyboard: true
+        });
+
+        const btnPremium = document.getElementById('btnPremium');
+        btnPremium?.addEventListener('click', () => {
+          premiumModal.show();
+          sessionStorage.setItem(promoKey, '1');
+        });
+
+        // Auto-show after 3s once per session
+        window.addEventListener('load', () => {
+          const hasShown = sessionStorage.getItem(promoKey) === '1';
+          if (!hasShown) {
+            setTimeout(() => {
+              premiumModal.show();
+              sessionStorage.setItem(promoKey, '1');
+            }, 3000);
+          }
+        });
+
+        // Handle Upgrade Now inside modal
+        const upg = document.getElementById('upgradeNow');
+        const warn = document.getElementById('upgradeWarn');
+        upg?.addEventListener('click', (e) => {
+          const can = upg.getAttribute('data-can') === '1';
+          if (!can) {
+            e.preventDefault(); // block navigation
+            warn.style.display = 'block'; // show inline message
+            warn.classList.remove('shake');
+            void warn.offsetWidth;
+            warn.classList.add('shake');
+          }
+        });
+      })();
+
+    /* === Notification read persistence (localStorage per user) — FIXED ===
+  
+*/
+    (function() {
+      const USER_ID = <?= (int)$user_id ?>;
+      const keyA = `jh_read_A_${USER_ID}`; // decisions: { appId: "Accepted"/"Rejected" }
+      const keyS = `jh_read_S_${USER_ID}`; // custom:     { "id": 1 }
+
+      const getA = () => {
         try {
-          await fetch('user_home.php', {
-            method: 'POST',
-            body: fd,
-            credentials: 'same-origin'
-          });
-        } catch (err) {}
-        window.location.href = href;
-      }, {
-        passive: false
-      });
-    });
+          return JSON.parse(localStorage.getItem(keyA) || '{}');
+        } catch {
+          return {};
+        }
+      };
+      const setA = obj => localStorage.setItem(keyA, JSON.stringify(obj || {}));
+      const getS = () => {
+        try {
+          return JSON.parse(localStorage.getItem(keyS) || '{}');
+        } catch {
+          return {};
+        }
+      };
+      const setS = obj => localStorage.setItem(keyS, JSON.stringify(obj || {}));
+
+      const isRead = (ntype, id, status) => {
+        if (ntype === 'A') {
+          const m = getA();
+          return (m[id] && m[id] === (status || ''));
+        }
+        const s = getS();
+        return !!s[id];
+      };
+
+      const markOneInStorage = (ntype, id, status) => {
+        if (ntype === 'A') {
+          const m = getA();
+          m[id] = status || '';
+          setA(m);
+        } else {
+          const s = getS();
+          s[id] = 1;
+          setS(s);
+        }
+      };
+
+      function updateBellBadge() {
+        const cards = document.querySelectorAll('.notif-card');
+        let unread = 0;
+        cards.forEach(card => {
+          const ntype = card.getAttribute('data-ntype');
+          const id = card.getAttribute('data-id');
+          const status = card.getAttribute('data-status') || '';
+          const domUnread = card.getAttribute('data-unread') === '1';
+          if (domUnread && !isRead(ntype, id, status)) unread++;
+        });
+        const badge = document.getElementById('notifBadge');
+        if (!badge) return;
+        if (unread > 0) {
+          badge.textContent = unread > 99 ? '99+' : unread;
+          badge.style.display = '';
+        } else {
+          badge.style.display = 'none';
+        }
+      }
+
+      function paintCardAsRead(card) {
+        const pill = card.querySelector('.js-pill');
+        const btn = card.querySelector('.js-mark-one');
+        card.classList.remove('unread');
+        card.classList.add('read');
+        card.setAttribute('data-unread', '0');
+        if (pill) {
+          pill.classList.remove('text-bg-warning', 'text-bg-primary');
+          pill.classList.add('text-bg-secondary');
+          pill.textContent = 'Read';
+        }
+        if (btn) {
+          btn.textContent = 'Marked';
+          btn.disabled = true;
+          btn.classList.add('disabled');
+        }
+      }
+
+      // Apply stored state after load (so previously read items stay read)
+      function applyStorageToUI() {
+        document.querySelectorAll('.notif-card').forEach(card => {
+          const ntype = card.getAttribute('data-ntype');
+          const id = card.getAttribute('data-id');
+          const status = card.getAttribute('data-status') || '';
+          if (isRead(ntype, id, status)) paintCardAsRead(card);
+        });
+        updateBellBadge();
+      }
+
+      // Single "Mark read": store, update only that card's UI now, then submit the form
+      document.addEventListener('click', function(e) {
+        const btn = e.target.closest('.js-mark-one');
+        if (!btn) return;
+
+        const card = btn.closest('.notif-card');
+        if (!card) return;
+
+        const ntype = card.getAttribute('data-ntype');
+        const id = card.getAttribute('data-id');
+        const status = card.getAttribute('data-status') || '';
+
+        // 1) persist this ONE item
+        markOneInStorage(ntype, id, status);
+
+        // 2) update ONLY this card immediately
+        paintCardAsRead(card);
+        updateBellBadge();
+        // 3) let form submit normally (server session keeps its own chip for this session)
+      }, false);
+
+      // "Mark all read": persist ALL visible, then let form submit
+      document.addEventListener('click', function(e) {
+        const btn = e.target.closest('.js-mark-all');
+        if (!btn) return;
+
+        document.querySelectorAll('.notif-card').forEach(card => {
+          const ntype = card.getAttribute('data-ntype');
+          const id = card.getAttribute('data-id');
+          const status = card.getAttribute('data-status') || '';
+          markOneInStorage(ntype, id, status);
+          // Also paint now for instant feedback
+          paintCardAsRead(card);
+        });
+        updateBellBadge();
+        // form submits after this
+      }, false);
+
+      document.addEventListener('DOMContentLoaded', applyStorageToUI);
+    })();
   </script>
 </body>
 

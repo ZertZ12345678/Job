@@ -186,7 +186,7 @@ if ($job && isset($job['status'])) {
 <body>
     <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
         <div class="container">
-            <a class="navbar-brand fw-bold text-warning" href="home.php">JobHive</a>
+            <a class="navbar-brand fw-bold text-warning" href="user_home.php">JobHive</a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#nav">
                 <span class="navbar-toggler-icon"></span>
             </button>

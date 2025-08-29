@@ -11,7 +11,6 @@ function e($v)
     return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
 }
 
-/** Return 1–2 letter initials from a full name */
 function initials_from_name($name): string
 {
     $name = trim((string)$name);
@@ -25,20 +24,16 @@ function initials_from_name($name): string
     return $ini ?: 'U';
 }
 
-/**
- * Build a square SVG avatar (as data: URI) showing initials.
- * Keeps the same visual size you use (default 112px).
- */
+/** Square SVG initials avatar as data: URI */
 function svg_avatar_data_uri(string $name, int $size = 112): string
 {
     $ini    = initials_from_name($name);
-    $bg     = '#FFF8E6';   // soft background
-    $ring   = '#FFC107';   // yellow ring (JobHive)
-    $txt    = '#FF8A00';   // warm orange letters
+    $bg     = '#FFF8E6';
+    $ring   = '#FFC107';
+    $txt    = '#FF8A00';
     $font   = (int) round($size * 0.42);
-    $radius = 16;          // rounded-corner square like your UI
-    $inner  = $size - 4;   // compute first; can't do {$size-4} inside heredoc
-
+    $radius = 16;
+    $inner  = $size - 4;
     $svg = <<<SVG
 <svg xmlns="http://www.w3.org/2000/svg" width="$size" height="$size" viewBox="0 0 $size $size">
   <rect x="2" y="2" width="$inner" height="$inner" rx="$radius" ry="$radius"
@@ -48,7 +43,6 @@ function svg_avatar_data_uri(string $name, int $size = 112): string
         font-weight="700" font-size="$font" fill="$txt">$ini</text>
 </svg>
 SVG;
-
     return 'data:image/svg+xml;base64,' . base64_encode($svg);
 }
 
@@ -70,18 +64,18 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $email            = trim($_POST['email'] ?? '');
     $phone            = trim($_POST['phone'] ?? '');
     $address          = trim($_POST['address'] ?? '');
-    $b_date           = trim($_POST['b_date'] ?? ''); // <-- Birth Date
+    $b_date           = trim($_POST['b_date'] ?? '');
+    $gender           = trim($_POST['gender'] ?? '');        // NEW
+    $education        = trim($_POST['education'] ?? '');     // NEW
     $job_category     = trim($_POST['job_category'] ?? '');
     $current_position = trim($_POST['current_position'] ?? '');
 
-    // Normalize date to YYYY-MM-DD or empty
     if ($b_date !== '') {
-        // Acceptable inputs like 2025-08-28; if invalid, set empty to avoid DB errors
         $ts = strtotime($b_date);
         $b_date = $ts ? date('Y-m-d', $ts) : '';
     }
 
-    // ---- Optional: photo upload ----
+    // ---- Photo upload (optional) ----
     $profile_picture = null;
     if (isset($_FILES['profile_picture']) && ($_FILES['profile_picture']['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK) {
         $allowed = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
@@ -95,13 +89,10 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         } else {
             $dir = __DIR__ . "/profile_pics";
             if (!is_dir($dir)) @mkdir($dir, 0775, true);
-
             $filename = "user_" . $user_id . "_" . time() . "." . $ext;
             $destFS   = $dir . "/" . $filename;
-
             if (move_uploaded_file($_FILES['profile_picture']['tmp_name'], $destFS)) {
                 $profile_picture = $filename;
-                // Remove old photo if any
                 if (!empty($user['profile_picture'])) {
                     $oldFS = $dir . "/" . $user['profile_picture'];
                     if (is_file($oldFS)) @unlink($oldFS);
@@ -118,7 +109,9 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                   email = :email,
                   phone = :phone,
                   address = :address,
-                  b_date = :b_date,                 -- <-- save birth date
+                  b_date = :b_date,
+                  gender = :gender,                -- NEW
+                  education = :education,          -- NEW
                   job_category = :job_category,
                   current_position = :current_position";
         $params = [
@@ -126,7 +119,9 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             ':email'            => $email,
             ':phone'            => $phone,
             ':address'          => $address,
-            ':b_date'           => ($b_date === '' ? null : $b_date), // NULL if empty
+            ':b_date'           => ($b_date === '' ? null : $b_date),
+            ':gender'           => ($gender === '' ? null : $gender),
+            ':education'        => ($education === '' ? null : $education),
             ':job_category'     => $job_category,
             ':current_position' => $current_position,
             ':user_id'          => $user_id
@@ -141,7 +136,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             $upd = $pdo->prepare($sql);
             if ($upd->execute($params)) {
                 $success_message = "Profile updated successfully!";
-                // Reload user so the new image (or fields) show immediately
                 $stmt = $pdo->prepare("SELECT * FROM users WHERE user_id = ?");
                 $stmt->execute([$user_id]);
                 $user = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
@@ -162,13 +156,22 @@ $job_categories = [
     "Marketing"   => "Marketing"
 ];
 
+$education_options = [        // used for the dropdown
+    ""             => "Select Education",
+    "High School"  => "High School",
+    "Diploma"      => "Diploma",
+    "Bachelor"     => "Bachelor",
+    "Master"       => "Master",
+    "PhD"          => "PhD"
+];
+
 function field_edit_attr($val, $type = 'input')
 {
     if (empty($val)) return '';
     return $type === 'select' ? 'disabled' : 'readonly';
 }
 
-/* ===== 4) Compute avatar source (photo OR initials SVG) ===== */
+/* ===== 4) Avatar ===== */
 $hasPhoto  = !empty($user['profile_picture']) && is_file(__DIR__ . '/profile_pics/' . $user['profile_picture']);
 $avatarSrc = $hasPhoto ? ('profile_pics/' . e($user['profile_picture'])) : svg_avatar_data_uri($user['full_name'] ?? '', 112);
 ?>
@@ -182,17 +185,39 @@ $avatarSrc = $hasPhoto ? ('profile_pics/' . e($user['profile_picture'])) : svg_a
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <style>
+        /* Page fits in one screen on typical laptop widths (≥1200px) */
+        html,
         body {
-            background: #f8fafc;
+            height: 100%;
         }
 
+        body {
+            background: #f8fafc;
+            overflow-y: hidden;
+        }
+
+        /* hide page scrollbar */
+
         .profile-card {
-            max-width: 680px;
-            margin: 40px auto;
+            width: min(1100px, 96vw);
+            margin: 24px auto;
             background: #fff;
-            border-radius: 1.5rem;
+            border-radius: 1.25rem;
             box-shadow: 0 3px 16px rgba(30, 30, 60, .07);
-            padding: 2.5rem 2rem 2rem;
+            padding: 1.5rem 1.5rem 1rem;
+        }
+
+        /* 2-column grid on lg+ to reduce height */
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 14px;
+        }
+
+        @media (min-width: 992px) {
+            .grid {
+                grid-template-columns: 1fr 1fr;
+            }
         }
 
         .profile-img {
@@ -202,7 +227,7 @@ $avatarSrc = $hasPhoto ? ('profile_pics/' . e($user['profile_picture'])) : svg_a
             border-radius: 16px;
             border: 3px solid #ffc107;
             background: #fafafa;
-            margin-bottom: 1rem;
+            margin-bottom: .5rem;
         }
 
         .edit-btn {
@@ -211,7 +236,7 @@ $avatarSrc = $hasPhoto ? ('profile_pics/' . e($user['profile_picture'])) : svg_a
             background: none;
             border: none;
             cursor: pointer;
-            font-size: 1.12rem;
+            font-size: 1.02rem;
         }
 
         .edit-btn:hover {
@@ -222,7 +247,7 @@ $avatarSrc = $hasPhoto ? ('profile_pics/' . e($user['profile_picture'])) : svg_a
             font-weight: 600;
             color: #6c757d;
             margin-bottom: .1rem;
-            font-size: 1.04rem;
+            font-size: .98rem;
         }
 
         .profile-form input[readonly],
@@ -234,8 +259,27 @@ $avatarSrc = $hasPhoto ? ('profile_pics/' . e($user['profile_picture'])) : svg_a
         .form-edit-row {
             display: flex;
             align-items: center;
-            gap: 1rem;
-            margin-bottom: 1.2rem;
+            gap: .75rem;
+        }
+
+        .sticky-actions {
+            position: sticky;
+            bottom: 0;
+            background: #fff;
+            padding-top: .5rem;
+            margin-top: .5rem;
+        }
+
+        /* compact controls for height */
+        .form-control,
+        .form-select {
+            padding: .45rem .6rem;
+        }
+
+        .navbar {
+            position: sticky;
+            top: 0;
+            z-index: 10;
         }
     </style>
 </head>
@@ -251,34 +295,35 @@ $avatarSrc = $hasPhoto ? ('profile_pics/' . e($user['profile_picture'])) : svg_a
                 <ul class="navbar-nav">
                     <li class="nav-item"><a class="nav-link" href="user_home.php">Home</a></li>
                     <li class="nav-item"><a class="nav-link active" href="user_profile.php">Profile</a></li>
-                    <li class="nav-item"><a class="nav-link" href="recommended.php">Recommended Jobs</a></li>
-                    <li class="nav-item"><a class="nav-link" href="companies.php">All Companies</a></li>
+                    <li class="nav-item"><a class="nav-link" href="all_companies.php">All Companies</a></li>
                     <li class="nav-item"><a class="btn btn-outline-warning ms-2" href="index.php">Logout</a></li>
                 </ul>
             </div>
         </div>
     </nav>
 
-    <div class="container">
-        <div class="profile-card">
-            <h3 class="fw-bold mb-3 text-center">Profile</h3>
+    <div class="profile-card">
+        <h4 class="fw-bold mb-2 text-center">Profile</h4>
 
-            <?php if (!empty($success_message)): ?>
-                <div class="alert alert-success text-center"><?= e($success_message) ?></div>
-            <?php endif; ?>
-            <?php if (!empty($error_message)): ?>
-                <div class="alert alert-danger text-center"><?= e($error_message) ?></div>
-            <?php endif; ?>
+        <?php if (!empty($success_message)): ?>
+            <div class="alert alert-success py-2 text-center"><?= e($success_message) ?></div>
+        <?php endif; ?>
+        <?php if (!empty($error_message)): ?>
+            <div class="alert alert-danger py-2 text-center"><?= e($error_message) ?></div>
+        <?php endif; ?>
 
-            <form class="profile-form" method="POST" enctype="multipart/form-data" action="user_profile.php">
-                <!-- Avatar (photo or initials) -->
-                <div class="text-center mb-3">
-                    <img src="<?= $avatarSrc ?>" class="profile-img" id="profilePreview" alt="Profile">
-                    <div>
-                        <input type="file" name="profile_picture" accept="image/*" class="form-control mt-2"
-                            style="max-width:260px; margin:0 auto;" onchange="previewProfilePic(this)">
-                    </div>
+        <form class="profile-form" method="POST" enctype="multipart/form-data" action="user_profile.php">
+            <!-- Header: Avatar + upload sits full width -->
+            <div class="text-center mb-2">
+                <img src="<?= $avatarSrc ?>" class="profile-img" id="profilePreview" alt="Profile">
+                <div>
+                    <input type="file" name="profile_picture" accept="image/*" class="form-control mt-2"
+                        style="max-width:260px; margin:0 auto;" onchange="previewProfilePic(this)">
                 </div>
+            </div>
+
+            <!-- Two-column grid of fields to reduce height -->
+            <div class="grid">
 
                 <!-- Full Name -->
                 <div class="form-edit-row">
@@ -287,9 +332,7 @@ $avatarSrc = $hasPhoto ? ('profile_pics/' . e($user['profile_picture'])) : svg_a
                         <input type="text" name="full_name" class="form-control"
                             value="<?= e($user['full_name'] ?? '') ?>" <?= field_edit_attr($user['full_name']) ?> required>
                     </div>
-                    <?php if (!empty($user['full_name'])): ?>
-                        <button type="button" class="edit-btn" onclick="toggleEdit(this)">✎ Edit</button>
-                    <?php endif; ?>
+                    <?php if (!empty($user['full_name'])): ?><button type="button" class="edit-btn" onclick="toggleEdit(this)">✎ Edit</button><?php endif; ?>
                 </div>
 
                 <!-- Email -->
@@ -299,9 +342,7 @@ $avatarSrc = $hasPhoto ? ('profile_pics/' . e($user['profile_picture'])) : svg_a
                         <input type="email" name="email" class="form-control"
                             value="<?= e($user['email'] ?? '') ?>" <?= field_edit_attr($user['email']) ?> required>
                     </div>
-                    <?php if (!empty($user['email'])): ?>
-                        <button type="button" class="edit-btn" onclick="toggleEdit(this)">✎ Edit</button>
-                    <?php endif; ?>
+                    <?php if (!empty($user['email'])): ?><button type="button" class="edit-btn" onclick="toggleEdit(this)">✎ Edit</button><?php endif; ?>
                 </div>
 
                 <!-- Phone -->
@@ -311,9 +352,7 @@ $avatarSrc = $hasPhoto ? ('profile_pics/' . e($user['profile_picture'])) : svg_a
                         <input type="text" name="phone" class="form-control"
                             value="<?= e($user['phone'] ?? '') ?>" <?= field_edit_attr($user['phone']) ?>>
                     </div>
-                    <?php if (!empty($user['phone'])): ?>
-                        <button type="button" class="edit-btn" onclick="toggleEdit(this)">✎ Edit</button>
-                    <?php endif; ?>
+                    <?php if (!empty($user['phone'])): ?><button type="button" class="edit-btn" onclick="toggleEdit(this)">✎ Edit</button><?php endif; ?>
                 </div>
 
                 <!-- Address -->
@@ -323,21 +362,49 @@ $avatarSrc = $hasPhoto ? ('profile_pics/' . e($user['profile_picture'])) : svg_a
                         <input type="text" name="address" class="form-control"
                             value="<?= e($user['address'] ?? '') ?>" <?= field_edit_attr($user['address']) ?>>
                     </div>
-                    <?php if (!empty($user['address'])): ?>
-                        <button type="button" class="edit-btn" onclick="toggleEdit(this)">✎ Edit</button>
-                    <?php endif; ?>
+                    <?php if (!empty($user['address'])): ?><button type="button" class="edit-btn" onclick="toggleEdit(this)">✎ Edit</button><?php endif; ?>
                 </div>
 
-                <!-- Birth Date (AFTER Address) -->
+                <!-- Birth Date -->
                 <div class="form-edit-row">
                     <div style="flex:1">
                         <div class="field-label">Birth Date</div>
                         <input type="date" name="b_date" class="form-control"
                             value="<?= e($user['b_date'] ?? '') ?>" <?= field_edit_attr($user['b_date']) ?>>
                     </div>
-                    <?php if (!empty($user['b_date'])): ?>
-                        <button type="button" class="edit-btn" onclick="toggleEdit(this)">✎ Edit</button>
-                    <?php endif; ?>
+                    <?php if (!empty($user['b_date'])): ?><button type="button" class="edit-btn" onclick="toggleEdit(this)">✎ Edit</button><?php endif; ?>
+                </div>
+
+                <!-- Gender (NEW) -->
+                <div class="form-edit-row">
+                    <div style="flex:1">
+                        <div class="field-label">Gender</div>
+                        <select name="gender" class="form-select" <?= field_edit_attr($user['gender'] ?? '', 'select') ?>>
+                            <option value="">Select Gender</option>
+                            <option value="Male" <?= (($user['gender'] ?? '') === 'Male')   ? 'selected' : '' ?>>Male</option>
+                            <option value="Female" <?= (($user['gender'] ?? '') === 'Female') ? 'selected' : '' ?>>Female</option>
+                        </select>
+                        <?php if (!empty($user['gender'])): ?>
+                            <input type="hidden" name="gender" id="gender_hidden" value="<?= e($user['gender']) ?>">
+                        <?php endif; ?>
+                    </div>
+                    <?php if (!empty($user['gender'])): ?><button type="button" class="edit-btn" onclick="toggleEdit(this)">✎ Edit</button><?php endif; ?>
+                </div>
+
+                <!-- Education (NEW) -->
+                <div class="form-edit-row">
+                    <div style="flex:1">
+                        <div class="field-label">Education</div>
+                        <select name="education" class="form-select" <?= field_edit_attr($user['education'] ?? '', 'select') ?>>
+                            <?php foreach ($education_options as $val => $label): ?>
+                                <option value="<?= e($val) ?>" <?= (($user['education'] ?? '') === $val) ? 'selected' : '' ?>><?= e($label) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <?php if (!empty($user['education'])): ?>
+                            <input type="hidden" name="education" id="education_hidden" value="<?= e($user['education']) ?>">
+                        <?php endif; ?>
+                    </div>
+                    <?php if (!empty($user['education'])): ?><button type="button" class="edit-btn" onclick="toggleEdit(this)">✎ Edit</button><?php endif; ?>
                 </div>
 
                 <!-- Job Category -->
@@ -348,18 +415,14 @@ $avatarSrc = $hasPhoto ? ('profile_pics/' . e($user['profile_picture'])) : svg_a
                             <?= field_edit_attr($user['job_category'], 'select') ?>>
                             <option value="">Select Category</option>
                             <?php foreach ($job_categories as $val => $label): ?>
-                                <option value="<?= e($val) ?>" <?= (($user['job_category'] ?? '') === $val) ? 'selected' : '' ?>>
-                                    <?= e($label) ?>
-                                </option>
+                                <option value="<?= e($val) ?>" <?= (($user['job_category'] ?? '') === $val) ? 'selected' : '' ?>><?= e($label) ?></option>
                             <?php endforeach; ?>
                         </select>
                         <?php if (!empty($user['job_category'])): ?>
                             <input type="hidden" name="job_category" id="job_category_hidden" value="<?= e($user['job_category']) ?>">
                         <?php endif; ?>
                     </div>
-                    <?php if (!empty($user['job_category'])): ?>
-                        <button type="button" class="edit-btn" onclick="toggleEdit(this)">✎ Edit</button>
-                    <?php endif; ?>
+                    <?php if (!empty($user['job_category'])): ?><button type="button" class="edit-btn" onclick="toggleEdit(this)">✎ Edit</button><?php endif; ?>
                 </div>
 
                 <!-- Current Position -->
@@ -369,16 +432,15 @@ $avatarSrc = $hasPhoto ? ('profile_pics/' . e($user['profile_picture'])) : svg_a
                         <input type="text" name="current_position" class="form-control"
                             value="<?= e($user['current_position'] ?? '') ?>" <?= field_edit_attr($user['current_position']) ?>>
                     </div>
-                    <?php if (!empty($user['current_position'])): ?>
-                        <button type="button" class="edit-btn" onclick="toggleEdit(this)">✎ Edit</button>
-                    <?php endif; ?>
+                    <?php if (!empty($user['current_position'])): ?><button type="button" class="edit-btn" onclick="toggleEdit(this)">✎ Edit</button><?php endif; ?>
                 </div>
 
-                <div class="mt-4 text-center">
-                    <button type="submit" class="btn btn-warning px-4">Save Changes</button>
-                </div>
-            </form>
-        </div>
+            </div><!-- /.grid -->
+
+            <div class="text-center sticky-actions">
+                <button type="submit" class="btn btn-warning px-4">Save Changes</button>
+            </div>
+        </form>
     </div>
 
     <script>
@@ -389,13 +451,15 @@ $avatarSrc = $hasPhoto ? ('profile_pics/' . e($user['profile_picture'])) : svg_a
             if (input.hasAttribute("disabled")) input.removeAttribute("disabled");
             input.focus();
             input.style.backgroundColor = "#fff8ec";
-            if (input.tagName === "SELECT" && input.name === "job_category") {
-                const hidden = document.getElementById('job_category_hidden');
+
+            // handle hidden mirrors for selects
+            if (input.tagName === "SELECT") {
+                const name = input.name;
+                const hidden = document.querySelector(`input[type="hidden"][name="${name}"]`);
                 if (hidden) hidden.disabled = true;
             }
         }
 
-        // Live preview when choosing a real photo — keeps the square box
         function previewProfilePic(input) {
             if (input.files && input.files[0]) {
                 const reader = new FileReader();

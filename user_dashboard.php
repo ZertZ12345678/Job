@@ -10,7 +10,7 @@ if (!$user_id) {
 }
 
 /* ===== Fetch current user with computed profile % =====
-   (fields counted: full_name, email, phone, address, current_position, b_date) */
+   Fields counted (8): full_name, email, phone, address, current_position, b_date, gender, education */
 try {
     $stmt = $pdo->prepare("
         SELECT 
@@ -22,15 +22,19 @@ try {
           u.job_category,
           u.current_position,
           u.b_date,
+          u.gender,
+          u.education,
           u.profile_picture AS photo,
           ROUND((
-            IF(u.full_name IS NULL OR u.full_name='',0,1) +
-            IF(u.email IS NULL OR u.email='',0,1) +
-            IF(u.phone IS NULL OR u.phone='',0,1) +
-            IF(u.address IS NULL OR u.address='',0,1) +
-            IF(u.current_position IS NULL OR u.current_position='',0,1) +
-            IF(u.b_date IS NULL OR u.b_date='',0,1)
-          ) / 6 * 100) AS profile_pct
+            IF(u.full_name         IS NULL OR u.full_name        ='',0,1) +
+            IF(u.email             IS NULL OR u.email            ='',0,1) +
+            IF(u.phone             IS NULL OR u.phone            ='',0,1) +
+            IF(u.address           IS NULL OR u.address          ='',0,1) +
+            IF(u.current_position  IS NULL OR u.current_position ='',0,1) +
+            IF(u.b_date            IS NULL OR u.b_date           ='',0,1) +
+            IF(u.gender            IS NULL OR u.gender           ='',0,1) +
+            IF(u.education         IS NULL OR u.education        ='',0,1)
+          ) / 8 * 100) AS profile_pct
         FROM users u
         WHERE u.user_id = ?
         LIMIT 1
@@ -85,6 +89,7 @@ try {
 
 /* ===== Progress bar color ===== */
 $pp = (int)($user['profile_pct'] ?? 0);
+$pp = max(0, min(100, $pp)); // clamp between 0–100
 $barClass = 'bg-danger';
 if ($pp > 30) $barClass = 'bg-warning';
 if ($pp > 60) $barClass = 'bg-info';
@@ -239,7 +244,7 @@ if ($pp > 85) $barClass = 'bg-success';
         </div>
 
         <main class="container py-4">
-            <!-- Overview: exactly 3 KPIs -->
+            <!-- Overview: 3 KPIs -->
             <section id="overview" class="mb-4">
                 <div class="row g-3">
                     <!-- Accepted Job -->
@@ -294,7 +299,7 @@ if ($pp > 85) $barClass = 'bg-success';
                 </div>
             </section>
 
-            <!-- Recent Applications (this user) -->
+            <!-- Recent Applications -->
             <section id="applications" class="mb-4">
                 <div class="card border-0 shadow-sm rounded-4">
                     <div class="card-header bg-white py-3">

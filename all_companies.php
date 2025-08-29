@@ -156,14 +156,14 @@ try {
             color: #ffaa2b !important;
         }
 
-        /* Hover underline on nav links */
-        .navbar-nav .nav-link {
+        /* underline only on main nav links, NOT profile dropdown */
+        .navbar-nav .nav-item:not(.dropdown) .nav-link {
             position: relative;
             padding-bottom: 4px;
-            transition: color .2s;
+            transition: color 0.2s ease-in-out;
         }
 
-        .navbar-nav .nav-link::after {
+        .navbar-nav .nav-item:not(.dropdown) .nav-link::after {
             content: "";
             position: absolute;
             left: 0;
@@ -171,10 +171,10 @@ try {
             width: 0%;
             height: 2px;
             background-color: #ffaa2b;
-            transition: width .25s;
+            transition: width 0.25s ease-in-out;
         }
 
-        .navbar-nav .nav-link:hover::after {
+        .navbar-nav .nav-item:not(.dropdown) .nav-link:hover::after {
             width: 100%;
         }
 

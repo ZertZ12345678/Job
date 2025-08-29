@@ -191,7 +191,7 @@ if ($job && isset($job['status'])) {
                                     </a>
                                 <?php else: ?>
                                     <a class="btn btn-warning"
-                                        href="resume_premium.php?job_id=<?= (int)$job['job_id'] ?>">
+                                        href="resume.php?job_id=<?= (int)$job['job_id'] ?>">
                                         I’m interested
                                     </a>
                                 <?php endif; ?>
