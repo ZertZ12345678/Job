@@ -86,23 +86,22 @@ if (empty($fatal_error) && $job_id > 0) {
             $jobTitle    = (string)$row['job_title'];
             $companyName = (string)$row['company_name'];
         }
-    } catch (PDOException $e) {
-        /* ignore gracefully */
+    } catch (PDOException $e) { /* ignore */
     }
 }
 
 /* ----------------- PREP DATA ----------------- */
-$name   = $user['full_name'] ?? '';
-$email  = $user['email'] ?? '';
-$phone  = $user['phone'] ?? '';
-$addr   = $user['address'] ?? '';
-$cat    = $user['job_category'] ?? '';
-$pos    = $user['current_position'] ?? '';
-$photo  = $user['profile_picture'] ?? '';
-$birth  = $user['b_date'] ?? '';
+$name  = $user['full_name'] ?? '';
+$email = $user['email'] ?? '';
+$phone = $user['phone'] ?? '';
+$addr  = $user['address'] ?? '';
+$cat   = $user['job_category'] ?? '';
+$pos   = $user['current_position'] ?? '';
+$photo = $user['profile_picture'] ?? '';
+$birth = $user['b_date'] ?? '';
 $gender = $user['gender'] ?? '';
-$edu    = $user['education'] ?? '';
-$ini    = initials($name);
+$edu   = $user['education'] ?? '';
+$ini   = initials($name);
 
 /* Normalize */
 $gender = $gender ? ucwords(strtolower($gender)) : '';
@@ -110,37 +109,40 @@ $edu    = $edu ? ucwords($edu) : '';
 
 $photo_src = '';
 if ($photo) {
-    $fs_path  = __DIR__ . '/' . $PROFILE_DIR . $photo;
+    $fs_path = __DIR__ . '/' . $PROFILE_DIR . $photo;
     $photo_src = data_uri_for_file($fs_path);
 }
 
-/* ----------------- PREMIUM SUMMARY (safe string building) ----------------- */
-$summaryParts = [];
-if ($name)   $summaryParts[] = $name;
-if ($gender) $summaryParts[] = "($gender)";
-$summaryHeader = trim(implode(' ', $summaryParts));
+/* ----------------- Summary (first-person; no premium/parentheses) ----------------- */
+$companyLabel      = $companyName ?: 'the company';
+$companyPossessive = $companyName ? ($companyName . "’s") : "the company’s";
 
-$summaryRole    = $jobTitle ? "for the role of {$jobTitle}" : "for the desired role";
-$summaryCompany = $companyName ? " at {$companyName}" : "";
-$profileBits    = [];
+if ($jobTitle && $companyName)      $opening = "I am applying for the {$jobTitle} position at {$companyName}.";
+elseif ($jobTitle)                   $opening = "I am applying for the {$jobTitle} position.";
+elseif ($companyName)                $opening = "I am applying to {$companyName} for a suitable role.";
+else                                 $opening = "I am seeking a role that matches my skills and goals.";
 
-if ($edu)   $profileBits[] = "Education: {$edu}";
-if ($phone) $profileBits[] = "Phone: {$phone}";
-if ($addr)  $profileBits[] = "Address: {$addr}";
-if ($birth) $profileBits[] = "Birth Date: {$birth}";
+$bg = [];
+if ($pos && $cat) $bg[] = "I have experience as {$pos} in the {$cat} field";
+elseif ($pos)     $bg[] = "I have experience as {$pos}";
+elseif ($cat)     $bg[] = "My focus is on {$cat} roles";
+if ($edu)         $bg[] = "I hold a {$edu}";
+if ($addr)        $bg[] = "I am based in {$addr}";
+if ($birth)       $bg[] = "I was born on {$birth}";
+$background = $bg ? implode('. ', $bg) . '.' : '';
 
-$detailsStr   = $profileBits ? (" (" . implode(" · ", $profileBits) . ")") : "";
-$companyLabel = $companyName ? $companyName : 'the company';
-$headerLabel  = $summaryHeader ? $summaryHeader : "Premium candidate";
-$candidateRef = $name ? $name : "the candidate";
+$commitment = "I learn quickly, follow company policies, and collaborate well with teams. My goal is to deliver reliable, high-quality work that contributes to {$companyPossessive} objectives.";
 
-$premiumSummary =
-    $headerLabel .
-    " is applying " . $summaryRole . $summaryCompany . "." .
-    " As a premium user, " . $candidateRef .
-    " commits to work hard in the company’s job role, follow policies, learn quickly, " .
-    "and deliver results that support " . $companyLabel . "’s goals." .
-    $detailsStr;
+$contactPieces = [];
+if ($phone) $contactPieces[] = $phone;
+if ($email) $contactPieces[] = $email;
+$contact = $contactPieces ? "You can reach me at " . implode(' or ', $contactPieces) . "." : "";
+
+$premiumSummary = trim(preg_replace('/\s+/', ' ', $opening . ' ' . $background . ' ' . $commitment . ' ' . $contact));
+
+/* Build Apply link (include job_id if present). Adjust path if resume.php lives elsewhere. */
+$applyHref = 'resume.php';
+if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -157,7 +159,6 @@ $premiumSummary =
     <script src="https://cdn.jsdelivr.net/npm/dom-to-image-more@3.3.0/dist/dom-to-image-more.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 
-    <!-- Inter font -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap" rel="stylesheet">
 
     <style>
@@ -193,13 +194,24 @@ $premiumSummary =
             line-height: var(--line);
         }
 
-        /* Consistent numeric width */
+        header {
+            position: relative;
+            z-index: 20;
+        }
+
+        /* ensure header (and Apply button) sits above everything */
+        .apply-box {
+            position: relative;
+            z-index: 21;
+        }
+
+        /* belt & suspenders */
+
         .resume,
         .resume * {
             font-variant-numeric: tabular-nums;
         }
 
-        /* Smooth reading & full look */
         .resume p {
             margin: .45rem 0 .9rem;
             text-align: justify;
@@ -207,7 +219,6 @@ $premiumSummary =
             hyphens: none;
             word-break: normal;
             overflow-wrap: anywhere;
-            /* long emails/URLs still wrap */
         }
 
         .section {
@@ -218,6 +229,27 @@ $premiumSummary =
             margin-top: 0;
         }
 
+        /* Editable hint */
+        .editable [contenteditable="true"] {
+            border-bottom: 1px dashed transparent;
+            cursor: text;
+        }
+
+        .editable [contenteditable="true"]:hover {
+            border-bottom: 1px dashed #cbd5e1;
+        }
+
+        .editable.off [contenteditable="true"] {
+            border-bottom: none !important;
+            cursor: default;
+        }
+
+        /* Toolbar */
+        .toolbar {
+            gap: .5rem;
+        }
+
+        /* Picker & Apply box */
         .template-picker .swatch {
             width: 28px;
             height: 28px;
@@ -240,12 +272,50 @@ $premiumSummary =
             border-color: var(--accent);
         }
 
+        .apply-box {
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-left: 4px solid var(--accent);
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, .04);
+        }
+
+        .apply-box h6 {
+            margin: 0 0 6px;
+            font-weight: 800;
+            color: var(--ink);
+        }
+
+        .apply-box p {
+            margin: 0 0 10px;
+            color: #475569;
+        }
+
+        .apply-box .steps {
+            font-size: .925rem;
+            color: #475569;
+            margin-bottom: 12px;
+        }
+
+        .apply-box .btn-apply {
+            background: var(--accent);
+            border: 1px solid var(--accent);
+            color: #fff;
+            font-weight: 700;
+            padding: .475rem .9rem;
+            border-radius: 999px;
+        }
+
+        .apply-box .btn-apply:hover {
+            filter: brightness(.95);
+        }
+
+        /* Stage */
         .resume-stage {
             background: #fff;
             width: 794px;
-            /* A4 @ 96dpi */
             min-height: 1123px;
-            /* A4 height */
             margin: 0 auto;
             box-shadow: var(--shadow);
             border-radius: var(--radius-lg);
@@ -277,6 +347,38 @@ $premiumSummary =
             margin-top: var(--sp-3);
         }
 
+        /* Avatar */
+        .avatar {
+            width: 120px;
+            height: 120px;
+            border-radius: 14px;
+            object-fit: cover;
+            border: 2px solid rgba(0, 0, 0, .06);
+            background: #fff;
+        }
+
+        .avatar-fallback {
+            width: 120px;
+            height: 120px;
+            border-radius: 14px;
+            background: var(--accent);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 34px;
+        }
+
+        .circle {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            border: 4px solid var(--accent);
+            object-fit: cover;
+            background: #fff;
+        }
+
         /* T1 */
         .t1 {
             display: grid;
@@ -300,31 +402,6 @@ $premiumSummary =
 
         .t1 .spacer {
             flex: 1 1 auto;
-        }
-
-        /* pushes bottom content down to fill */
-
-        /* Avatar */
-        .avatar {
-            width: 120px;
-            height: 120px;
-            border-radius: 14px;
-            object-fit: cover;
-            border: 2px solid rgba(0, 0, 0, .06);
-            background: #fff;
-        }
-
-        .avatar-fallback {
-            width: 120px;
-            height: 120px;
-            border-radius: 14px;
-            background: var(--accent);
-            color: #fff;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 800;
-            font-size: 34px;
         }
 
         .section-title {
@@ -396,15 +473,6 @@ $premiumSummary =
             flex: 1 1 auto;
         }
 
-        .t3 .circle {
-            width: 120px;
-            height: 120px;
-            border-radius: 50%;
-            border: 4px solid var(--accent);
-            object-fit: cover;
-            background: #fff;
-        }
-
         .t3 .chip {
             display: inline-block;
             padding: .35rem .7rem;
@@ -416,6 +484,7 @@ $premiumSummary =
             line-height: 1;
         }
 
+        /* Print */
         @media print {
             body {
                 background: #fff;
@@ -428,13 +497,23 @@ $premiumSummary =
 
             .navbar,
             header,
-            footer {
+            footer,
+            .toolbar,
+            .apply-box,
+            .template-pills {
                 display: none !important;
             }
 
             @page {
                 margin: 0;
                 size: A4;
+            }
+        }
+
+        /* Mobile */
+        @media (max-width:992px) {
+            .apply-box {
+                margin-top: 10px;
             }
         }
 
@@ -461,7 +540,18 @@ $premiumSummary =
     <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
         <div class="container">
             <a class="navbar-brand fw-bold text-warning" href="user_home.php">JobHive</a>
-            <div class="ms-auto d-flex align-items-center gap-2">
+            <div class="ms-auto d-flex align-items-center toolbar">
+                <div class="form-check form-switch me-2">
+                    <input class="form-check-input" type="checkbox" id="toggleEdit" checked>
+                    <label class="form-check-label" for="toggleEdit">Edit Mode</label>
+                </div>
+
+                <!-- Photo controls -->
+                <input id="photoInput" type="file" accept="image/*" class="d-none">
+                <button id="btnPhoto" class="btn btn-outline-secondary btn-sm">Change Photo</button>
+                <button id="btnPhotoRemove" class="btn btn-outline-danger btn-sm">Remove Photo</button>
+
+                <button id="btnReset" class="btn btn-outline-secondary btn-sm ms-2">Reset Edits</button>
                 <a href="user_home.php" class="btn btn-outline-secondary btn-sm">Back</a>
                 <button id="btnPNG" class="btn btn-outline-secondary btn-sm">Download PNG</button>
                 <button id="btnPDF" class="btn btn-warning btn-sm">Download PDF</button>
@@ -471,8 +561,26 @@ $premiumSummary =
 
     <header class="py-4 bg-white border-bottom">
         <div class="container">
-            <h1 class="h4 fw-bold mb-2">Select your template</h1>
-            <div class="text-muted">Premium resume uses your saved profile—no typing needed.</div>
+            <div class="row align-items-center">
+                <div class="col-md-3">
+                    <h1 class="h4 fw-bold mb-2">Select your template</h1>
+                    <div class="text-muted">Customize your resume below.</div>
+                </div>
+
+                <div class="col-md-9">
+                    <div class="apply-box h-100 d-flex flex-column justify-content-between">
+                        <div>
+                            <h6>Apply with this resume</h6>
+                            <p class="steps mb-2">1. Choose a template & color · 2. Edit your details · 3. <strong>Download</strong> as PNG or PDF</p>
+                            <p class="mb-0">After downloading the resume, click <strong>Apply Resume</strong> to continue applying for the job.</p>
+                        </div>
+                        <div class="mt-3">
+                            <!-- IMPORTANT: include job_id if present -->
+                            <a class="btn btn-apply" id="btnApply" href="<?= e($applyHref) ?>" role="button">Apply Resume</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </header>
 
@@ -482,29 +590,29 @@ $premiumSummary =
                 <div class="alert alert-warning"><?= e($fatal_error) ?></div>
             <?php else: ?>
 
-                <div class="row g-3 align-items-center mb-3 template-picker">
-                    <div class="col-12 col-lg">
+                <!-- Template & color -->
+                <div class="row g-3 align-items-stretch mb-3 template-picker">
+                    <div class="col-12 col-lg-7">
                         <div class="d-flex align-items-center flex-wrap gap-2">
                             <span class="me-2">Theme color</span>
-                            <?php
-                            $swatches = ['#111827', '#64748b', '#6b7280', '#1d4ed8', '#b91c1c', '#065f46', '#0ea5e9', '#ef4444', '#f59e0b', '#14b8a6', '#eab308'];
+                            <?php $swatches = ['#111827', '#64748b', '#6b7280', '#1d4ed8', '#b91c1c', '#065f46', '#0ea5e9', '#ef4444', '#f59e0b', '#14b8a6', '#eab308'];
                             foreach ($swatches as $hex): ?>
                                 <div class="swatch" data-color="<?= e($hex) ?>" style="background: <?= e($hex) ?>;"></div>
                             <?php endforeach; ?>
                             <span class="mx-2">or</span>
                             <input id="hexColor" type="text" class="form-control form-control-sm" value="#0EA5E9" style="max-width:120px;" />
                         </div>
+
+                        <div id="templatePills" class="template-pills d-flex flex-wrap gap-2 mt-3" role="tablist">
+                            <button type="button" class="btn btn-outline-secondary btn-sm btn-templ active" data-template="t1" aria-selected="true">Template 1</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm btn-templ" data-template="t2" aria-selected="false">Template 2</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm btn-templ" data-template="t3" aria-selected="false">Template 3</button>
+                        </div>
                     </div>
                 </div>
 
-                <div id="templatePills" class="template-pills d-flex flex-wrap gap-2 mb-4" role="tablist">
-                    <button type="button" class="btn btn-outline-secondary btn-sm btn-templ active" data-template="t1" aria-selected="true">Template 1</button>
-                    <button type="button" class="btn btn-outline-secondary btn-sm btn-templ" data-template="t2" aria-selected="false">Template 2</button>
-                    <button type="button" class="btn btn-outline-secondary btn-sm btn-templ" data-template="t3" aria-selected="false">Template 3</button>
-                </div>
-
                 <!-- Live A4 Preview -->
-                <div id="resumeStage" class="resume-stage" style="--accent:#0ea5e9;">
+                <div id="resumeStage" class="resume-stage editable" style="--accent:#0ea5e9;">
                     <div id="resumeHost"></div>
                 </div>
 
@@ -513,25 +621,25 @@ $premiumSummary =
                     <div class="resume t1">
                         <aside class="side">
                             <div class="stack">
-                                <?php if ($photo_src): ?>
-                                    <img src="<?= e($photo_src) ?>" alt="Profile" class="avatar">
-                                <?php else: ?>
-                                    <div class="avatar-fallback"><?= e($ini) ?></div>
-                                <?php endif; ?>
+                                <!-- Avatar (editable) -->
+                                <div class="position-relative">
+                                    <img class="avatar js-photo d-none" alt="Profile">
+                                    <div class="avatar-fallback js-fallback"><?= e($ini) ?></div>
+                                </div>
 
                                 <div class="section">
-                                    <div class="fw-semibold"><?= e($email) ?></div>
-                                    <div class="muted"><?= e($phone) ?></div>
-                                    <div class="muted"><?= e($addr) ?></div>
-                                    <div class="muted"><?= e($birth) ?></div>
-                                    <?php if ($gender): ?><div class="muted">Gender: <?= e($gender) ?></div><?php endif; ?>
-                                    <?php if ($edu): ?><div class="muted">Education: <?= e($edu) ?></div><?php endif; ?>
+                                    <div class="fw-semibold" contenteditable="true"><?= e($email) ?></div>
+                                    <div class="muted" contenteditable="true"><?= e($phone) ?></div>
+                                    <div class="muted" contenteditable="true"><?= e($addr) ?></div>
+                                    <div class="muted" contenteditable="true"><?= e($birth) ?></div>
+                                    <?php if ($gender): ?><div class="muted" contenteditable="true">Gender: <?= e($gender) ?></div><?php endif; ?>
+                                    <?php if ($edu): ?><div class="muted" contenteditable="true">Education: <?= e($edu) ?></div><?php endif; ?>
                                 </div>
 
                                 <div class="section">
                                     <div class="section-title">Key Info</div>
-                                    <div><small>Category</small><br><strong><?= e($cat) ?></strong></div>
-                                    <div class="mt-2"><small>Position</small><br><strong><?= e($pos) ?></strong></div>
+                                    <div><small>Category</small><br><strong contenteditable="true"><?= e($cat) ?></strong></div>
+                                    <div class="mt-2"><small>Position</small><br><strong contenteditable="true"><?= e($pos) ?></strong></div>
                                 </div>
                             </div>
                             <div class="spacer"></div>
@@ -539,8 +647,8 @@ $premiumSummary =
 
                         <section class="main">
                             <div class="section">
-                                <div class="display-6 h-name mb-1"><?= e($name) ?></div>
-                                <?php if ($pos): ?><div class="fs-5 muted"><?= e($pos) ?></div><?php endif; ?>
+                                <div class="display-6 h-name mb-1" contenteditable="true"><?= e($name) ?></div>
+                                <div class="fs-5 muted" contenteditable="true"><?= e($pos) ?></div>
                             </div>
 
                             <?php if ($jobTitle || $companyName): ?>
@@ -549,19 +657,19 @@ $premiumSummary =
                                     <div class="row g-2">
                                         <div class="col-md-6">
                                             <div class="fw-semibold">Company</div>
-                                            <div class="muted"><?= e($companyName) ?></div>
+                                            <div class="muted" contenteditable="true"><?= e($companyName) ?></div>
                                         </div>
                                         <div class="col-md-6">
                                             <div class="fw-semibold">Job Title</div>
-                                            <div class="muted"><?= e($jobTitle) ?></div>
+                                            <div class="muted" contenteditable="true"><?= e($jobTitle) ?></div>
                                         </div>
                                     </div>
                                 </div>
                             <?php endif; ?>
 
                             <div class="section">
-                                <div class="section-title">Premium Summary</div>
-                                <p class="mb-0 muted"><?= e($premiumSummary) ?></p>
+                                <div class="section-title">Summary</div>
+                                <p class="mb-0 muted" contenteditable="true"><?= e($premiumSummary) ?></p>
                             </div>
 
                             <div class="spacer"></div>
@@ -573,14 +681,14 @@ $premiumSummary =
                 <template id="tpl-t2">
                     <div class="resume t2">
                         <div class="head d-flex align-items-center gap-4">
-                            <?php if ($photo_src): ?>
-                                <img src="<?= e($photo_src) ?>" alt="Profile" class="avatar" style="border:3px solid rgba(255,255,255,.55);">
-                            <?php else: ?>
-                                <div class="avatar-fallback"><?= e($ini) ?></div>
-                            <?php endif; ?>
+                            <!-- Avatar (editable) -->
+                            <div class="position-relative">
+                                <img class="avatar js-photo d-none" alt="Profile" style="border:3px solid rgba(255,255,255,.55);">
+                                <div class="avatar-fallback js-fallback"><?= e($ini) ?></div>
+                            </div>
                             <div class="flex-grow-1">
-                                <div class="display-6 fw-bold mb-1"><?= e($name) ?></div>
-                                <span class="badge-role"><?= e($pos ?: $cat) ?></span>
+                                <div class="display-6 fw-bold mb-1" contenteditable="true"><?= e($name) ?></div>
+                                <span class="badge-role" contenteditable="true"><?= e($pos ?: $cat) ?></span>
                             </div>
                         </div>
 
@@ -589,54 +697,54 @@ $premiumSummary =
                                 <div class="row gx-6 gy-4">
                                     <div class="col-md-6">
                                         <div class="fw-semibold">Email</div>
-                                        <div class="muted"><?= e($email) ?></div>
+                                        <div class="muted" contenteditable="true"><?= e($email) ?></div>
                                     </div>
                                     <div class="col-md-6">
                                         <div class="fw-semibold">Phone</div>
-                                        <div class="muted"><?= e($phone) ?></div>
+                                        <div class="muted" contenteditable="true"><?= e($phone) ?></div>
                                     </div>
                                     <div class="col-md-6">
                                         <div class="fw-semibold">Address</div>
-                                        <div class="muted"><?= e($addr) ?></div>
+                                        <div class="muted" contenteditable="true"><?= e($addr) ?></div>
                                     </div>
                                     <div class="col-md-6">
                                         <div class="fw-semibold">Category</div>
-                                        <div class="muted"><?= e($cat) ?></div>
+                                        <div class="muted" contenteditable="true"><?= e($cat) ?></div>
                                     </div>
                                     <div class="col-md-6">
                                         <div class="fw-semibold">Birth Date</div>
-                                        <div class="muted"><?= e($birth) ?></div>
+                                        <div class="muted" contenteditable="true"><?= e($birth) ?></div>
                                     </div>
                                     <div class="col-md-6">
                                         <div class="fw-semibold">Gender</div>
-                                        <div class="muted"><?= e($gender) ?></div>
+                                        <div class="muted" contenteditable="true"><?= e($gender) ?></div>
                                     </div>
                                     <div class="col-md-6">
                                         <div class="fw-semibold">Education</div>
-                                        <div class="muted"><?= e($edu) ?></div>
+                                        <div class="muted" contenteditable="true"><?= e($edu) ?></div>
                                     </div>
                                     <?php if ($jobTitle || $companyName): ?>
                                         <div class="col-md-6">
                                             <div class="fw-semibold">Company</div>
-                                            <div class="muted"><?= e($companyName) ?></div>
+                                            <div class="muted" contenteditable="true"><?= e($companyName) ?></div>
                                         </div>
                                         <div class="col-md-6">
                                             <div class="fw-semibold">Job Title</div>
-                                            <div class="muted"><?= e($jobTitle) ?></div>
+                                            <div class="muted" contenteditable="true"><?= e($jobTitle) ?></div>
                                         </div>
                                     <?php endif; ?>
                                 </div>
                             </div>
 
                             <div class="section">
-                                <div class="fw-semibold">Premium Summary</div>
-                                <p class="muted mb-0"><?= e($premiumSummary) ?></p>
+                                <div class="fw-semibold">Summary</div>
+                                <p class="muted mb-0" contenteditable="true"><?= e($premiumSummary) ?></p>
                             </div>
 
                             <div class="divider"></div>
                             <div class="section">
                                 <div class="fw-semibold mb-1">Current Position</div>
-                                <div><?= e($pos) ?></div>
+                                <div contenteditable="true"><?= e($pos) ?></div>
                             </div>
 
                             <div class="spacer"></div>
@@ -648,27 +756,27 @@ $premiumSummary =
                 <template id="tpl-t3">
                     <div class="resume t3">
                         <div class="left">
-                            <?php if ($photo_src): ?>
-                                <img src="<?= e($photo_src) ?>" alt="Profile" class="circle">
-                            <?php else: ?>
-                                <div class="avatar-fallback" style="border-radius:50%;width:120px;height:120px;"><?= e($ini) ?></div>
-                            <?php endif; ?>
-
-                            <div class="section">
-                                <div><?= e($email) ?></div>
-                                <div><?= e($phone) ?></div>
-                                <div><?= e($addr) ?></div>
-                                <div><?= e($birth) ?></div>
-                                <?php if ($gender): ?><div><?= e('Gender: ' . $gender) ?></div><?php endif; ?>
-                                <?php if ($edu): ?><div><?= e('Education: ' . $edu) ?></div><?php endif; ?>
-                                <?php if ($companyName): ?><div><?= e('Company: ' . $companyName) ?></div><?php endif; ?>
-                                <?php if ($jobTitle): ?><div><?= e('Job Title: ' . $jobTitle) ?></div><?php endif; ?>
+                            <!-- Avatar (editable) -->
+                            <div class="position-relative">
+                                <img class="circle js-photo d-none" alt="Profile">
+                                <div class="avatar-fallback js-fallback" style="border-radius:50%;width:120px;height:120px;"><?= e($ini) ?></div>
                             </div>
 
                             <div class="section">
-                                <?php if ($cat): ?><span class="chip"><?= e($cat) ?></span><?php endif; ?>
-                                <?php if ($pos): ?><span class="chip"><?= e($pos) ?></span><?php endif; ?>
-                                <?php if ($edu): ?><span class="chip"><?= e($edu) ?></span><?php endif; ?>
+                                <div contenteditable="true"><?= e($email) ?></div>
+                                <div contenteditable="true"><?= e($phone) ?></div>
+                                <div contenteditable="true"><?= e($addr) ?></div>
+                                <div contenteditable="true"><?= e($birth) ?></div>
+                                <?php if ($gender): ?><div contenteditable="true"><?= e('Gender: ' . $gender) ?></div><?php endif; ?>
+                                <?php if ($edu): ?><div contenteditable="true"><?= e('Education: ' . $edu) ?></div><?php endif; ?>
+                                <?php if ($companyName): ?><div contenteditable="true"><?= e('Company: ' . $companyName) ?></div><?php endif; ?>
+                                <?php if ($jobTitle): ?><div contenteditable="true"><?= e('Job Title: ' . $jobTitle) ?></div><?php endif; ?>
+                            </div>
+
+                            <div class="section">
+                                <?php if ($cat): ?><span class="chip" contenteditable="true"><?= e($cat) ?></span><?php endif; ?>
+                                <?php if ($pos): ?><span class="chip" contenteditable="true"><?= e($pos) ?></span><?php endif; ?>
+                                <?php if ($edu): ?><span class="chip" contenteditable="true"><?= e($edu) ?></span><?php endif; ?>
                             </div>
 
                             <div class="spacer"></div>
@@ -676,21 +784,21 @@ $premiumSummary =
 
                         <div class="right">
                             <div class="section">
-                                <div class="display-6 fw-bold mb-1" style="color:var(--accent)"><?= e($name) ?></div>
-                                <div class="fs-5 muted mb-4"><?= e($pos ?: $cat) ?></div>
+                                <div class="display-6 fw-bold mb-1" style="color:var(--accent)" contenteditable="true"><?= e($name) ?></div>
+                                <div class="fs-5 muted mb-4" contenteditable="true"><?= e($pos ?: $cat) ?></div>
                             </div>
 
                             <div class="section">
-                                <div class="fw-semibold">Premium Summary</div>
-                                <p class="muted"><?= e($premiumSummary) ?></p>
+                                <div class="fw-semibold">Summary</div>
+                                <p class="muted" contenteditable="true"><?= e($premiumSummary) ?></p>
                             </div>
 
                             <div class="section">
                                 <div class="fw-semibold">Contact</div>
                                 <ul class="mb-0">
-                                    <li><?= e($email) ?></li>
-                                    <li><?= e($phone) ?></li>
-                                    <li><?= e($addr) ?></li>
+                                    <li contenteditable="true"><?= e($email) ?></li>
+                                    <li contenteditable="true"><?= e($phone) ?></li>
+                                    <li contenteditable="true"><?= e($addr) ?></li>
                                 </ul>
                             </div>
 
@@ -713,7 +821,6 @@ $premiumSummary =
         (function() {
             const A4_W = 794,
                 A4_H = 1123;
-
             const stage = document.getElementById('resumeStage');
             const host = document.getElementById('resumeHost');
             const hexInput = document.getElementById('hexColor');
@@ -721,15 +828,58 @@ $premiumSummary =
             const templBtns = document.querySelectorAll('.btn-templ');
             const btnPNG = document.getElementById('btnPNG');
             const btnPDF = document.getElementById('btnPDF');
+            const btnReset = document.getElementById('btnReset');
+            const toggleEdit = document.getElementById('toggleEdit');
+            const btnApply = document.getElementById('btnApply');
+
+            const btnPhoto = document.getElementById('btnPhoto');
+            const btnPhotoRemove = document.getElementById('btnPhotoRemove');
+            const photoInput = document.getElementById('photoInput');
 
             const tpl1 = document.getElementById('tpl-t1');
             const tpl2 = document.getElementById('tpl-t2');
             const tpl3 = document.getElementById('tpl-t3');
 
+            let originalHTML = '';
+            let currentTplKey = 't1';
+
+            /* ---- Session model: only for photo + accent (no DB writes) ---- */
+            const STORAGE_KEY = 'resumePremiumModel';
+            const defaultModel = {
+                photoSrc: <?= json_encode($photo_src ?: "") ?>,
+                accent: '#0EA5E9'
+            };
+            let resumeModel = loadModel();
+
+            function loadModel() {
+                try {
+                    const raw = sessionStorage.getItem(STORAGE_KEY);
+                    if (raw) {
+                        const p = JSON.parse(raw);
+                        return {
+                            ...defaultModel,
+                            ...p
+                        };
+                    }
+                } catch (e) {}
+                return {
+                    ...defaultModel
+                };
+            }
+
+            function saveModel() {
+                try {
+                    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(resumeModel));
+                } catch (e) {}
+            }
+
             function mountTemplate(tplEl) {
                 host.innerHTML = '';
                 host.appendChild(tplEl.content.cloneNode(true));
                 forceFillCurrentTemplate(host);
+                originalHTML = host.innerHTML;
+                applyEditMode();
+                applyPhoto();
             }
 
             function setAccent(hex) {
@@ -737,9 +887,12 @@ $premiumSummary =
                 if (!/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(v)) return;
                 stage.style.setProperty('--accent', v);
                 hexInput.value = v.toUpperCase();
+                resumeModel.accent = v;
+                saveModel();
             }
 
             function setTemplate(key) {
+                currentTplKey = key;
                 templBtns.forEach(b => {
                     const active = b.dataset.template === key;
                     b.classList.toggle('active', active);
@@ -750,17 +903,13 @@ $premiumSummary =
                 if (key === 't3') mountTemplate(tpl3);
             }
 
-            // Ensure visible resume fills exact A4
             function forceFillCurrentTemplate(root) {
                 stage.style.width = A4_W + 'px';
                 stage.style.height = A4_H + 'px';
-
                 const resume = root.querySelector('.resume');
                 if (!resume) return;
-
                 resume.style.minHeight = A4_H + 'px';
                 resume.style.height = '100%';
-
                 if (resume.classList.contains('t1')) {
                     resume.style.display = 'grid';
                     resume.style.gridTemplateColumns = '280px 1fr';
@@ -778,8 +927,47 @@ $premiumSummary =
                 }
             }
 
+            function applyEditMode() {
+                const on = toggleEdit.checked;
+                stage.classList.toggle('off', !on);
+                stage.querySelectorAll('[contenteditable]').forEach(el => el.setAttribute('contenteditable', on ? 'true' : 'false'));
+            }
+
+            function resetEdits() {
+                if (!originalHTML) return;
+                host.innerHTML = originalHTML;
+                forceFillCurrentTemplate(host);
+                applyEditMode();
+                applyPhoto();
+            }
+
+            /* ---- Photo handling ---- */
+            function applyPhoto() {
+                const hasPhoto = !!resumeModel.photoSrc;
+                stage.querySelectorAll('.js-photo').forEach(img => {
+                    if (hasPhoto) {
+                        img.src = resumeModel.photoSrc;
+                        img.classList.remove('d-none');
+                    } else {
+                        img.classList.add('d-none');
+                        img.removeAttribute('src');
+                    }
+                });
+                stage.querySelectorAll('.js-fallback').forEach(fb => fb.style.display = hasPhoto ? 'none' : '');
+                saveModel();
+            }
+
+            function readFileAsDataURL(file) {
+                return new Promise((resolve, reject) => {
+                    const fr = new FileReader();
+                    fr.onload = () => resolve(fr.result);
+                    fr.onerror = reject;
+                    fr.readAsDataURL(file);
+                });
+            }
+
             /* Init */
-            setAccent('#0EA5E9');
+            setAccent(resumeModel.accent || '#0EA5E9');
             setTemplate('t1');
 
             /* UI */
@@ -787,10 +975,53 @@ $premiumSummary =
             hexInput.addEventListener('change', () => setAccent(hexInput.value));
             templBtns.forEach(b => b.addEventListener('click', () => setTemplate(b.dataset.template)));
 
+            toggleEdit.addEventListener('change', applyEditMode);
+            btnReset.addEventListener('click', resetEdits);
+
+            btnPhoto.addEventListener('click', () => photoInput.click());
+            photoInput.addEventListener('change', async (e) => {
+                const f = e.target.files && e.target.files[0];
+                if (!f) return;
+                if (!f.type.startsWith('image/')) {
+                    alert('Please choose an image file.');
+                    return;
+                }
+                const MB = f.size / (1024 * 1024);
+                if (MB > 5 && !confirm('This image is larger than 5MB. Continue?')) {
+                    photoInput.value = '';
+                    return;
+                }
+                try {
+                    const dataUrl = await readFileAsDataURL(f);
+                    resumeModel.photoSrc = dataUrl;
+                    applyPhoto();
+                } catch (err) {
+                    alert('Could not read the selected image.');
+                    console.error(err);
+                } finally {
+                    photoInput.value = '';
+                }
+            });
+            btnPhotoRemove.addEventListener('click', () => {
+                resumeModel.photoSrc = '';
+                applyPhoto();
+            });
+
+            /* If anything ever blocked default anchor navigation, this ensures a hard navigate. */
+            btnApply?.addEventListener('click', function(ev) {
+                // Let the normal <a href> work; as a safety net, also force navigation.
+                const url = this.getAttribute('href') || 'resume.php';
+                // Small timeout to avoid double-trigger; harmless if default already navigates.
+                setTimeout(() => {
+                    try {
+                        window.location.assign(url);
+                    } catch (e) {}
+                }, 0);
+            });
+
             /* Capture helpers */
             function isIOS() {
-                return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-                    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+                return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
             }
 
             function isSafari() {
@@ -798,8 +1029,7 @@ $premiumSummary =
             }
             async function ensureImages(node) {
                 const imgs = Array.from(node.querySelectorAll('img'));
-                await Promise.all(imgs.map(img => img.complete ? Promise.resolve() :
-                    new Promise(r => (img.onload = img.onerror = r))));
+                await Promise.all(imgs.map(img => img.complete ? Promise.resolve() : new Promise(r => (img.onload = img.onerror = r))));
             }
 
             function buildSnapshotNode() {
@@ -817,10 +1047,8 @@ $premiumSummary =
                     background: '#ffffff',
                     overflow: 'hidden'
                 });
-
                 const liveResume = stage.querySelector('.resume');
                 const resumeClone = liveResume ? liveResume.cloneNode(true) : document.createElement('div');
-
                 const wrapper = document.createElement('div');
                 Object.assign(wrapper.style, {
                     width: A4_W + 'px',
@@ -831,7 +1059,6 @@ $premiumSummary =
                 wrapper.appendChild(resumeClone);
                 cloneStage.innerHTML = '';
                 cloneStage.appendChild(wrapper);
-
                 (function enforce(el) {
                     const resume = el.querySelector('.resume');
                     if (!resume) return;
@@ -852,7 +1079,6 @@ $premiumSummary =
                         resume.style.gridTemplateColumns = '300px 1fr';
                     }
                 })(cloneStage);
-
                 document.body.appendChild(cloneStage);
                 return cloneStage;
             }
@@ -899,8 +1125,8 @@ $premiumSummary =
                 }
             }
 
-            /* Downloads (Safari/iOS open new tab) */
-            document.getElementById('btnPNG')?.addEventListener('click', async () => {
+            /* Downloads */
+            btnPNG?.addEventListener('click', async () => {
                 try {
                     const out = await captureA4();
                     const needsNewTab = isIOS() || isSafari();
@@ -930,7 +1156,7 @@ $premiumSummary =
                 }
             });
 
-            document.getElementById('btnPDF')?.addEventListener('click', async () => {
+            btnPDF?.addEventListener('click', async () => {
                 try {
                     const out = await captureA4();
                     const {
@@ -938,12 +1164,10 @@ $premiumSummary =
                     } = window.jspdf || {};
                     const PDFCtor = jsPDF || (window.jspdf && window.jspdf.jsPDF);
                     if (!PDFCtor) throw new Error('jsPDF not loaded');
-
                     const pdf = new PDFCtor('p', 'mm', 'a4');
                     const pageW = pdf.internal.pageSize.getWidth();
                     const pageH = pdf.internal.pageSize.getHeight();
                     const needsNewTab = isIOS() || isSafari();
-
                     if (out.kind === 'canvas') {
                         const imgData = out.value.toDataURL('image/png');
                         pdf.addImage(imgData, 'PNG', 0, 0, pageW, pageH, undefined, 'FAST');
@@ -960,7 +1184,6 @@ $premiumSummary =
                         pdf.addImage(imgData, 'PNG', 0, 0, pageW, pageH, undefined, 'FAST');
                         URL.revokeObjectURL(blobUrl);
                     }
-
                     if (needsNewTab) window.open(pdf.output('bloburl'), '_blank');
                     else pdf.save('resume.pdf');
                 } catch (err) {
@@ -968,6 +1191,7 @@ $premiumSummary =
                     console.error(err);
                 }
             });
+
         })();
     </script>
 </body>

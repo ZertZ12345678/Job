@@ -249,7 +249,7 @@ $LOGO_DIR = "company_logos/";
           <div class="row g-2">
             <div class="col-12">
               <input class="form-control form-control-lg" name="keyword" value="<?= e($keyword) ?>"
-                placeholder="Job title, skills, company..." />
+                placeholder="Job title, Company name ....." />
             </div>
           </div>
           <div class="search-row">
@@ -327,7 +327,7 @@ $LOGO_DIR = "company_logos/";
         <div class="col-md-4">
           <div class="fs-1 mb-2" style="color:#ffaa2b;">🔎</div>
           <h5>1. Search Jobs</h5>
-          <p>Browse thousands of jobs by title, skill, or location to find your fit.</p>
+          <p>Browse thousands of jobs by title, company, or location to find your fit.</p>
         </div>
         <div class="col-md-4">
           <div class="fs-1 mb-2" style="color:#ffaa2b;">📄</div>
