@@ -7,7 +7,7 @@ if (session_status() === PHP_SESSION_NONE) {
 
 $LOGO_DIR = "company_logos/";
 
-// --- Helpers ---
+/* ---------- Helpers ---------- */
 function e($v)
 {
     return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
@@ -19,36 +19,55 @@ function fmt_date($d)
     return $ts ? date('M d, Y', $ts) : $d;
 }
 
-// --- 1) Validate job id ---
+/* ---------- Viewer info (for premium routing) ---------- */
+$is_logged_in = isset($_SESSION['user_id']);
+$user_id = $_SESSION['user_id'] ?? null;
+$package = $_SESSION['package'] ?? null;
+
+// If logged in but package missing in session, refresh from DB
+if ($is_logged_in && ($package === null || $package === '')) {
+    try {
+        $st = $pdo->prepare("SELECT package FROM users WHERE user_id=? LIMIT 1");
+        $st->execute([$user_id]);
+        $package = (string)($st->fetchColumn() ?: 'normal');
+        $_SESSION['package'] = $package;
+    } catch (PDOException $e) {
+        $package = 'normal';
+    }
+}
+$is_premium = (strtolower((string)$package) === 'premium');
+
+/* ---------- 1) Validate job id ---------- */
 $job_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 if ($job_id <= 0) {
     http_response_code(400);
     $error = "Invalid job id.";
 }
 
-// --- 2) Auto-update this job to Inactive if deadline passed ---
+/* ---------- 2) Auto-inactivate if past deadline ---------- */
 if (empty($error)) {
     try {
         $today = date('Y-m-d');
         $up = $pdo->prepare("UPDATE jobs SET status='Inactive' WHERE job_id=? AND status='Active' AND deadline < ?");
         $up->execute([$job_id, $today]);
-    } catch (PDOException $e) { /* log if needed */
+    } catch (PDOException $e) {
+        /* optional: log */
     }
 }
 
-// --- 3) Fetch job + company ---
+/* ---------- 3) Fetch job + company ---------- */
 $job = null;
 if (empty($error)) {
     try {
         $sql = "
-      SELECT j.job_id, j.job_title, j.description_detail, j.employment_type, j.requirements,
-             j.salary, j.location, j.deadline, j.status, j.posted_at,
-             c.company_id, c.company_name, c.email AS company_email, c.phone AS company_phone, c.logo AS company_logo
-      FROM jobs j
-      JOIN companies c ON c.company_id = j.company_id
-      WHERE j.job_id = ?
-      LIMIT 1
-    ";
+          SELECT j.job_id, j.job_title, j.description_detail, j.employment_type, j.requirements,
+                 j.salary, j.location, j.deadline, j.status, j.posted_at,
+                 c.company_id, c.company_name, c.email AS company_email, c.phone AS company_phone, c.logo AS company_logo
+          FROM jobs j
+          JOIN companies c ON c.company_id = j.company_id
+          WHERE j.job_id = ?
+          LIMIT 1
+        ";
         $stmt = $pdo->prepare($sql);
         $stmt->execute([$job_id]);
         $job = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -62,10 +81,12 @@ if (empty($error)) {
     }
 }
 
-// --- 4) Determine badge class for status ---
+/* ---------- 4) Status badge class ---------- */
 $badgeClass = "bg-secondary";
 if ($job && isset($job['status'])) {
-    $badgeClass = ($job['status'] === 'Active') ? 'bg-success' : (($job['status'] === 'Closed') ? 'bg-danger' : 'bg-secondary');
+    $badgeClass = ($job['status'] === 'Active')
+        ? 'bg-success'
+        : (($job['status'] === 'Closed') ? 'bg-danger' : 'bg-secondary');
 }
 ?>
 <!DOCTYPE html>
@@ -149,7 +170,9 @@ if ($job && isset($job['status'])) {
                                     </div>
                                     <div class="meta mt-1">
                                         <small>Location: <?= e($job['location']) ?></small><br>
-                                        <?php if (!empty($job['posted_at'])): ?><small>Posted: <?= e(fmt_date($job['posted_at'])) ?></small><?php endif; ?>
+                                        <?php if (!empty($job['posted_at'])): ?>
+                                            <small>Posted: <?= e(fmt_date($job['posted_at'])) ?></small>
+                                        <?php endif; ?>
                                     </div>
                                 </div>
                             </div>
@@ -182,24 +205,32 @@ if ($job && isset($job['status'])) {
                                 <p class="mb-0" style="text-align: justify;"><?= nl2br(e($job['requirements'])) ?></p>
                             </div>
 
-                            <!-- >>> FIXED BUTTON BLOCK <<< -->
+                            <!-- APPLY BUTTONS -->
+                            <?php $can_apply = (isset($job['status']) && $job['status'] === 'Active'); ?>
                             <div class="mt-4 d-flex gap-2 align-items-center">
-                                <?php if (!isset($_SESSION['user_id'])): ?>
-                                    <a class="btn btn-warning"
-                                        href="login.php?next=<?= urlencode('resume.php?job_id=' . (int)$job['job_id']) ?>">
-                                        I’m interested
+                                <?php if ($can_apply): ?>
+                                    <?php
+                                    if (!$is_logged_in) {
+                                        // Not logged in: go to login; after login, router sends to right page
+                                        $apply_href = "login.php?next=" . urlencode('resume_entry.php?job_id=' . (int)$job['job_id']);
+                                    } else {
+                                        // Logged in: route by package
+                                        $apply_href = ($is_premium ? 'resume_premium.php?job_id=' : 'resume.php?job_id=') . (int)$job['job_id'];
+                                    }
+                                    ?>
+                                    <a class="btn btn-warning" href="<?= e($apply_href) ?>">
+                                        I’m interested<?= ($is_logged_in && $is_premium) ? ' ⭐' : '' ?>
                                     </a>
                                 <?php else: ?>
-                                    <a class="btn btn-warning"
-                                        href="resume.php?job_id=<?= (int)$job['job_id'] ?>">
+                                    <button class="btn btn-secondary" type="button" disabled aria-disabled="true" title="Applications are closed">
                                         I’m interested
-                                    </a>
+                                    </button>
                                 <?php endif; ?>
 
                                 <button type="button" class="btn btn-outline-secondary" onclick="history.back()">Back</button>
 
-                                <?php if ($job['status'] !== 'Active'): ?>
-                                    <span class="align-self-center text-muted small">This job is not active (you can still view/apply).</span>
+                                <?php if (!$can_apply): ?>
+                                    <span class="align-self-center text-muted small">Applications are closed for this job.</span>
                                 <?php endif; ?>
                             </div>
                         </div>
@@ -229,7 +260,7 @@ if ($job && isset($job['status'])) {
                 <a href="#" class="text-white text-decoration-none me-3">Contact</a>
                 <a href="#" class="text-white text-decoration-none">Privacy Policy</a>
             </div>
-            <small>&copy; 2025 JobHive. All rights reserved.</small>
+            <small>&copy; <?= date('Y') ?> JobHive. All rights reserved.</small>
         </div>
     </footer>
 </body>

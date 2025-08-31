@@ -9,7 +9,6 @@ function e($v)
 {
     return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
 }
-
 function initials($name)
 {
     $parts = preg_split('/\s+/', trim((string)$name));
@@ -20,7 +19,6 @@ function initials($name)
     }
     return $ini ?: 'YN';
 }
-
 function data_uri_for_file($fs_path)
 {
     if (!is_readable($fs_path)) return '';
@@ -36,21 +34,22 @@ function data_uri_for_file($fs_path)
     return "data:$mime;base64," . base64_encode($data);
 }
 
-/* ----------------- AUTH & PREMIUM CHECK ----------------- */
+/* ----------------- AUTH ----------------- */
 $user_id = $_SESSION['user_id'] ?? null;
 if (!$user_id) {
     header("Location: login.php?next=" . urlencode($_SERVER['REQUEST_URI']));
     exit;
 }
-$is_premium = true;
 
-/* ----------------- LOAD USER FROM DB ----------------- */
+/* ----------------- LOAD USER + PREMIUM CHECK ----------------- */
 try {
     $stmt = $pdo->prepare("
-    SELECT user_id, full_name, email, phone, address, job_category, current_position, profile_picture, b_date
-    FROM users WHERE user_id=? LIMIT 1
-");
-
+        SELECT user_id, full_name, email, phone, address,
+               job_category, current_position, profile_picture,
+               b_date, gender, education, package
+        FROM users
+        WHERE user_id=? LIMIT 1
+    ");
     $stmt->execute([$user_id]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
@@ -60,28 +59,88 @@ try {
 if (!$user) {
     http_response_code(404);
     $fatal_error = "User not found.";
+} else {
+    $is_premium = (strtolower(trim($user['package'] ?? '')) === 'premium');
+    if (!$is_premium) {
+        http_response_code(403);
+        $fatal_error = "Premium feature only. Please upgrade to access Premium Resume.";
+    }
 }
-if (!$is_premium && empty($fatal_error)) {
-    http_response_code(403);
-    $fatal_error = "Premium feature only. Please upgrade to access Premium Resume.";
+
+/* ----------------- LOAD JOB + COMPANY (from ?job_id=) ----------------- */
+$job_id = isset($_GET['job_id']) ? (int)$_GET['job_id'] : 0;
+$jobTitle = '';
+$companyName = '';
+if (empty($fatal_error) && $job_id > 0) {
+    try {
+        $stJ = $pdo->prepare("
+            SELECT j.job_id, j.job_title, c.company_name
+            FROM jobs j
+            JOIN companies c ON c.company_id = j.company_id
+            WHERE j.job_id = ?
+            LIMIT 1
+        ");
+        $stJ->execute([$job_id]);
+        $row = $stJ->fetch(PDO::FETCH_ASSOC);
+        if ($row) {
+            $jobTitle    = (string)$row['job_title'];
+            $companyName = (string)$row['company_name'];
+        }
+    } catch (PDOException $e) {
+        /* ignore gracefully */
+    }
 }
 
 /* ----------------- PREP DATA ----------------- */
-$name  = $user['full_name'] ?? '';
-$email = $user['email'] ?? '';
-$phone = $user['phone'] ?? '';
-$addr  = $user['address'] ?? '';
-$cat   = $user['job_category'] ?? '';
-$pos   = $user['current_position'] ?? '';
-$photo = $user['profile_picture'] ?? '';
-$birth = $user['b_date'] ?? '';
-$ini   = initials($name);
+$name   = $user['full_name'] ?? '';
+$email  = $user['email'] ?? '';
+$phone  = $user['phone'] ?? '';
+$addr   = $user['address'] ?? '';
+$cat    = $user['job_category'] ?? '';
+$pos    = $user['current_position'] ?? '';
+$photo  = $user['profile_picture'] ?? '';
+$birth  = $user['b_date'] ?? '';
+$gender = $user['gender'] ?? '';
+$edu    = $user['education'] ?? '';
+$ini    = initials($name);
+
+/* Normalize */
+$gender = $gender ? ucwords(strtolower($gender)) : '';
+$edu    = $edu ? ucwords($edu) : '';
 
 $photo_src = '';
 if ($photo) {
-    $fs_path = __DIR__ . '/' . $PROFILE_DIR . $photo;
+    $fs_path  = __DIR__ . '/' . $PROFILE_DIR . $photo;
     $photo_src = data_uri_for_file($fs_path);
 }
+
+/* ----------------- PREMIUM SUMMARY (safe string building) ----------------- */
+$summaryParts = [];
+if ($name)   $summaryParts[] = $name;
+if ($gender) $summaryParts[] = "($gender)";
+$summaryHeader = trim(implode(' ', $summaryParts));
+
+$summaryRole    = $jobTitle ? "for the role of {$jobTitle}" : "for the desired role";
+$summaryCompany = $companyName ? " at {$companyName}" : "";
+$profileBits    = [];
+
+if ($edu)   $profileBits[] = "Education: {$edu}";
+if ($phone) $profileBits[] = "Phone: {$phone}";
+if ($addr)  $profileBits[] = "Address: {$addr}";
+if ($birth) $profileBits[] = "Birth Date: {$birth}";
+
+$detailsStr   = $profileBits ? (" (" . implode(" · ", $profileBits) . ")") : "";
+$companyLabel = $companyName ? $companyName : 'the company';
+$headerLabel  = $summaryHeader ? $summaryHeader : "Premium candidate";
+$candidateRef = $name ? $name : "the candidate";
+
+$premiumSummary =
+    $headerLabel .
+    " is applying " . $summaryRole . $summaryCompany . "." .
+    " As a premium user, " . $candidateRef .
+    " commits to work hard in the company’s job role, follow policies, learn quickly, " .
+    "and deliver results that support " . $companyLabel . "’s goals." .
+    $detailsStr;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -98,6 +157,9 @@ if ($photo) {
     <script src="https://cdn.jsdelivr.net/npm/dom-to-image-more@3.3.0/dist/dom-to-image-more.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 
+    <!-- Inter font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap" rel="stylesheet">
+
     <style>
         :root {
             --accent: #0ea5e9;
@@ -113,13 +175,47 @@ if ($photo) {
             --sp-8: 56px;
             --radius-lg: 16px;
             --shadow: 0 10px 30px rgba(0, 0, 0, .08);
-            --line: 1.6;
+            --line: 1.65;
+        }
+
+        html,
+        body {
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            text-rendering: optimizeLegibility;
+            font-feature-settings: "liga", "kern";
+            font-family: 'Inter', sans-serif;
         }
 
         body {
             background: #f8fafc;
             color: var(--ink);
             line-height: var(--line);
+        }
+
+        /* Consistent numeric width */
+        .resume,
+        .resume * {
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* Smooth reading & full look */
+        .resume p {
+            margin: .45rem 0 .9rem;
+            text-align: justify;
+            text-justify: inter-word;
+            hyphens: none;
+            word-break: normal;
+            overflow-wrap: anywhere;
+            /* long emails/URLs still wrap */
+        }
+
+        .section {
+            margin: var(--sp-4) 0;
+        }
+
+        .section:first-child {
+            margin-top: 0;
         }
 
         .template-picker .swatch {
@@ -147,15 +243,18 @@ if ($photo) {
         .resume-stage {
             background: #fff;
             width: 794px;
+            /* A4 @ 96dpi */
             min-height: 1123px;
+            /* A4 height */
             margin: 0 auto;
             box-shadow: var(--shadow);
             border-radius: var(--radius-lg);
             overflow: hidden;
+            transition: box-shadow .25s ease, transform .25s ease;
         }
 
-        .resume {
-            color: var(--ink);
+        .resume-stage:hover {
+            box-shadow: 0 12px 36px rgba(0, 0, 0, .10);
         }
 
         .divider {
@@ -187,13 +286,23 @@ if ($photo) {
 
         .t1 .side {
             background: color-mix(in srgb, var(--accent) 9%, white);
-            padding: var(--sp-6) var(--sp-5);
+            padding: var(--sp-7) var(--sp-6);
             border-right: 3px solid var(--accent);
+            display: flex;
+            flex-direction: column;
         }
 
         .t1 .main {
-            padding: var(--sp-6) var(--sp-7);
+            padding: var(--sp-7) var(--sp-7);
+            display: flex;
+            flex-direction: column;
         }
+
+        .t1 .spacer {
+            flex: 1 1 auto;
+        }
+
+        /* pushes bottom content down to fill */
 
         /* Avatar */
         .avatar {
@@ -221,12 +330,19 @@ if ($photo) {
         .section-title {
             color: var(--accent);
             font-weight: 800;
-            letter-spacing: .5px;
-            margin-top: var(--sp-6);
-            margin-bottom: var(--sp-2);
+            letter-spacing: .4px;
+            margin: var(--sp-4) 0 var(--sp-2);
+            border-bottom: 2px solid color-mix(in srgb, var(--accent) 18%, white);
+            padding-bottom: .25rem;
         }
 
         /* T2 */
+        .t2 {
+            min-height: 1123px;
+            display: flex;
+            flex-direction: column;
+        }
+
         .t2 .head {
             background: var(--accent);
             color: #fff;
@@ -235,6 +351,13 @@ if ($photo) {
 
         .t2 .body {
             padding: var(--sp-6) var(--sp-7);
+            display: flex;
+            flex-direction: column;
+            flex: 1 1 auto;
+        }
+
+        .t2 .body .spacer {
+            flex: 1 1 auto;
         }
 
         .t2 .badge-role {
@@ -258,11 +381,19 @@ if ($photo) {
         .t3 .left {
             background: #0b1220;
             color: #e5e7eb;
-            padding: var(--sp-7) var(--sp-5);
+            padding: var(--sp-7) var(--sp-6);
+            display: flex;
+            flex-direction: column;
         }
 
         .t3 .right {
             padding: var(--sp-7) var(--sp-7);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .t3 .right .spacer {
+            flex: 1 1 auto;
         }
 
         .t3 .circle {
@@ -282,6 +413,29 @@ if ($photo) {
             margin-right: .35rem;
             margin-top: .35rem;
             background: rgba(255, 255, 255, .05);
+            line-height: 1;
+        }
+
+        @media print {
+            body {
+                background: #fff;
+            }
+
+            .resume-stage {
+                box-shadow: none !important;
+                border-radius: 0 !important;
+            }
+
+            .navbar,
+            header,
+            footer {
+                display: none !important;
+            }
+
+            @page {
+                margin: 0;
+                size: A4;
+            }
         }
 
         @media (max-width:900px) {
@@ -364,31 +518,53 @@ if ($photo) {
                                 <?php else: ?>
                                     <div class="avatar-fallback"><?= e($ini) ?></div>
                                 <?php endif; ?>
-                                <div>
+
+                                <div class="section">
                                     <div class="fw-semibold"><?= e($email) ?></div>
                                     <div class="muted"><?= e($phone) ?></div>
                                     <div class="muted"><?= e($addr) ?></div>
                                     <div class="muted"><?= e($birth) ?></div>
+                                    <?php if ($gender): ?><div class="muted">Gender: <?= e($gender) ?></div><?php endif; ?>
+                                    <?php if ($edu): ?><div class="muted">Education: <?= e($edu) ?></div><?php endif; ?>
                                 </div>
-                                <div>
+
+                                <div class="section">
                                     <div class="section-title">Key Info</div>
                                     <div><small>Category</small><br><strong><?= e($cat) ?></strong></div>
                                     <div class="mt-2"><small>Position</small><br><strong><?= e($pos) ?></strong></div>
                                 </div>
                             </div>
+                            <div class="spacer"></div>
                         </aside>
+
                         <section class="main">
-                            <div>
+                            <div class="section">
                                 <div class="display-6 h-name mb-1"><?= e($name) ?></div>
                                 <?php if ($pos): ?><div class="fs-5 muted"><?= e($pos) ?></div><?php endif; ?>
                             </div>
-                            <div class="divider"></div>
-                            <div class="stack">
-                                <div>
-                                    <div class="section-title">Profile</div>
-                                    <p class="mb-0 muted">This premium resume loads your saved details automatically. Add more fields to your profile to enrich this section.</p>
+
+                            <?php if ($jobTitle || $companyName): ?>
+                                <div class="section">
+                                    <div class="section-title">Applied Job</div>
+                                    <div class="row g-2">
+                                        <div class="col-md-6">
+                                            <div class="fw-semibold">Company</div>
+                                            <div class="muted"><?= e($companyName) ?></div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="fw-semibold">Job Title</div>
+                                            <div class="muted"><?= e($jobTitle) ?></div>
+                                        </div>
+                                    </div>
                                 </div>
+                            <?php endif; ?>
+
+                            <div class="section">
+                                <div class="section-title">Premium Summary</div>
+                                <p class="mb-0 muted"><?= e($premiumSummary) ?></p>
                             </div>
+
+                            <div class="spacer"></div>
                         </section>
                     </div>
                 </template>
@@ -407,36 +583,63 @@ if ($photo) {
                                 <span class="badge-role"><?= e($pos ?: $cat) ?></span>
                             </div>
                         </div>
+
                         <div class="body">
-                            <div class="row gx-6 gy-4">
-                                <div class="col-md-6">
-                                    <div class="fw-semibold">Email</div>
-                                    <div class="muted"><?= e($email) ?></div>
+                            <div class="section">
+                                <div class="row gx-6 gy-4">
+                                    <div class="col-md-6">
+                                        <div class="fw-semibold">Email</div>
+                                        <div class="muted"><?= e($email) ?></div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="fw-semibold">Phone</div>
+                                        <div class="muted"><?= e($phone) ?></div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="fw-semibold">Address</div>
+                                        <div class="muted"><?= e($addr) ?></div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="fw-semibold">Category</div>
+                                        <div class="muted"><?= e($cat) ?></div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="fw-semibold">Birth Date</div>
+                                        <div class="muted"><?= e($birth) ?></div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="fw-semibold">Gender</div>
+                                        <div class="muted"><?= e($gender) ?></div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="fw-semibold">Education</div>
+                                        <div class="muted"><?= e($edu) ?></div>
+                                    </div>
+                                    <?php if ($jobTitle || $companyName): ?>
+                                        <div class="col-md-6">
+                                            <div class="fw-semibold">Company</div>
+                                            <div class="muted"><?= e($companyName) ?></div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="fw-semibold">Job Title</div>
+                                            <div class="muted"><?= e($jobTitle) ?></div>
+                                        </div>
+                                    <?php endif; ?>
                                 </div>
-                                <div class="col-md-6">
-                                    <div class="fw-semibold">Phone</div>
-                                    <div class="muted"><?= e($phone) ?></div>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="fw-semibold">Address</div>
-                                    <div class="muted"><?= e($addr) ?></div>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="fw-semibold">Category</div>
-                                    <div class="muted"><?= e($cat) ?></div>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="fw-semibold">Birth Date</div>
-                                    <div class="muted"><?= e($birth) ?></div>
-                                </div>
-
-
                             </div>
+
+                            <div class="section">
+                                <div class="fw-semibold">Premium Summary</div>
+                                <p class="muted mb-0"><?= e($premiumSummary) ?></p>
+                            </div>
+
                             <div class="divider"></div>
-                            <div>
+                            <div class="section">
                                 <div class="fw-semibold mb-1">Current Position</div>
                                 <div><?= e($pos) ?></div>
                             </div>
+
+                            <div class="spacer"></div>
                         </div>
                     </div>
                 </template>
@@ -450,28 +653,48 @@ if ($photo) {
                             <?php else: ?>
                                 <div class="avatar-fallback" style="border-radius:50%;width:120px;height:120px;"><?= e($ini) ?></div>
                             <?php endif; ?>
-                            <div class="mt-4">
+
+                            <div class="section">
                                 <div><?= e($email) ?></div>
                                 <div><?= e($phone) ?></div>
                                 <div><?= e($addr) ?></div>
                                 <div><?= e($birth) ?></div>
+                                <?php if ($gender): ?><div><?= e('Gender: ' . $gender) ?></div><?php endif; ?>
+                                <?php if ($edu): ?><div><?= e('Education: ' . $edu) ?></div><?php endif; ?>
+                                <?php if ($companyName): ?><div><?= e('Company: ' . $companyName) ?></div><?php endif; ?>
+                                <?php if ($jobTitle): ?><div><?= e('Job Title: ' . $jobTitle) ?></div><?php endif; ?>
                             </div>
-                            <div class="mt-4">
+
+                            <div class="section">
                                 <?php if ($cat): ?><span class="chip"><?= e($cat) ?></span><?php endif; ?>
                                 <?php if ($pos): ?><span class="chip"><?= e($pos) ?></span><?php endif; ?>
+                                <?php if ($edu): ?><span class="chip"><?= e($edu) ?></span><?php endif; ?>
                             </div>
+
+                            <div class="spacer"></div>
                         </div>
+
                         <div class="right">
-                            <div class="display-6 fw-bold mb-1" style="color:var(--accent)"><?= e($name) ?></div>
-                            <div class="fs-5 muted mb-4"><?= e($pos ?: $cat) ?></div>
-                            <div class="fw-semibold">About</div>
-                            <p class="muted">Complete more fields in your profile to improve this section.</p>
-                            <div class="fw-semibold mt-4">Contact</div>
-                            <ul class="mb-0">
-                                <li><?= e($email) ?></li>
-                                <li><?= e($phone) ?></li>
-                                <li><?= e($addr) ?></li>
-                            </ul>
+                            <div class="section">
+                                <div class="display-6 fw-bold mb-1" style="color:var(--accent)"><?= e($name) ?></div>
+                                <div class="fs-5 muted mb-4"><?= e($pos ?: $cat) ?></div>
+                            </div>
+
+                            <div class="section">
+                                <div class="fw-semibold">Premium Summary</div>
+                                <p class="muted"><?= e($premiumSummary) ?></p>
+                            </div>
+
+                            <div class="section">
+                                <div class="fw-semibold">Contact</div>
+                                <ul class="mb-0">
+                                    <li><?= e($email) ?></li>
+                                    <li><?= e($phone) ?></li>
+                                    <li><?= e($addr) ?></li>
+                                </ul>
+                            </div>
+
+                            <div class="spacer"></div>
                         </div>
                     </div>
                 </template>
@@ -488,7 +711,6 @@ if ($photo) {
 
     <script>
         (function() {
-            /* --------- constants --------- */
             const A4_W = 794,
                 A4_H = 1123;
 
@@ -504,7 +726,6 @@ if ($photo) {
             const tpl2 = document.getElementById('tpl-t2');
             const tpl3 = document.getElementById('tpl-t3');
 
-            /* --------- mount + layout guards --------- */
             function mountTemplate(tplEl) {
                 host.innerHTML = '';
                 host.appendChild(tplEl.content.cloneNode(true));
@@ -529,7 +750,7 @@ if ($photo) {
                 if (key === 't3') mountTemplate(tpl3);
             }
 
-            // Ensure the visible resume fills exact A4 height
+            // Ensure visible resume fills exact A4
             function forceFillCurrentTemplate(root) {
                 stage.style.width = A4_W + 'px';
                 stage.style.height = A4_H + 'px';
@@ -544,7 +765,6 @@ if ($photo) {
                     resume.style.display = 'grid';
                     resume.style.gridTemplateColumns = '280px 1fr';
                 }
-
                 if (resume.classList.contains('t2')) {
                     resume.style.display = 'flex';
                     resume.style.flexDirection = 'column';
@@ -552,28 +772,30 @@ if ($photo) {
                     const body = resume.querySelector('.body');
                     if (body) body.style.flex = '1 1 auto';
                 }
-
                 if (resume.classList.contains('t3')) {
                     resume.style.display = 'grid';
                     resume.style.gridTemplateColumns = '300px 1fr';
                 }
             }
 
-            // init
+            /* Init */
             setAccent('#0EA5E9');
             setTemplate('t1');
 
-            // UI events
+            /* UI */
             swatches.forEach(s => s.addEventListener('click', () => setAccent(s.dataset.color)));
             hexInput.addEventListener('change', () => setAccent(hexInput.value));
             templBtns.forEach(b => b.addEventListener('click', () => setTemplate(b.dataset.template)));
 
-            /* --------- capture pipeline: off-screen A4 clone --------- */
+            /* Capture helpers */
             function isIOS() {
                 return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
                     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
             }
 
+            function isSafari() {
+                return /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+            }
             async function ensureImages(node) {
                 const imgs = Array.from(node.querySelectorAll('img'));
                 await Promise.all(imgs.map(img => img.complete ? Promise.resolve() :
@@ -610,7 +832,6 @@ if ($photo) {
                 cloneStage.innerHTML = '';
                 cloneStage.appendChild(wrapper);
 
-                // enforce layout inside clone
                 (function enforce(el) {
                     const resume = el.querySelector('.resume');
                     if (!resume) return;
@@ -635,7 +856,6 @@ if ($photo) {
                 document.body.appendChild(cloneStage);
                 return cloneStage;
             }
-
             async function renderWithHtml2Canvas(node) {
                 if (typeof html2canvas !== 'function') throw new Error('html2canvas not loaded');
                 await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
@@ -647,7 +867,6 @@ if ($photo) {
                     imageTimeout: 15000
                 });
             }
-
             async function renderBlobWithDomToImage(node) {
                 if (!window.domtoimage) throw new Error('dom-to-image-more not loaded');
                 return window.domtoimage.toBlob(node, {
@@ -657,7 +876,6 @@ if ($photo) {
                     height: A4_H
                 });
             }
-
             async function captureA4() {
                 const snap = buildSnapshotNode();
                 try {
@@ -681,13 +899,14 @@ if ($photo) {
                 }
             }
 
-            /* --------- download handlers --------- */
-            btnPNG?.addEventListener('click', async () => {
+            /* Downloads (Safari/iOS open new tab) */
+            document.getElementById('btnPNG')?.addEventListener('click', async () => {
                 try {
                     const out = await captureA4();
+                    const needsNewTab = isIOS() || isSafari();
                     if (out.kind === 'canvas') {
                         const url = out.value.toDataURL('image/png');
-                        if (isIOS()) window.open(url, '_blank');
+                        if (needsNewTab) window.open(url, '_blank');
                         else {
                             const a = document.createElement('a');
                             a.href = url;
@@ -696,7 +915,7 @@ if ($photo) {
                         }
                     } else {
                         const url = URL.createObjectURL(out.value);
-                        if (isIOS()) window.open(url, '_blank');
+                        if (needsNewTab) window.open(url, '_blank');
                         else {
                             const a = document.createElement('a');
                             a.href = url;
@@ -711,7 +930,7 @@ if ($photo) {
                 }
             });
 
-            btnPDF?.addEventListener('click', async () => {
+            document.getElementById('btnPDF')?.addEventListener('click', async () => {
                 try {
                     const out = await captureA4();
                     const {
@@ -723,6 +942,7 @@ if ($photo) {
                     const pdf = new PDFCtor('p', 'mm', 'a4');
                     const pageW = pdf.internal.pageSize.getWidth();
                     const pageH = pdf.internal.pageSize.getHeight();
+                    const needsNewTab = isIOS() || isSafari();
 
                     if (out.kind === 'canvas') {
                         const imgData = out.value.toDataURL('image/png');
@@ -741,7 +961,7 @@ if ($photo) {
                         URL.revokeObjectURL(blobUrl);
                     }
 
-                    if (isIOS()) window.open(pdf.output('bloburl'), '_blank');
+                    if (needsNewTab) window.open(pdf.output('bloburl'), '_blank');
                     else pdf.save('resume.pdf');
                 } catch (err) {
                     alert('Could not generate PDF.\n' + (err?.message || err));

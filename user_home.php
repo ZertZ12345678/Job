@@ -39,24 +39,29 @@ function initials($name)
   return $ini ?: 'U';
 }
 
-/* ===== Fetch fresh user ===== */
+/* ===== Fetch fresh user (now including package) ===== */
 $profile_picture = $_SESSION['profile_picture'] ?? null;
+$package = $_SESSION['package'] ?? 'normal';
 try {
-  $st = $pdo->prepare("SELECT full_name,email,profile_picture FROM users WHERE user_id=? LIMIT 1");
+  $st = $pdo->prepare("SELECT full_name,email,profile_picture,package FROM users WHERE user_id=? LIMIT 1");
   $st->execute([$user_id]);
   if ($row = $st->fetch(PDO::FETCH_ASSOC)) {
-    $full_name = $row['full_name'] ?: $full_name;
-    $email = $row['email'] ?: $email;
+    $full_name       = $row['full_name'] ?: $full_name;
+    $email           = $row['email'] ?: $email;
     $profile_picture = $row['profile_picture'] ?? null;
+    $package         = $row['package'] ?: 'normal';
+
     $_SESSION['full_name']       = $full_name;
     $_SESSION['email']           = $email;
     $_SESSION['profile_picture'] = $profile_picture;
+    $_SESSION['package']         = $package;
   } else {
     header("Location: index.php");
     exit;
   }
 } catch (PDOException $e) {
 }
+$is_premium = (strtolower((string)$package) === 'premium');
 
 /* ===== Profile completion (must be 100% to upgrade) ===== */
 $REQUIRED = [
@@ -87,27 +92,25 @@ try {
 }
 $can_upgrade = empty($missing_fields);
 
-/* ===== POST handlers (server-side mark states kept for this session UI only) ===== */
-$_SESSION['app_seen_status']    = $_SESSION['app_seen_status']    ?? []; // application_id => last seen status (chip)
-$_SESSION['session_notif_read'] = $_SESSION['session_notif_read'] ?? []; // custom session notifs read state
+/* ===== POST handlers (session-scoped read state) ===== */
+$_SESSION['app_seen_status']    = $_SESSION['app_seen_status']    ?? [];
+$_SESSION['session_notif_read'] = $_SESSION['session_notif_read'] ?? [];
 $seenApp  = &$_SESSION['app_seen_status'];
 $seenSess = &$_SESSION['session_notif_read'];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-  // Mark all (session)
   if (isset($_POST['mark_all'])) {
     $_SESSION['mark_all_pending'] = 1;
     header("Location: user_home.php?inbox=1");
     exit;
   }
-  // Mark one (session)
   if (isset($_POST['mark_one']) && isset($_POST['type'])) {
     $type = $_POST['type']; // 'A' or 'S'
     if ($type === 'A') {
       $aid    = (int)($_POST['mark_one'] ?? 0);
       $status = trim($_POST['status_now'] ?? '');
       if ($aid > 0 && ($status === 'Accepted' || $status === 'Rejected')) {
-        $seenApp[$aid] = $status;  // remembers read/marked for this session
+        $seenApp[$aid] = $status;
       }
     } elseif ($type === 'S') {
       $nid = trim($_POST['mark_one'] ?? '');
@@ -201,81 +204,68 @@ try {
   $apps = [];
 }
 
-/* ===== Build unified inbox (history + session unread) ===== */
+/* ===== Build unified inbox ===== */
 $items = [];
 date_default_timezone_set('Asia/Yangon');
-
-if (!isset($_SESSION['already_notified'])) {
-  $_SESSION['already_notified'] = []; // [application_id] => 'Accepted'|'Rejected'
-}
+if (!isset($_SESSION['already_notified'])) $_SESSION['already_notified'] = [];
 $alreadyNotified = &$_SESSION['already_notified'];
 
 foreach ($apps as $a) {
   $aid = (int)$a['application_id'];
   $stt = (string)$a['status'];
-
   if ($stt === 'Accepted' || $stt === 'Rejected') {
-    // First time this decision appears in THIS session?
     $isFirstThisSession = !(isset($alreadyNotified[$aid]) && $alreadyNotified[$aid] === $stt);
-    if ($isFirstThisSession) {
-      $alreadyNotified[$aid] = $stt; // prevent "New" again this session
-    }
-    // Unread only the first time in this session AND if user hasn't clicked "Mark read" yet
+    if ($isFirstThisSession) $alreadyNotified[$aid] = $stt;
     $unread = $isFirstThisSession && (!isset($seenApp[$aid]) || $seenApp[$aid] !== $stt);
-
     $items[] = [
-      '_type'      => 'A',
-      '_id'        => (string)$aid,
-      '_unread'    => $unread,
-      'title'      => $stt . " — " . $a['job_title'],
-      'body'       => ($stt === 'Accepted'
+      '_type' => 'A',
+      '_id' => (string)$aid,
+      '_unread' => $unread,
+      'title' => $stt . " — " . $a['job_title'],
+      'body' => ($stt === 'Accepted'
         ? "Great news! Your application to {$a['company_name']} for “{$a['job_title']}” was accepted."
         : "Update: Your application to {$a['company_name']} for “{$a['job_title']}” was rejected."),
-      'when'       => 'Applied: ' . date('M d, Y H:i', strtotime($a['applied_at'])),
-      'link'       => '',
-      'pill'       => $unread ? 'New' : 'Read',
-      'pillClass'  => $unread ? 'text-bg-warning' : 'text-bg-secondary',
+      'when' => 'Applied: ' . date('M d, Y H:i', strtotime($a['applied_at'])),
+      'link' => '',
+      'pill' => $unread ? 'New' : 'Read',
+      'pillClass' => $unread ? 'text-bg-warning' : 'text-bg-secondary',
       'status_now' => $stt,
     ];
   }
 }
 
-/* Session-scoped custom notifications (e.g., Application Submitted) */
+/* Session custom notifications */
 $sessList = $_SESSION['notifications'] ?? [];
 if (is_array($sessList) && $sessList) {
   foreach ($sessList as $n) {
-    $nid    = (string)($n['id'] ?? '');
+    $nid = (string)($n['id'] ?? '');
     if ($nid === '') continue;
-
     $unread = empty($seenSess[$nid]);
     $items[] = [
-      '_type'     => 'S',
-      '_id'       => $nid,
-      '_unread'   => $unread,
-      'title'     => (string)($n['title'] ?? 'Notification'),
-      'body'      => (string)($n['message'] ?? ''),
-      'when'      => date('M d, Y H:i', strtotime((string)($n['created_at'] ?? date('Y-m-d H:i:s')))),
-      'link'      => (string)($n['link'] ?? ''),
-      'pill'      => $unread ? 'New' : 'Read',
+      '_type' => 'S',
+      '_id' => $nid,
+      '_unread' => $unread,
+      'title' => (string)($n['title'] ?? 'Notification'),
+      'body' => (string)($n['message'] ?? ''),
+      'when' => date('M d, Y H:i', strtotime((string)($n['created_at'] ?? date('Y-m-d H:i:s')))),
+      'link' => (string)($n['link'] ?? ''),
+      'pill' => $unread ? 'New' : 'Read',
       'pillClass' => $unread ? 'text-bg-primary' : 'text-bg-secondary',
       'status_now' => null,
     ];
   }
 }
 
-/* Mark all pending (session only; localStorage will persist across logins on this device) */
+/* Mark all pending (session only) */
 if (!empty($_SESSION['mark_all_pending'])) {
   foreach ($items as $it) {
-    if ($it['_type'] === 'A') {
-      $seenApp[(int)$it['_id']] = (string)$it['status_now'];
-    } else {
-      $seenSess[(string)$it['_id']] = 1;
-    }
+    if ($it['_type'] === 'A') $seenApp[(int)$it['_id']] = (string)$it['status_now'];
+    else $seenSess[(string)$it['_id']] = 1;
   }
   unset($_SESSION['mark_all_pending']);
 }
 
-/* Badge + shake (server guess; JS will adjust after applying localStorage) */
+/* Badge + shake */
 $badge_count = 0;
 foreach ($items as $it) if (!empty($it['_unread'])) $badge_count++;
 $prev_badge   = (int)($_SESSION['prev_badge_count'] ?? 0);
@@ -575,7 +565,6 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
       transform-origin: 50% 0%
     }
 
-    /* Premium modal styling */
     .premium-highlight {
       background: linear-gradient(135deg, #fff9e6, #fff);
       border: 1px solid #ffe08a;
@@ -636,7 +625,6 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
       font-weight: 600
     }
 
-    /* subtle shake for inline warning */
     @keyframes shakeX {
 
       0%,
@@ -692,11 +680,17 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
             </button>
           </li>
 
-          <!-- Go Premium button -->
+          <!-- Premium control -->
           <li class="nav-item ms-lg-2 d-none d-lg-block">
-            <button id="btnPremium" class="btn btn-warning">
-              <i class="bi bi-star-fill me-1"></i> Go Premium
-            </button>
+            <?php if (!$is_premium): ?>
+              <button id="btnPremium" class="btn btn-warning">
+                <i class="bi bi-star-fill me-1"></i> Go Premium
+              </button>
+            <?php else: ?>
+              <button class="btn btn-outline-warning" disabled>
+                <i class="bi bi-stars me-1"></i> Premium User
+              </button>
+            <?php endif; ?>
           </li>
 
           <!-- User dropdown -->
@@ -726,7 +720,14 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
   <section class="hero-section">
     <div class="container">
       <h1 class="display-6 fw-bold">Welcome back<?= $full_name ? ', ' . e($full_name) : '' ?>!</h1>
-      <p class="lead mb-4">Ready to discover your next opportunity?</p>
+      <p class="lead mb-2">Ready to discover your next opportunity?</p>
+
+      <?php if ($is_premium): ?>
+        <div class="alert alert-success d-inline-flex align-items-center gap-2 py-2 px-3 mt-2" role="alert">
+          <i class="bi bi-patch-check-fill"></i>
+          <span>You’re on <strong>Premium</strong> — enjoy auto-fill resumes and pro templates.</span>
+        </div>
+      <?php endif; ?>
 
       <!-- Search -->
       <form class="search-bar" autocomplete="off" method="get" action="user_home.php">
@@ -818,55 +819,56 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
     </div>
   </aside>
 
-  <!-- Premium Promo Modal -->
-  <div class="modal fade" id="premiumModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-      <div class="modal-content premium-highlight shadow">
-        <div class="modal-header border-0 pb-0">
-          <h5 class="modal-title">
-            <span class="sparkle"><i class="bi bi-stars me-1"></i> Premium — 40% OFF</span>
-          </h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
+  <?php if (!$is_premium): ?>
+    <!-- Premium Promo Modal (only for normal users) -->
+    <div class="modal fade" id="premiumModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content premium-highlight shadow">
+          <div class="modal-header border-0 pb-0">
+            <h5 class="modal-title">
+              <span class="sparkle"><i class="bi bi-stars me-1"></i> Premium — 40% OFF</span>
+            </h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
 
-        <div class="modal-body pt-2">
-          <p class="mb-3">
-            Unlock <strong>Premium Resume</strong>: beautiful templates + <strong>uto-fill</strong> from your profile. Apply faster and look professional.
-          </p>
+          <div class="modal-body pt-2">
+            <p class="mb-3">
+              Unlock <strong>Premium Resume</strong>: beautiful templates + <strong>auto-fill</strong> from your profile. Apply faster and look professional.
+            </p>
 
-          <div class="d-flex align-items-center justify-content-between p-3 bg-white rounded-3 border">
-            <div class="price-wrap">
-              <span class="price-old">50,000 MMK</span>
-              <span class="price-new">30,000 MMK</span>
+            <div class="d-flex align-items-center justify-content-between p-3 bg-white rounded-3 border">
+              <div class="price-wrap">
+                <span class="price-old">50,000 MMK</span>
+                <span class="price-new">30,000 MMK</span>
+              </div>
+              <span class="badge-save">You save 20,000 MMK</span>
             </div>
-            <span class="badge-save">You save 20,000 MMK</span>
+
+            <ul class="mt-3 mb-0 small text-muted">
+              <li>Premium resume templates (ATS-friendly)</li>
+              <li>One-click auto-fill from your JobHive profile</li>
+              <li>Download as PDF/PNG anytime</li>
+            </ul>
+
+            <div id="upgradeWarn" class="alert alert-warning mt-3 mb-0 p-2" style="display: <?= $can_upgrade ? 'none' : 'block' ?>;">
+              <small>
+                <strong>Fill all data…</strong>
+                Missing: <?= e(implode(', ', $missing_fields)) ?>.
+                <a href="user_profile.php" class="alert-link">Update profile</a>
+              </small>
+            </div>
           </div>
 
-          <ul class="mt-3 mb-0 small text-muted">
-            <li>Premium resume templates (ATS-friendly)</li>
-            <li>One-click auto-fill from your JobHive profile</li>
-            <li>Download as PDF/PNG anytime</li>
-          </ul>
-
-          <!-- Inline warning if incomplete -->
-          <div id="upgradeWarn" class="alert alert-warning mt-3 mb-0 p-2" style="display: <?= $can_upgrade ? 'none' : 'block' ?>;">
-            <small>
-              <strong>Fill all data…</strong>
-              Missing: <?= e(implode(', ', $missing_fields)) ?>.
-              <a href="user_profile.php" class="alert-link">Update profile</a>
-            </small>
+          <div class="modal-footer border-0 pt-0">
+            <a id="upgradeNow" href="premium.php" class="btn btn-warning" data-can="<?= $can_upgrade ? '1' : '0' ?>">
+              <i class="bi bi-lightning-charge-fill me-1"></i> Upgrade Now
+            </a>
+            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Maybe later</button>
           </div>
-        </div>
-
-        <div class="modal-footer border-0 pt-0">
-          <a id="upgradeNow" href="premium.php" class="btn btn-warning" data-can="<?= $can_upgrade ? '1' : '0' ?>">
-            <i class="bi bi-lightning-charge-fill me-1"></i> Upgrade Now
-          </a>
-          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Maybe later</button>
         </div>
       </div>
     </div>
-  </div>
+  <?php endif; ?>
 
   <!-- Featured Jobs -->
   <section class="py-5">
@@ -920,7 +922,7 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
     </div>
   </footer>
 
-  <!-- Panel + Premium + Notification Persistence JS -->
+  <!-- Panel + Notification Persistence JS -->
   <script>
     // Inbox Panel
     const panel = document.getElementById('inboxPanel');
@@ -960,183 +962,170 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
     })();
     <?php endif; ?>
 
-      // === Premium modal logic (NO alerts) ===
+    <?php if (!$is_premium): ?>
+        // === Premium modal logic (only for normal users) ===
+        (function() {
+          const promoKey = 'jobhive_premium_shown';
+          const modalEl = document.getElementById('premiumModal');
+          if (!modalEl) return;
+          const premiumModal = new bootstrap.Modal(modalEl, {
+            backdrop: 'static',
+            keyboard: true
+          });
+
+          const btnPremium = document.getElementById('btnPremium');
+          btnPremium?.addEventListener('click', () => {
+            premiumModal.show();
+            sessionStorage.setItem(promoKey, '1');
+          });
+
+          // Auto-show after 3s once per session
+          window.addEventListener('load', () => {
+            const hasShown = sessionStorage.getItem(promoKey) === '1';
+            if (!hasShown) {
+              setTimeout(() => {
+                premiumModal.show();
+                sessionStorage.setItem(promoKey, '1');
+              }, 3000);
+            }
+          });
+
+          // Handle Upgrade Now inside modal
+          const upg = document.getElementById('upgradeNow');
+          const warn = document.getElementById('upgradeWarn');
+          upg?.addEventListener('click', (e) => {
+            const can = upg.getAttribute('data-can') === '1';
+            if (!can) {
+              e.preventDefault();
+              warn.style.display = 'block';
+              warn.classList.remove('shake');
+              void warn.offsetWidth;
+              warn.classList.add('shake');
+            }
+          });
+        })();
+    <?php endif; ?>
+
+      /* === Notification read persistence (localStorage per user) === */
       (function() {
-        const promoKey = 'jobhive_premium_shown';
-        const modalEl = document.getElementById('premiumModal');
-        if (!modalEl) return;
-        const premiumModal = new bootstrap.Modal(modalEl, {
-          backdrop: 'static',
-          keyboard: true
-        });
+        const USER_ID = <?= (int)$user_id ?>;
+        const keyA = `jh_read_A_${USER_ID}`;
+        const keyS = `jh_read_S_${USER_ID}`;
 
-        const btnPremium = document.getElementById('btnPremium');
-        btnPremium?.addEventListener('click', () => {
-          premiumModal.show();
-          sessionStorage.setItem(promoKey, '1');
-        });
-
-        // Auto-show after 3s once per session
-        window.addEventListener('load', () => {
-          const hasShown = sessionStorage.getItem(promoKey) === '1';
-          if (!hasShown) {
-            setTimeout(() => {
-              premiumModal.show();
-              sessionStorage.setItem(promoKey, '1');
-            }, 3000);
+        const getA = () => {
+          try {
+            return JSON.parse(localStorage.getItem(keyA) || '{}');
+          } catch {
+            return {};
           }
-        });
-
-        // Handle Upgrade Now inside modal
-        const upg = document.getElementById('upgradeNow');
-        const warn = document.getElementById('upgradeWarn');
-        upg?.addEventListener('click', (e) => {
-          const can = upg.getAttribute('data-can') === '1';
-          if (!can) {
-            e.preventDefault(); // block navigation
-            warn.style.display = 'block'; // show inline message
-            warn.classList.remove('shake');
-            void warn.offsetWidth;
-            warn.classList.add('shake');
+        };
+        const setA = obj => localStorage.setItem(keyA, JSON.stringify(obj || {}));
+        const getS = () => {
+          try {
+            return JSON.parse(localStorage.getItem(keyS) || '{}');
+          } catch {
+            return {};
           }
-        });
-      })();
+        };
+        const setS = obj => localStorage.setItem(keyS, JSON.stringify(obj || {}));
 
-    /* === Notification read persistence (localStorage per user) — FIXED ===
-  
-*/
-    (function() {
-      const USER_ID = <?= (int)$user_id ?>;
-      const keyA = `jh_read_A_${USER_ID}`; // decisions: { appId: "Accepted"/"Rejected" }
-      const keyS = `jh_read_S_${USER_ID}`; // custom:     { "id": 1 }
-
-      const getA = () => {
-        try {
-          return JSON.parse(localStorage.getItem(keyA) || '{}');
-        } catch {
-          return {};
-        }
-      };
-      const setA = obj => localStorage.setItem(keyA, JSON.stringify(obj || {}));
-      const getS = () => {
-        try {
-          return JSON.parse(localStorage.getItem(keyS) || '{}');
-        } catch {
-          return {};
-        }
-      };
-      const setS = obj => localStorage.setItem(keyS, JSON.stringify(obj || {}));
-
-      const isRead = (ntype, id, status) => {
-        if (ntype === 'A') {
-          const m = getA();
-          return (m[id] && m[id] === (status || ''));
-        }
-        const s = getS();
-        return !!s[id];
-      };
-
-      const markOneInStorage = (ntype, id, status) => {
-        if (ntype === 'A') {
-          const m = getA();
-          m[id] = status || '';
-          setA(m);
-        } else {
+        const isRead = (ntype, id, status) => {
+          if (ntype === 'A') {
+            const m = getA();
+            return (m[id] && m[id] === (status || ''));
+          }
           const s = getS();
-          s[id] = 1;
-          setS(s);
+          return !!s[id];
+        };
+
+        const markOneInStorage = (ntype, id, status) => {
+          if (ntype === 'A') {
+            const m = getA();
+            m[id] = status || '';
+            setA(m);
+          } else {
+            const s = getS();
+            s[id] = 1;
+            setS(s);
+          }
+        };
+
+        function updateBellBadge() {
+          const cards = document.querySelectorAll('.notif-card');
+          let unread = 0;
+          cards.forEach(card => {
+            const ntype = card.getAttribute('data-ntype');
+            const id = card.getAttribute('data-id');
+            const status = card.getAttribute('data-status') || '';
+            const domUnread = card.getAttribute('data-unread') === '1';
+            if (domUnread && !isRead(ntype, id, status)) unread++;
+          });
+          const badge = document.getElementById('notifBadge');
+          if (!badge) return;
+          if (unread > 0) {
+            badge.textContent = unread > 99 ? '99+' : unread;
+            badge.style.display = '';
+          } else {
+            badge.style.display = 'none';
+          }
         }
-      };
 
-      function updateBellBadge() {
-        const cards = document.querySelectorAll('.notif-card');
-        let unread = 0;
-        cards.forEach(card => {
-          const ntype = card.getAttribute('data-ntype');
-          const id = card.getAttribute('data-id');
-          const status = card.getAttribute('data-status') || '';
-          const domUnread = card.getAttribute('data-unread') === '1';
-          if (domUnread && !isRead(ntype, id, status)) unread++;
-        });
-        const badge = document.getElementById('notifBadge');
-        if (!badge) return;
-        if (unread > 0) {
-          badge.textContent = unread > 99 ? '99+' : unread;
-          badge.style.display = '';
-        } else {
-          badge.style.display = 'none';
+        function paintCardAsRead(card) {
+          const pill = card.querySelector('.js-pill');
+          const btn = card.querySelector('.js-mark-one');
+          card.classList.remove('unread');
+          card.classList.add('read');
+          card.setAttribute('data-unread', '0');
+          if (pill) {
+            pill.classList.remove('text-bg-warning', 'text-bg-primary');
+            pill.classList.add('text-bg-secondary');
+            pill.textContent = 'Read';
+          }
+          if (btn) {
+            btn.textContent = 'Marked';
+            btn.disabled = true;
+            btn.classList.add('disabled');
+          }
         }
-      }
 
-      function paintCardAsRead(card) {
-        const pill = card.querySelector('.js-pill');
-        const btn = card.querySelector('.js-mark-one');
-        card.classList.remove('unread');
-        card.classList.add('read');
-        card.setAttribute('data-unread', '0');
-        if (pill) {
-          pill.classList.remove('text-bg-warning', 'text-bg-primary');
-          pill.classList.add('text-bg-secondary');
-          pill.textContent = 'Read';
+        function applyStorageToUI() {
+          document.querySelectorAll('.notif-card').forEach(card => {
+            const ntype = card.getAttribute('data-ntype');
+            const id = card.getAttribute('data-id');
+            const status = card.getAttribute('data-status') || '';
+            if (isRead(ntype, id, status)) paintCardAsRead(card);
+          });
+          updateBellBadge();
         }
-        if (btn) {
-          btn.textContent = 'Marked';
-          btn.disabled = true;
-          btn.classList.add('disabled');
-        }
-      }
 
-      // Apply stored state after load (so previously read items stay read)
-      function applyStorageToUI() {
-        document.querySelectorAll('.notif-card').forEach(card => {
-          const ntype = card.getAttribute('data-ntype');
-          const id = card.getAttribute('data-id');
-          const status = card.getAttribute('data-status') || '';
-          if (isRead(ntype, id, status)) paintCardAsRead(card);
-        });
-        updateBellBadge();
-      }
-
-      // Single "Mark read": store, update only that card's UI now, then submit the form
-      document.addEventListener('click', function(e) {
-        const btn = e.target.closest('.js-mark-one');
-        if (!btn) return;
-
-        const card = btn.closest('.notif-card');
-        if (!card) return;
-
-        const ntype = card.getAttribute('data-ntype');
-        const id = card.getAttribute('data-id');
-        const status = card.getAttribute('data-status') || '';
-
-        // 1) persist this ONE item
-        markOneInStorage(ntype, id, status);
-
-        // 2) update ONLY this card immediately
-        paintCardAsRead(card);
-        updateBellBadge();
-        // 3) let form submit normally (server session keeps its own chip for this session)
-      }, false);
-
-      // "Mark all read": persist ALL visible, then let form submit
-      document.addEventListener('click', function(e) {
-        const btn = e.target.closest('.js-mark-all');
-        if (!btn) return;
-
-        document.querySelectorAll('.notif-card').forEach(card => {
+        document.addEventListener('click', function(e) {
+          const btn = e.target.closest('.js-mark-one');
+          if (!btn) return;
+          const card = btn.closest('.notif-card');
+          if (!card) return;
           const ntype = card.getAttribute('data-ntype');
           const id = card.getAttribute('data-id');
           const status = card.getAttribute('data-status') || '';
           markOneInStorage(ntype, id, status);
-          // Also paint now for instant feedback
           paintCardAsRead(card);
-        });
-        updateBellBadge();
-        // form submits after this
-      }, false);
+          updateBellBadge();
+        }, false);
 
-      document.addEventListener('DOMContentLoaded', applyStorageToUI);
-    })();
+        document.addEventListener('click', function(e) {
+          const btn = e.target.closest('.js-mark-all');
+          if (!btn) return;
+          document.querySelectorAll('.notif-card').forEach(card => {
+            const ntype = card.getAttribute('data-ntype');
+            const id = card.getAttribute('data-id');
+            const status = card.getAttribute('data-status') || '';
+            markOneInStorage(ntype, id, status);
+            paintCardAsRead(card);
+          });
+          updateBellBadge();
+        }, false);
+
+        document.addEventListener('DOMContentLoaded', applyStorageToUI);
+      })();
   </script>
 </body>
 
