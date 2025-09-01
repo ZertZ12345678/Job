@@ -150,11 +150,10 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
 /* ===== 3) Options / helpers ===== */
 $job_categories = [
-    "IT&Hardware" => "IT & Hardware",
-    "Finance"     => "Finance",
-    "Engineering" => "Engineering",
-    "Marketing"   => "Marketing"
+    "Software" => "Software",
+    "Network"  => "Network",
 ];
+
 
 $education_options = [        // used for the dropdown
     ""             => "Select Education",

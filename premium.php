@@ -308,9 +308,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                         <label class="form-label">CVC</label>
                                         <input type="text" class="form-control" name="card_cvc" placeholder="123" inputmode="numeric" value="<?= e($card_cvc) ?>">
                                     </div>
-                                    <div class="col-md-4 d-flex align-items-end">
-                                        <div class="small text-muted">Test only — no real charge.</div>
-                                    </div>
                                 </div>
                             </div>
                         </div>
