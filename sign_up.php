@@ -5,6 +5,38 @@ session_start(); // <<— make sure session is started
 $message = "";
 $register_success = false;
 
+/* ================== Strong Password Policy ==================
+   - at least 8 characters
+   - at least 1 lowercase, 1 uppercase, 1 digit, 1 special
+   - no spaces
+============================================================= */
+const NEW_PW_MIN_LEN   = 8;
+const PW_POLICY_REGEX  = '/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()\-\_\=\+\[\]\{\};:,.?~])(?!.*\s).{8,}$/';
+const PW_POLICY_HUMAN  = "At least 8 chars, with 1 uppercase, 1 lowercase, 1 number, and 1 special (!@#\$%^&*() -_=+[]{};:,.?~). No spaces.";
+const PW_BLOCKLIST     = ['password', 'Password1', 'Passw0rd', '12345678', 'qwerty123', 'letmein', 'admin123', 'jobhive123'];
+
+function isStrongPassword(string $pw): array
+{
+  if (strlen($pw) < NEW_PW_MIN_LEN) {
+    return [false, "Password must be at least " . NEW_PW_MIN_LEN . " characters."];
+  }
+  if (preg_match('/\s/', $pw)) {
+    return [false, "Password cannot contain spaces."];
+  }
+  foreach (PW_BLOCKLIST as $bad) {
+    if (strcasecmp($pw, $bad) === 0) {
+      return [false, "That password is too common. Please choose another."];
+    }
+  }
+  if (!preg_match(PW_POLICY_REGEX, $pw)) {
+    return [false, PW_POLICY_HUMAN];
+  }
+  if (preg_match('/(.)\1\1/', $pw)) {
+    return [false, "Avoid repeating any character 3+ times in a row."];
+  }
+  return [true, ""];
+}
+
 try {
   if ($_SERVER["REQUEST_METHOD"] === "POST") {
     // Basic sanitization
@@ -18,6 +50,12 @@ try {
       throw new Exception("Invalid email format.");
     }
 
+    // Strong password check (server-side gatekeeper)
+    [$okStrong, $why] = isStrongPassword($password);
+    if (!$okStrong) {
+      throw new Exception("Weak password: " . $why);
+    }
+
     // Check if email or phone already exists
     $check_sql = "SELECT user_id, email, phone FROM users WHERE email = ? OR phone = ?";
     $stmt = $pdo->prepare($check_sql);
@@ -25,7 +63,7 @@ try {
     $exists = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if ($exists) {
-      if ($exists['email'] === $email) {
+      if (isset($exists['email']) && strcasecmp($exists['email'], $email) === 0) {
         $message = "<div class='alert alert-danger custom-error text-center'>This email is already registered.</div>";
       } else {
         $message = "<div class='alert alert-danger custom-error text-center'>This phone number is already registered.</div>";
@@ -210,7 +248,18 @@ try {
       </div>
       <div class="mb-2">
         <label for="password" class="form-label">Password</label>
-        <input type="password" class="form-control" id="password" name="password" required minlength="6">
+        <input
+          type="password"
+          class="form-control"
+          id="password"
+          name="password"
+          required
+          minlength="<?php echo NEW_PW_MIN_LEN; ?>"
+          pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()\-\_\=\+\[\]\{\};:,.?~])(?!.*\s).{8,}"
+          title="<?php echo htmlspecialchars(PW_POLICY_HUMAN); ?>">
+        <small class="form-text text-muted">
+          <?php echo htmlspecialchars(PW_POLICY_HUMAN); ?>
+        </small>
       </div>
       <div class="mb-2">
         <label for="phno" class="form-label">Phone Number</label>
@@ -221,6 +270,58 @@ try {
       <a href="login.php" class="small-link text-decoration-none">Already have an account? <span class="text-warning">Login</span></a>
     </form>
   </div>
+
+  <!-- Optional live checklist -->
+  <script>
+    (function() {
+      var pw = document.getElementById('password');
+      if (!pw) return;
+      var helper = document.createElement('div');
+      helper.className = 'form-text';
+      helper.innerHTML = `
+      <ul id="pw-req" style="margin:.3rem 0 0 1rem; padding:0; list-style:square;">
+        <li data-k="len">≥ 8 characters</li>
+        <li data-k="low">1 lowercase</li>
+        <li data-k="upp">1 uppercase</li>
+        <li data-k="dig">1 digit</li>
+        <li data-k="spe">1 special (!@#$%^&*() -_=+[]{};:,.?~)</li>
+        <li data-k="spc">no spaces</li>
+        <li data-k="rep">no 3 repeated chars (e.g., aaa)</li>
+      </ul>`;
+      pw.parentNode.appendChild(helper);
+
+      var li = {};
+      ['len', 'low', 'upp', 'dig', 'spe', 'spc', 'rep'].forEach(k => {
+        li[k] = helper.querySelector('[data-k="' + k + '"]');
+      });
+
+      function setOK(el, ok) {
+        el.style.color = ok ? '#198754' : '#6c757d';
+        el.style.fontWeight = ok ? '600' : '400';
+      }
+
+      function check() {
+        var v = pw.value || '';
+        var okLen = v.length >= 8;
+        var okLow = /[a-z]/.test(v);
+        var okUpp = /[A-Z]/.test(v);
+        var okDig = /\d/.test(v);
+        var okSpe = /[!@#$%^&*()\-\_\=\+\[\]\{\};:,.?~]/.test(v);
+        var okSpc = !/\s/.test(v);
+        var okRep = !/(.)\1\1/.test(v);
+
+        setOK(li.len, okLen);
+        setOK(li.low, okLow);
+        setOK(li.upp, okUpp);
+        setOK(li.dig, okDig);
+        setOK(li.spe, okSpe);
+        setOK(li.spc, okSpc);
+        setOK(li.rep, okRep);
+      }
+      pw.addEventListener('input', check);
+      check();
+    })();
+  </script>
 </body>
 
 </html>

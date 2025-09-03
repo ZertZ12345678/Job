@@ -2,35 +2,61 @@
 include("connect.php");
 session_start();
 
-// Ensure company is logged in
+/* =================== Auth: company only =================== */
 $company_id = $_SESSION['company_id'] ?? null;
 if (!$company_id) {
     header("Location: login.php");
     exit;
 }
 
-// Fetch company info for autofill
-$stmt = $pdo->prepare("SELECT company_name, address FROM companies WHERE company_id=?");
+/* =================== Constants (Promotions) =================== */
+const JH_BASE_FEE   = 50000; // MMK base price per post
+const TIER_1_MIN    = 5;     // >=5  posts -> 10%
+const TIER_2_MIN    = 15;    // >=15 posts -> 15%
+const TIER_3_MIN    = 25;    // >=25 posts -> 20%
+
+function promo_for_total_posts(int $total): array
+{
+    // Returns [discount_rate_float, member_tier]
+    if ($total >= TIER_3_MIN) return [0.20, 'diamond'];
+    if ($total >= TIER_2_MIN) return [0.15, 'platinum'];
+    if ($total >= TIER_1_MIN) return [0.10, 'gold'];
+    return [0.00, 'normal'];
+}
+function price_after_discount(int $base, float $rate): int
+{
+    return (int) round($base * (1 - $rate), 0);
+}
+
+/* =================== Fetch company info =================== */
+$stmt = $pdo->prepare("SELECT company_name, address, member FROM companies WHERE company_id=?");
 $stmt->execute([$company_id]);
 $company = $stmt->fetch(PDO::FETCH_ASSOC);
 
-// Payment info
-$payment_amount = 50000;
-$payee_name = "Phone Thaw Naing";
+/* =================== Compute upcoming promo (for UI preview) =================== */
+$stCount = $pdo->prepare("SELECT COUNT(*) FROM jobs WHERE company_id = ?");
+$stCount->execute([$company_id]);
+$existing_posts = (int) $stCount->fetchColumn();
+$future_total   = $existing_posts + 1; // after this post
+list($ui_rate, $ui_member) = promo_for_total_posts($future_total);
+$ui_fee = price_after_discount(JH_BASE_FEE, $ui_rate);
+
+/* =================== Payment receiver info =================== */
+$payee_name  = "Phone Thaw Naing";
 $payee_phone = "09957433847";
 
+/* =================== Page state =================== */
 $success = '';
-$error = '';
-
-// Keep form data for refill
+$error   = '';
 $form_data = $_POST ?? [];
 
-// Helper: HTML escape
+/* =================== Helper =================== */
 function e($v)
 {
     return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
 }
 
+/* =================== Handle POST =================== */
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $job_title           = trim($_POST['job_title'] ?? '');
     $job_description     = trim($_POST['job_description'] ?? '');
@@ -62,7 +88,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     if (!$error && !in_array($payment_method, $valid_methods, true)) {
         $error = "Please choose a valid payment method.";
     }
-
     if (!$error) {
         if (in_array($payment_method, ['KPay', 'AyaPay', 'Wave Pay'], true)) {
             if ($wallet_txn === '') $error = "Please enter your wallet Transaction ID.";
@@ -77,14 +102,25 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
     if (!$error) {
         try {
-            // 1) Insert into jobs (job_type after description_detail)
-            $stmt = $pdo->prepare("
+            $pdo->beginTransaction();
+
+            // Re-count inside TX to be precise
+            $st = $pdo->prepare("SELECT COUNT(*) FROM jobs WHERE company_id=? FOR UPDATE");
+            $st->execute([$company_id]);
+            $current_posts = (int) $st->fetchColumn();
+
+            $new_total_posts = $current_posts + 1;
+            list($rate, $memberTierAfter) = promo_for_total_posts($new_total_posts);
+            $final_fee = price_after_discount(JH_BASE_FEE, $rate);
+
+            // 1) Insert job
+            $ins = $pdo->prepare("
                 INSERT INTO jobs
                     (company_id, job_title, job_description, description_detail, job_type, location, salary, employment_type, requirements, posted_at, deadline, status)
                 VALUES
                     (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
-            $stmt->execute([
+            $ins->execute([
                 $company_id,
                 $job_title,
                 $job_description,
@@ -98,22 +134,27 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 $deadline,
                 $status
             ]);
-            $job_id = $pdo->lastInsertId();
+            $job_id = (int)$pdo->lastInsertId();
 
-            // 2) Compute reference (optional but recommended)
-            $reference = null;
+            // 2) Update company member tier
+            // (Requires companies.member column)
+
+            
+            // $upd = $pdo->prepare("UPDATE companies SET member = ? WHERE company_id = ?");
+            // $upd->execute([$memberTierAfter, $company_id]);
+
+            // 3) Build payment reference
             if (in_array($payment_method, ['KPay', 'AyaPay', 'Wave Pay'], true)) {
                 $reference = $wallet_txn;
             } elseif ($payment_method === 'Visa Card') {
                 $reference = 'card_last4:' . substr($card_no, -4);
-            } else { // PayPal
-                $reference = $paypal_email;
+            } else {
+                $reference = $paypal_email; // PayPal
             }
 
-            // 3) Insert payment record
+            // 4) Insert payment record (amount = discounted fee)
+            // Requires post_payment(company_id, amount, payment_date, payment_status, job_id, payment_method, reference)
             $payment_status = 'Completed';
-
-            // If you added a `reference` column (recommended SQL below), use this:
             $q = "
                 INSERT INTO post_payment (company_id, amount, payment_date, payment_status, job_id, payment_method, reference)
                 VALUES (?, ?, NOW(), ?, ?, ?, ?)
@@ -121,32 +162,25 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $payment_stmt = $pdo->prepare($q);
             $payment_stmt->execute([
                 $company_id,
-                $payment_amount,
+                $final_fee,
                 $payment_status,
                 $job_id,
                 $payment_method,
                 $reference
             ]);
 
-            // If you did NOT add `reference`, comment the above block and uncomment this one:
-            /*
-            $q = "
-                INSERT INTO post_payment (company_id, amount, payment_date, payment_status, job_id, payment_method)
-                VALUES (?, ?, NOW(), ?, ?, ?)
-            ";
-            $payment_stmt = $pdo->prepare($q);
-            $payment_stmt->execute([
-                $company_id,
-                $payment_amount,
-                $payment_status,
-                $job_id,
-                $payment_method
-            ]);
-            */
+            $pdo->commit();
 
-            $success = "Job posted successfully!";
+            $success = "Job posted successfully! You were charged " . number_format($final_fee) . " MMK (" . (int)round($rate * 100) . "% off, tier: " . strtoupper($memberTierAfter) . ").";
             $form_data = [];
-        } catch (PDOException $e) {
+
+            // Refresh UI preview vars after commit
+            $existing_posts = $new_total_posts;
+            $future_total   = $existing_posts + 1;
+            list($ui_rate, $ui_member) = promo_for_total_posts($future_total);
+            $ui_fee = price_after_discount(JH_BASE_FEE, $ui_rate);
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
             $error = "Error posting job/payment: " . $e->getMessage();
         }
     }
@@ -159,7 +193,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <meta charset="UTF-8">
     <title>JobHive | Post Job</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- Bootstrap + Icons -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
     <style>
         body {
             background: #f7f9fb;
@@ -179,8 +215,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             font-weight: 700;
             color: #ffb200;
             letter-spacing: .5px;
-            margin-bottom: 32px;
+            margin-bottom: 16px;
             text-align: center;
+        }
+
+        .promo {
+            margin: 10px auto 24px;
         }
 
         label {
@@ -271,6 +311,17 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 <body>
     <div class="post-job-container">
         <h3>Post a Job</h3>
+
+        <!-- Live promo preview -->
+        <div class="promo alert alert-info">
+            <div class="d-flex flex-column gap-1 text-center">
+                <div><strong>Your tier after this post:</strong> <?= e(strtoupper($ui_member)) ?></div>
+                <div><strong>Discount:</strong> <?= (int)round($ui_rate * 100) ?>%</div>
+                <div><strong>Price for this post:</strong> <?= number_format($ui_fee) ?> MMK <span class="text-muted">(base <?= number_format(JH_BASE_FEE) ?>)</span></div>
+                <small class="text-muted">Tiers: ≥<?= TIER_1_MIN ?> → 10%, ≥<?= TIER_2_MIN ?> → 15%, ≥<?= TIER_3_MIN ?> → 20%.</small>
+            </div>
+        </div>
+
         <?php if ($success): ?>
             <div class="alert alert-success"><?= e($success) ?></div>
         <?php elseif ($error): ?>
@@ -337,10 +388,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     <textarea class="form-control" name="requirements" rows="2" required><?= e($form_data['requirements'] ?? '') ?></textarea>
                 </div>
 
-                <!-- Posting Fee -->
+                <!-- Dynamic Posting Fee (discounted) -->
                 <div class="col-md-6">
                     <label>Posting Fee (MMK)</label>
-                    <input type="number" class="form-control" value="<?= $payment_amount ?>" name="posting_fee" readonly>
+                    <input type="number" class="form-control" value="<?= $ui_fee ?>" name="posting_fee" readonly>
                 </div>
 
                 <!-- Payment Method (images/buttons) -->
@@ -370,7 +421,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                         </div>
                         <ol class="small mt-2 mb-3">
                             <li>Open your selected wallet (KPay / AyaPay / Wave Pay)</li>
-                            <li>Send <strong><?= e(number_format($payment_amount)) ?> MMK</strong> to the contact above</li>
+                            <li>Send <strong><?= e(number_format($ui_fee)) ?> MMK</strong> to the contact above</li>
                             <li>Paste your <strong>Transaction ID</strong> below and submit</li>
                         </ol>
                         <label class="form-label">Transaction ID</label>
@@ -398,9 +449,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                             <div class="col-md-4">
                                 <label class="form-label">CVC</label>
                                 <input type="text" class="form-control" name="card_cvc" placeholder="123" inputmode="numeric" value="<?= e($form_data['card_cvc'] ?? '') ?>">
-                            </div>
-                            <div class="col-md-4 d-flex align-items-end">
-                                <div class="small text-muted">Test only — no real charge.</div>
                             </div>
                         </div>
                     </div>
@@ -443,7 +491,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 card.style.display = (v === 'Visa Card') ? '' : 'none';
                 paypal.style.display = (v === 'PayPal') ? '' : 'none';
 
-                // Toggle required on wallet txn
                 if (txn) {
                     if (isWallet) txn.setAttribute('required', 'required');
                     else txn.removeAttribute('required');
@@ -462,13 +509,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             // Initialize on load for server-returned state
             showSections();
         });
-
-        function copyToClipboard(id) {
-            const el = document.getElementById(id);
-            const text = el ? el.innerText : '';
-            if (!text) return;
-            navigator.clipboard.writeText(text).then(() => alert("Copied: " + text));
-        }
 
         function clearForm() {
             document.querySelectorAll('.post-job-container input:not([readonly]):not([type=hidden]), .post-job-container textarea')

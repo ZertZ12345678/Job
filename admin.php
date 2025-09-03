@@ -62,9 +62,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add_a
         $admin_error = "Image too large. Max 3MB.";
       } else {
         $dir = __DIR__ . "/profile_pics";
-        if (!is_dir($dir)) {
-          @mkdir($dir, 0775, true);
-        }
+        if (!is_dir($dir)) @mkdir($dir, 0775, true);
         $rand     = bin2hex(random_bytes(4));
         $filename = "admin_" . time() . "_" . $rand . "." . $ext;
         $destFS   = $dir . "/" . $filename;
@@ -141,9 +139,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
         $profile_error = "Image too large. Max 3MB.";
       } else {
         $dir = __DIR__ . "/profile_pics";
-        if (!is_dir($dir)) {
-          @mkdir($dir, 0775, true);
-        }
+        if (!is_dir($dir)) @mkdir($dir, 0775, true);
         $rand     = bin2hex(random_bytes(4));
         $filename = "admin_" . $current_admin_id . "_" . time() . "_" . $rand . "." . $ext;
         $destFS   = $dir . "/" . $filename;
@@ -154,9 +150,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
           $new_photo = $filename;
           if (!empty($adminRow['profile_picture'])) {
             $oldFS = $dir . "/" . $adminRow['profile_picture'];
-            if (is_file($oldFS)) {
-              @unlink($oldFS);
-            }
+            if (is_file($oldFS)) @unlink($oldFS);
           }
         }
       }
@@ -221,6 +215,29 @@ try {
   $jobs_error = "Error loading jobs data: " . $e->getMessage();
 }
 
+/* -------------------- Applications (ALL, for Applied Jobs tab) -------------------- */
+try {
+  $q = "
+    SELECT 
+      a.application_id,
+      a.applied_at,
+      a.status,
+      u.full_name   AS seeker_name,
+      j.job_title,
+      c.company_name
+    FROM application a
+      JOIN jobs j        ON j.job_id = a.job_id
+      LEFT JOIN companies c ON c.company_id = j.company_id
+      JOIN users u       ON u.user_id = a.user_id
+    ORDER BY a.applied_at DESC
+  ";
+  $stmtA = $pdo->query($q);
+  $all_apps = $stmtA->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+  $all_apps = [];
+  $apps_error = "Error loading applications: " . $e->getMessage();
+}
+
 /* -------------------- Load current admin for Profile display -------------------- */
 $profile_admin = [];
 try {
@@ -262,8 +279,8 @@ try {
       font-size: 1.09rem;
       padding: 0.9rem 2rem 0.9rem 2.2rem;
       border-radius: 0.8rem 0 0 0.8rem;
-      transition: background 0.13s, color 0.13s;
-      margin-bottom: 0.1rem;
+      transition: background .13s, color .13s;
+      margin-bottom: .1rem;
       font-weight: 500;
       cursor: pointer;
       text-decoration: none;
@@ -302,26 +319,28 @@ try {
       }
     }
 
-    .companies-title-bar {
+    /* ======= Unified Title Bar (use for all sections) ======= */
+    .section .companies-title-bar {
       background: #22223b;
       color: #ffc107;
-      padding: 0.85rem 1.2rem;
+      padding: 0.9rem 1.3rem;
       border-radius: 0.7rem;
       font-size: 1.35rem;
       font-weight: 700;
       margin-bottom: 1.4rem;
-      letter-spacing: 0.2px;
-      box-shadow: 0 1px 5px rgba(30, 30, 55, 0.06);
+      letter-spacing: 0.03rem;
+      box-shadow: 0 1px 5px rgba(30, 30, 55, .06);
       display: inline-block;
     }
 
-    /* ====== Tables ====== */
+    /* ======= UNIFIED TABLE STYLES (apply to ALL tables) ======= */
     .dark-table {
       background: #22223b;
       color: #ffc107;
       border-radius: 0.7rem;
       overflow: hidden;
       width: 100%;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     }
 
     .dark-table th,
@@ -330,20 +349,20 @@ try {
       color: #ffc107 !important;
       border: 1px solid #ffc107 !important;
       font-weight: 500;
-      font-size: 0.9rem;
+      font-size: 0.95rem;
+      line-height: 1.4;
       vertical-align: middle !important;
-      padding: 0.5rem 0.8rem;
-      /* >>> Force JUSTIFY for all table text <<< */
-      text-align: justify !important;
-      text-justify: inter-word;
+      padding: 0.6rem 0.8rem;
+      text-align: left !important;
       word-break: break-word;
       white-space: normal;
     }
 
     .dark-table th {
       font-weight: 700;
-      font-size: 0.95rem;
-      letter-spacing: 0.03rem;
+      font-size: 1rem;
+      letter-spacing: 0.04rem;
+      text-transform: uppercase;
       border-bottom: 2px solid #ffc107 !important;
     }
 
@@ -441,7 +460,7 @@ try {
     .field-label {
       font-weight: 600;
       color: #6c757d;
-      margin-bottom: 0.1rem;
+      margin-bottom: .1rem;
       font-size: 1.02rem;
     }
 
@@ -462,20 +481,35 @@ try {
     }
 
     /* ====== Jobs table row highlighting ====== */
-    /* We use a second class on the jobs table so we can safely override dark theme cell colors */
     .jobs-table tr.row-inactive td {
       background: #fde7e7 !important;
-      /* light red */
       color: #842029 !important;
-      /* bootstrap danger text */
       border-color: #f5c2c7 !important;
     }
 
     .jobs-table tr.row-closed td {
       background: #e9ecef !important;
-      /* grey */
       color: #495057 !important;
       border-color: #d3d6d8 !important;
+    }
+
+    /* ====== Applied Jobs status colors ====== */
+    .apps-table tr.status-accepted td {
+      background: #d1e7dd !important;
+      color: #0f5132 !important;
+      /* light green bg, dark green text */
+    }
+
+    .apps-table tr.status-rejected td {
+      background: #f8d7da !important;
+      color: #842029 !important;
+      /* light red bg, dark red text   */
+    }
+
+    .apps-table tr.status-pending td {
+      background: #cff4fc !important;
+      color: #055160 !important;
+      /* light blue bg, dark blue text */
     }
   </style>
 
@@ -546,7 +580,7 @@ try {
       <a id="adminsLink" class="nav-link" onclick="showSection('adminsSection', this)">Add Admin Role</a>
       <a class="nav-link" onclick="showSection('profileSection', this)">Profile</a>
       <a class="nav-link" onclick="showSection('settingsSection', this)">Settings</a>
-      <a class="nav-link" href="index.php">Logout</a>
+      <a class="nav-link" href="logout.php">Logout</a>
     </nav>
   </div>
 
@@ -601,7 +635,7 @@ try {
         <div class="alert alert-info">No companies found.</div>
       <?php else: ?>
         <div class="table-responsive">
-          <table class="table dark-table align-middle" style="font-weight:bold;">
+          <table class="table dark-table align-middle">
             <thead>
               <tr>
                 <th>Company Id</th>
@@ -654,7 +688,7 @@ try {
         <div class="alert alert-info">No seekers found.</div>
       <?php else: ?>
         <div class="table-responsive">
-          <table class="table dark-table align-middle" style="font-weight:bold;">
+          <table class="table dark-table align-middle">
             <thead>
               <tr>
                 <th>User Id</th>
@@ -712,8 +746,7 @@ try {
         <div class="alert alert-info">No jobs found.</div>
       <?php else: ?>
         <div class="table-responsive">
-          <!-- Added jobs-table class for targeted row coloring -->
-          <table class="table dark-table jobs-table align-middle" style="font-weight:bold;">
+          <table class="table dark-table jobs-table align-middle">
             <thead>
               <tr>
                 <th>Job Id</th>
@@ -722,8 +755,6 @@ try {
                 <th>Type</th>
                 <th>Salary</th>
                 <th>Location</th>
-                <th>Description</th>
-                <th>Requirements</th>
                 <th>Posted On</th>
                 <th>Deadline</th>
                 <th>Status</th>
@@ -733,12 +764,7 @@ try {
               <?php foreach ($jobs as $job): ?>
                 <?php
                 $statusRaw = strtolower(trim((string)($job['status'] ?? '')));
-                $rowClass = '';
-                if ($statusRaw === 'inactive') {
-                  $rowClass = 'row-inactive';
-                } elseif ($statusRaw === 'closed') {
-                  $rowClass = 'row-closed';
-                }
+                $rowClass = ($statusRaw === 'inactive') ? 'row-inactive' : (($statusRaw === 'closed') ? 'row-closed' : '');
                 ?>
                 <tr class="<?php echo $rowClass; ?>">
                   <td><?php echo htmlspecialchars($job['job_id'] ?? ''); ?></td>
@@ -747,18 +773,7 @@ try {
                   <td><?php echo htmlspecialchars($job['employment_type'] ?? ''); ?></td>
                   <td><?php echo htmlspecialchars($job['salary'] ?? ''); ?></td>
                   <td><?php echo htmlspecialchars($job['location'] ?? ''); ?></td>
-                  <td title="<?php echo htmlspecialchars((string)($job['job_description'] ?? '')); ?>">
-                    <?php
-                    $full = (string)($job['job_description'] ?? '');
-                    echo htmlspecialchars(strlen($full) > 60 ? substr($full, 0, 60) . '…' : $full);
-                    ?>
-                  </td>
-                  <td title="<?php echo htmlspecialchars((string)($job['requirements'] ?? '')); ?>">
-                    <?php
-                    $fullReq = (string)($job['requirements'] ?? '');
-                    echo htmlspecialchars(strlen($fullReq) > 60 ? substr($fullReq, 0, 60) . '…' : $fullReq);
-                    ?>
-                  </td>
+                 
                   <td><?php $p = $job['posted_at'] ?? '';
                       echo htmlspecialchars($p ? date('M d, Y', strtotime($p)) : ''); ?></td>
                   <td><?php $d = $job['deadline'] ?? '';
@@ -772,10 +787,61 @@ try {
       <?php endif; ?>
     </div>
 
-    <!-- Applied Jobs Placeholder -->
+    <!-- Applied Jobs (ALL with status colors) -->
     <div id="appliedSection" class="section" style="display:none;">
-      <div class="companies-title-bar mb-4">Applied Jobs</div>
-      <p class="small-hint">(Wire this up later.)</p>
+      <div class="companies-title-bar mb-4">
+        <?php
+        $app_count = isset($all_apps) ? count($all_apps) : 0;
+        echo $app_count === 0 ? "No Applications"
+          : ($app_count === 1 ? "1 Application" : "{$app_count} Applications");
+        ?>
+      </div>
+
+      <?php if (!empty($apps_error)): ?>
+        <div class="alert alert-danger"><?php echo htmlspecialchars($apps_error); ?></div>
+      <?php endif; ?>
+
+      <?php if (empty($all_apps)): ?>
+        <div class="alert alert-info">There are no applications yet.</div>
+      <?php else: ?>
+        <div class="table-responsive">
+          <table class="table dark-table apps-table align-middle">
+            <thead>
+              <tr>
+                <th>No</th>
+                <th>Company Name</th>
+                <th>Job Title</th>
+                <th>Username</th>
+                <th>Status</th>
+                <th>Applied On</th>
+              </tr>
+            </thead>
+            <tbody>
+              <?php foreach ($all_apps as $idx => $row): ?>
+                <?php
+                $status = strtolower(trim($row['status'] ?? ''));
+                $rowClass = $status === 'accepted' ? 'status-accepted'
+                  : ($status === 'rejected' ? 'status-rejected'
+                    : ($status === 'pending' ? 'status-pending' : ''));
+                ?>
+                <tr class="<?php echo $rowClass; ?>">
+                  <td><?php echo $idx + 1; ?></td>
+                  <td><?php echo htmlspecialchars($row['company_name'] ?? ''); ?></td>
+                  <td><?php echo htmlspecialchars($row['job_title'] ?? ''); ?></td>
+                  <td><?php echo htmlspecialchars($row['seeker_name'] ?? ''); ?></td>
+                  <td class="fw-bold"><?php echo htmlspecialchars($row['status'] ?? ''); ?></td>
+                  <td>
+                    <?php
+                    $ap = $row['applied_at'] ?? '';
+                    echo htmlspecialchars($ap ? date('M d, Y H:i', strtotime($ap)) : '');
+                    ?>
+                  </td>
+                </tr>
+              <?php endforeach; ?>
+            </tbody>
+          </table>
+        </div>
+      <?php endif; ?>
     </div>
 
     <!-- Add Admin Role Section -->
@@ -821,8 +887,7 @@ try {
 
             <div class="col-6">
               <label class="form-label">Photo (JPG/PNG/GIF/WebP, max 3MB)</label>
-              <input type="file" name="profile_picture" class="form-control"
-                accept=".jpg,.jpeg,.png,.gif,.webp,image/*" required>
+              <input type="file" name="profile_picture" class="form-control" accept=".jpg,.jpeg,.png,.gif,.webp,image/*" required>
             </div>
 
             <div class="full form-actions">
@@ -838,7 +903,7 @@ try {
         <div class="alert alert-info">No admins yet.</div>
       <?php else: ?>
         <div class="table-responsive">
-          <table class="table dark-table align-middle" style="font-weight:bold;">
+          <table class="table dark-table align-middle">
             <thead>
               <tr>
                 <th>User Id</th>

@@ -5,7 +5,7 @@ session_start();
 /* ============================================================
    OTP toggle
    ============================================================ */
-define('USE_LOGIN_OTP', true);
+define('USE_LOGIN_OTP', false);
 if (isset($_GET['otp'])) {
   if ($_GET['otp'] === '1') define('USE_LOGIN_OTP', true);
   if ($_GET['otp'] === '0') define('USE_LOGIN_OTP', false);
