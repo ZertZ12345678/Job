@@ -53,8 +53,8 @@ if ($company_logo !== '') {
   $logo_src = preg_match('~^https?://~i', $company_logo) ? $company_logo : $LOGO_DIR . ltrim($company_logo, '/');
 }
 
-/* ===== Pricing/Tier preview for NEXT post ===== */
-require_once "pricing.php"; // JH_BASE_FEE + helpers
+/* ===== Pricing/Tier preview for NEXT post (same info as banner, but for modal) ===== */
+require_once "pricing.php"; // defines JH_BASE_FEE + helpers
 
 // Count **all** posts for this company
 $totalPosts = 0;
@@ -70,7 +70,7 @@ list($rateNext, $tierNext) = jh_company_discount_for_posts($totalPosts + 1);
 $feeNext = jh_price_after_discount(JH_BASE_FEE, $rateNext);
 
 // badge class
-$badgeClass = match ($company_member) {
+$badgeClass = match (strtolower($company_member)) {
   'gold'     => 'bg-warning text-dark',
   'platinum' => 'bg-secondary',
   'diamond'  => 'bg-info text-dark',
@@ -99,7 +99,7 @@ try {
   $apps = [];
 }
 
-/* Session-based read state for company inbox */
+/* Session-based read state for company inbox (server-side) */
 $_SESSION['company_app_read'] = $_SESSION['company_app_read'] ?? []; // [application_id] => 1
 $readMap = &$_SESSION['company_app_read'];
 
@@ -117,13 +117,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     exit;
   }
 }
-/* apply mark-all now */
+
+/* apply mark-all now and expose a one-shot flag for JS to mirror to localStorage */
 if (!empty($_SESSION['c_mark_all_pending'])) {
   foreach ($apps as $a) $readMap[(int)$a['application_id']] = 1;
+  $_SESSION['c_just_marked_all'] = 1;  // one-shot for next render
   unset($_SESSION['c_mark_all_pending']);
 }
+$did_mark_all = !empty($_SESSION['c_just_marked_all']);
+unset($_SESSION['c_just_marked_all']);
 
-/* unread count */
+/* unread count for badge (server-side initial) */
 $badge_count = 0;
 foreach ($apps as $a) if (empty($readMap[(int)$a['application_id']])) $badge_count++;
 
@@ -168,6 +172,12 @@ try {
 } catch (PDOException $e) {
   $jobs = [];
 }
+
+/* ===== Optional one-time flag if you want "only after successful login" =====
+   In login.php before redirect: $_SESSION['show_member_after_login']=1;
+*/
+$show_member_after_login = (int)($_SESSION['show_member_after_login'] ?? 0);
+unset($_SESSION['show_member_after_login']); // one-time
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -182,6 +192,12 @@ try {
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
   <style>
+    :root {
+      --jh-gold: #ffaa2b;
+      --jh-gold-2: #ffc107;
+      --jh-dark: #1a202c;
+    }
+
     body {
       background: #f8fafc;
     }
@@ -221,7 +237,7 @@ try {
       bottom: 0;
       width: 0;
       height: 2px;
-      background: #ffaa2b;
+      background-color: #ffaa2b;
       transition: width .25s
     }
 
@@ -232,11 +248,6 @@ try {
     .hero-section {
       padding: 56px 0 14px;
       text-align: center;
-    }
-
-    .promo {
-      max-width: 900px;
-      margin: 14px auto 18px;
     }
 
     .search-bar {
@@ -290,14 +301,17 @@ try {
       font-size: .98rem;
       border-radius: .55rem;
       padding: .3rem 1.15rem;
-      font-weight: 500
+      font-weight: 500;
+      text-decoration: none;
     }
 
     .popular-btn:hover {
       background: #fff8ec;
       color: #ff8800;
-      border-color: #ff8800
+      border-color: #ff8800;
+      text-decoration: none;
     }
+
 
     .badge-dot {
       position: absolute;
@@ -406,16 +420,6 @@ try {
       flex: 0 0 50px
     }
 
-    .btn-detail {
-      background: #0dcaf0;
-      color: #fff
-    }
-
-    .btn-detail:hover {
-      background: #0bb8db;
-      color: #fff
-    }
-
     .job-card {
       border: 0;
       border-radius: 1.25rem
@@ -434,11 +438,67 @@ try {
       font-size: .82rem
     }
 
+    /* Modal polish like user home */
+    .member-highlight {
+      background: linear-gradient(135deg, #e8f7ff, #fff);
+      border: 1px solid #bfe7ff;
+      border-radius: 1rem;
+    }
+
+    .modal.fade .modal-dialog {
+      transform: translateY(18px);
+      transition: transform .28s ease, opacity .28s ease;
+    }
+
+    .modal.show .modal-dialog {
+      transform: none;
+    }
+
+    /* Footer */
     .footer {
-      background: #1a202c;
-      color: #fff;
-      padding: 24px 0 10px;
-      text-align: center
+      background: var(--jh-dark);
+      color: #e9ecef;
+      padding: 40px 0 16px;
+      flex-shrink: 0;
+      margin-top: 24px;
+    }
+
+    .footer a {
+      color: #f8f9fa;
+      text-decoration: none;
+    }
+
+    .footer a:hover {
+      color: var(--jh-gold);
+    }
+
+    .footer .brand {
+      font-weight: 800;
+      color: var(--jh-gold);
+    }
+
+    .footer .social a {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, .08);
+      margin-right: 8px;
+    }
+
+    .footer .social a:hover {
+      background: rgba(255, 193, 7, .2);
+    }
+
+    .footer hr {
+      border-top: 1px solid rgba(255, 255, 255, .12);
+      margin: 24px 0 12px;
+    }
+
+    .footer small {
+      color: #cbd5e1;
     }
 
     @media (max-width:992px) {
@@ -462,17 +522,29 @@ try {
         <ul class="navbar-nav align-items-lg-center">
           <li class="nav-item"><a class="nav-link" href="company_home.php">Home</a></li>
           <li class="nav-item"><a class="nav-link" href="c_dashboard.php">Dashboard</a></li>
+
+          <!-- New: open membership modal -->
+          <li class="nav-item">
+            <button id="btnMember" class="btn btn-outline-warning ms-2">
+              <i class="bi bi-gem me-1"></i> Membership
+            </button>
+          </li>
+
           <li class="nav-item">
             <a class="btn btn-warning ms-2 text-white fw-bold" href="post_job.php" style="border-radius:0.6rem;">Post Job</a>
           </li>
+
           <li class="nav-item ms-2">
             <button id="btnInbox" class="btn btn-outline-secondary position-relative" type="button" title="Applications inbox">
               <i class="bi bi-envelope"></i>
               <?php if ($badge_count > 0): ?>
-                <span class="badge rounded-pill text-bg-danger badge-dot"><?= $badge_count > 99 ? '99+' : $badge_count ?></span>
+                <span id="notifBadge" class="badge rounded-pill text-bg-danger badge-dot"><?= $badge_count > 99 ? '99+' : $badge_count ?></span>
+              <?php else: ?>
+                <span id="notifBadge" class="badge rounded-pill text-bg-danger badge-dot" style="display:none"></span>
               <?php endif; ?>
             </button>
           </li>
+
           <li class="nav-item dropdown ms-lg-2">
             <a class="nav-link dropdown-toggle d-flex align-items-center gap-2" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
               <?php if ($logo_src !== ''): ?>
@@ -507,21 +579,7 @@ try {
       <h1 class="display-6 fw-bold">Welcome back<?= $company_name ? ', ' . e($company_name) : '' ?>!</h1>
       <p class="lead mb-2">Search your postings quickly.</p>
 
-      <!-- Promo preview (current + next post) -->
-      <div class="promo alert alert-info">
-        <div class="d-flex flex-column gap-1 text-center">
-          <div>
-            <strong>Current tier:</strong>
-            <span class="badge rounded-pill <?= $badgeClass ?>"><?= e(ucfirst($company_member)) ?></span>
-            <span class="ms-2 text-muted">(<?= $totalPosts ?> posts)</span>
-          </div>
-          <div><strong>Your tier after the next post:</strong> <?= e(strtoupper($tierNext)) ?></div>
-          <div><strong>Price for the next post:</strong> <?= number_format($feeNext) ?> MMK
-            <small class="text-muted">(base <?= number_format(JH_BASE_FEE) ?>, <?= (int)round($rateNext * 100) ?>% off)</small>
-          </div>
-          <small class="text-muted">Tiers: ≥5 → 10%, ≥15 → 15%, ≥25 → 20%.</small>
-        </div>
-      </div>
+      <!-- NOTE: Promo banner removed per your request -->
 
       <!-- Search (scoped to this company) -->
       <form class="search-bar" autocomplete="off" method="get" action="company_home.php">
@@ -532,7 +590,7 @@ try {
           <div class="d-flex flex-wrap align-items-center ms-3 gap-2">
             <a href="company_home.php?csearch=1&jt=Software" class="popular-btn<?= $jt === 'Software' ? ' border-2' : '' ?>">Software</a>
             <a href="company_home.php?csearch=1&jt=Network" class="popular-btn<?= $jt === 'Network'  ? ' border-2' : '' ?>">Network</a>
-            <a href="company_home.php?csearch=1" class="popular-btn<?= $jt === ''          ? ' border-2' : '' ?>">All Jobs</a>
+            <a href="company_home.php?csearch=1" class="popular-btn<?= $jt === ''         ? ' border-2' : '' ?>">All Jobs</a>
           </div>
         </div>
       </form>
@@ -549,7 +607,7 @@ try {
       </div>
       <div class="d-flex gap-2">
         <form method="post" class="m-0">
-          <button name="mark_all_company" value="1" class="btn btn-light btn-sm">Mark all read</button>
+          <button name="mark_all_company" value="1" class="btn btn-light btn-sm js-mark-all">Mark all read</button>
         </form>
         <button id="btnCloseInbox" class="btn btn-light btn-sm"><i class="bi bi-x-lg"></i></button>
       </div>
@@ -567,7 +625,9 @@ try {
           $st = (string)$a['status'];
           $stCls = ($st === 'Pending') ? 'bg-warning' : (($st === 'Accepted') ? 'bg-success' : 'bg-secondary');
         ?>
-          <div class="card app-card <?= $cardCls ?> shadow-sm mb-3">
+          <div class="card app-card <?= $cardCls ?> shadow-sm mb-3"
+            data-id="<?= (int)$a['application_id'] ?>"
+            data-unread="<?= $isUnread ? '1' : '0' ?>">
             <div class="card-body d-flex align-items-start justify-content-between">
               <div class="d-flex">
                 <?php if (!empty($pp)): ?>
@@ -581,24 +641,28 @@ try {
                     <span class="badge status-badge <?= e($stCls) ?>"><?= e($st) ?></span>
                   </div>
                   <div class="small text-muted mb-1"><?= e(date('M d, Y H:i', strtotime($a['applied_at']))) ?></div>
-                  <div class="text-muted">
+                  <div class="text-muted mb-1">
                     <?= e($a['full_name']) ?> applied<?= $a['location'] ? ' from ' . e($a['location']) : '' ?>.
-                    <?php if (!empty($a['email'])): ?>
-                      <span class="ms-1"><i class="bi bi-envelope me-1"></i><a href="mailto:<?= e($a['email']) ?>"><?= e($a['email']) ?></a></span>
-                    <?php endif; ?>
-                    <?php if (!empty($a['phone'])): ?>
-                      <span class="ms-2"><i class="bi bi-telephone me-1"></i><a href="tel:<?= e($a['phone']) ?>"><?= e($a['phone']) ?></a></span>
-                    <?php endif; ?>
                   </div>
+                  <?php if (!empty($a['email'])): ?>
+                    <div class="text-muted small">
+                      <i class="bi bi-envelope me-1"></i>
+                      <a href="mailto:<?= e($a['email']) ?>"><?= e($a['email']) ?></a>
+                    </div>
+                  <?php endif; ?>
+                  <?php if (!empty($a['phone'])): ?>
+                    <div class="text-muted small">
+                      <i class="bi bi-telephone me-1"></i>
+                      <a href="tel:<?= e($a['phone']) ?>"><?= e($a['phone']) ?></a>
+                    </div>
+                  <?php endif; ?>
                 </div>
               </div>
+
               <div class="ms-3 app-actions">
-                <a class="btn btn-detail btn-icon-sm" href="c_job_detail.php?id=<?= (int)$a['job_id'] ?>">
-                  <i class="bi bi-eye me-1"></i>Detail
-                </a>
                 <?php if ($isUnread): ?>
                   <form method="post" class="m-0">
-                    <button class="btn btn-light btn-icon-sm" name="mark_one_company" value="<?= (int)$a['application_id'] ?>">Mark read</button>
+                    <button class="btn btn-light btn-icon-sm js-mark-one" name="mark_one_company" value="<?= (int)$a['application_id'] ?>">Mark read</button>
                   </form>
                 <?php else: ?>
                   <button class="btn btn-light btn-icon-sm" disabled>Marked</button>
@@ -655,17 +719,123 @@ try {
     </div>
   </section>
 
-  <!-- Footer -->
-  <footer class="footer mt-4">
+  <!-- ===== Footer ===== -->
+  <footer class="footer mt-auto">
     <div class="container">
-      <div class="mb-2">
-        <a href="#" class="text-white text-decoration-none me-3">About</a>
-        <a href="#" class="text-white text-decoration-none me-3">Contact</a>
-        <a href="#" class="text-white text-decoration-none">Privacy Policy</a>
+      <div class="row gy-4">
+        <div class="col-md-3">
+          <div class="brand h4 mb-2">JobHive</div>
+          <p class="mb-2">Find jobs. Apply fast. Get hired.</p>
+          <div class="social">
+            <a href="#" aria-label="Facebook"><i class="bi bi-facebook"></i></a>
+            <a href="#" aria-label="Twitter / X"><i class="bi bi-twitter-x"></i></a>
+            <a href="#" aria-label="LinkedIn"><i class="bi bi-linkedin"></i></a>
+          </div>
+        </div>
+
+        <div class="col-md-3">
+          <h6 class="text-uppercase text-white-50 mb-3">Quick Links</h6>
+          <ul class="list-unstyled">
+            <li class="mb-2"><a href="index.php">Home</a></li>
+            <li class="mb-2"><a href="login.php">Login</a></li>
+            <li class="mb-2"><a href="sign_up.php">Register</a></li>
+            <li class="mb-2"><a href="c_sign_up.php">Company Register</a></li>
+            <li class="mb-2"><a href="index_all_companies.php">All Companies</a></li>
+          </ul>
+        </div>
+
+        <div class="col-md-3">
+          <h6 class="text-uppercase text-white-50 mb-3">Company</h6>
+          <ul class="list-unstyled">
+            <li class="mb-2"><a href="faq.php">FAQ</a></li>
+            <li class="mb-2"><a href="about.php">About Us</a></li>
+            <li class="mb-2"><a href="privacy.php">Privacy Policy</a></li>
+            <li class="mb-2"><a href="terms.php">Terms &amp; Conditions</a></li>
+          </ul>
+        </div>
+
+        <div class="col-md-3">
+          <h6 class="text-uppercase text-white-50 mb-3">Contact</h6>
+          <ul class="list-unstyled">
+            <li class="mb-2"><i class="bi bi-geo-alt me-2"></i>Yangon, Myanmar</li>
+            <li class="mb-2"><i class="bi bi-envelope me-2"></i><a href="mailto:support@jobhive.mm">support@jobhive.mm</a></li>
+            <li class="mb-2"><i class="bi bi-telephone me-2"></i><a href="tel:+95957433847">+95 957 433 847</a></li>
+          </ul>
+        </div>
       </div>
-      <small>&copy; <?= date('Y') ?> JobHive. All rights reserved.</small>
+
+      <hr>
+      <div class="d-flex flex-column flex-md-row justify-content-between align-items-center">
+        <small>&copy; <?= date('Y') ?> JobHive. All rights reserved.</small>
+        <small>Made with <span style="color:#e25555;">♥</span> in Myanmar</small>
+      </div>
     </div>
   </footer>
+
+  <!-- Membership / Pricing Modal -->
+  <div class="modal fade" id="memberModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content member-highlight shadow">
+        <div class="modal-header border-0 pb-0">
+          <h5 class="modal-title">
+            <i class="bi bi-gem me-1"></i> Grow Faster with Your Membership
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+
+        <div class="modal-body pt-2">
+          <div class="text-center">
+            <!-- Current tier -->
+            <div class="mb-2">
+              <div class="fw-semibold">You’re currently on</div>
+              <span class="badge rounded-pill <?= $badgeClass ?>"><?= e(ucfirst($company_member)) ?></span>
+              <span class="ms-2 text-muted">(<?= $totalPosts ?> posts)</span>
+            </div>
+
+            <!-- Next tier after the next post -->
+            <div class="mb-2">
+              <div class="fw-semibold">After your next post</div>
+              <div class="fs-6"><?= e(strtoupper($tierNext)) ?> tier</div>
+            </div>
+
+            <!-- Price for the next post -->
+            <div class="mb-3">
+              <div class="fw-semibold">Next post price</div>
+              <div class="fs-5 fw-bold">
+                <?= number_format($feeNext) ?> MMK
+                <small class="text-muted d-block">
+                  base <?= number_format(JH_BASE_FEE) ?> · save <?= number_format(max(0, JH_BASE_FEE - $feeNext)) ?> MMK (<?= (int)round($rateNext * 100) ?>%)
+                </small>
+              </div>
+            </div>
+
+            <!-- New attractive sentence -->
+            <p class="small text-muted mb-0">
+              The more you post, the more you save — enjoy <strong>10% off after 5 posts</strong>,
+              <strong>15% off after 15 posts</strong>, and <strong>20% off once you reach 25 posts</strong>.
+            </p>
+          </div>
+
+          <hr class="my-3">
+
+          <ul class="list-unstyled small m-0 text-muted">
+            <li class="mb-1"><i class="bi bi-check2-circle me-1"></i> Transparent pricing before you publish</li>
+            <li class="mb-1"><i class="bi bi-check2-circle me-1"></i> Volume-based discounts for ongoing hiring</li>
+            <li class="mb-1"><i class="bi bi-check2-circle me-1"></i> Optimized for active recruitment campaigns</li>
+          </ul>
+        </div>
+
+        <div class="modal-footer border-0 pt-0">
+          <a href="post_job.php" class="btn btn-warning">
+            <i class="bi bi-plus-square me-1"></i> Post a Job Now
+          </a>
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
 
   <!-- Inbox toggle -->
   <script>
@@ -687,7 +857,6 @@ try {
       panel.setAttribute('aria-hidden', 'true');
       document.body.style.overflow = '';
     }
-
     btnInbox.addEventListener('click', openInbox);
     btnClose.addEventListener('click', closeInbox);
     backdrop.addEventListener('click', closeInbox);
@@ -702,6 +871,131 @@ try {
       history.replaceState(null, "", url.pathname + (url.searchParams.toString() ? ('?' + url.searchParams.toString()) : ''));
     })();
     <?php endif; ?>
+  </script>
+
+  <!-- One-time notification persistence (localStorage per company) -->
+  <script>
+    (function() {
+      const COMPANY_ID = <?= (int)$company_id ?>;
+      const STORAGE_KEY = `jh_c_read_${COMPANY_ID}`; // <-- fixed quotes
+      const DID_MARK_ALL = <?= $did_mark_all ? 'true' : 'false' ?>;
+
+      const getMap = () => {
+        try {
+          return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+        } catch {
+          return {};
+        }
+      };
+      const setMap = (m) => localStorage.setItem(STORAGE_KEY, JSON.stringify(m || {}));
+      const isRead = (id) => !!getMap()[id];
+      const markOne = (id) => {
+        const m = getMap();
+        m[id] = 1;
+        setMap(m);
+      };
+
+      function paintCardAsRead(card) {
+        card.classList.remove('unread');
+        card.classList.add('read');
+        card.setAttribute('data-unread', '0');
+        const btn = card.querySelector('.js-mark-one');
+        if (btn) {
+          btn.textContent = 'Marked';
+          btn.disabled = true;
+          btn.classList.add('disabled');
+        }
+      }
+
+      function updateBellBadge() {
+        const badge = document.getElementById('notifBadge');
+        if (!badge) return;
+        let unread = 0;
+        document.querySelectorAll('.app-card').forEach(card => {
+          const id = card.getAttribute('data-id');
+          const domUnread = card.getAttribute('data-unread') === '1';
+          if (domUnread && !isRead(id)) unread++;
+        });
+        if (unread > 0) {
+          badge.textContent = unread > 99 ? '99+' : unread;
+          badge.style.display = '';
+        } else {
+          badge.style.display = 'none';
+        }
+      }
+
+      function applyStorageToUI() {
+        document.querySelectorAll('.app-card').forEach(card => {
+          const id = card.getAttribute('data-id');
+          if (isRead(id)) paintCardAsRead(card);
+        });
+        updateBellBadge();
+      }
+
+      document.addEventListener('click', function(e) {
+        const btn = e.target.closest('.js-mark-one');
+        if (!btn) return;
+        const card = btn.closest('.app-card');
+        if (!card) return;
+        const id = card.getAttribute('data-id');
+        markOne(id);
+        paintCardAsRead(card);
+        updateBellBadge();
+      }, false);
+
+      document.addEventListener('click', function(e) {
+        const btn = e.target.closest('.js-mark-all');
+        if (!btn) return;
+        document.querySelectorAll('.app-card').forEach(card => {
+          const id = card.getAttribute('data-id');
+          markOne(id);
+          paintCardAsRead(card);
+        });
+        updateBellBadge();
+      }, false);
+
+      if (DID_MARK_ALL) {
+        document.querySelectorAll('.app-card').forEach(card => {
+          const id = card.getAttribute('data-id');
+          markOne(id);
+          paintCardAsRead(card);
+        });
+        updateBellBadge();
+      }
+
+      document.addEventListener('DOMContentLoaded', applyStorageToUI);
+    })();
+  </script>
+
+  <!-- Membership modal behavior (auto-appear ~3s after login, or on button click) -->
+  <script>
+    (function() {
+      const modalEl = document.getElementById('memberModal');
+      if (!modalEl) return;
+      const memberModal = new bootstrap.Modal(modalEl, {
+        backdrop: 'static',
+        keyboard: true
+      });
+      const btnMember = document.getElementById('btnMember');
+
+      // open on button
+      btnMember?.addEventListener('click', () => {
+        memberModal.show();
+        sessionStorage.setItem('jh_member_shown', '1');
+      });
+
+      // one-time per session; prefer post-login signal, else first time this session
+      const JUST_LOGGED_IN = <?= $show_member_after_login ? 'true' : 'false' ?>;
+      window.addEventListener('load', () => {
+        const hasShown = sessionStorage.getItem('jh_member_shown') === '1';
+        if ((JUST_LOGGED_IN || !hasShown)) {
+          setTimeout(() => {
+            memberModal.show();
+            sessionStorage.setItem('jh_member_shown', '1');
+          }, 3000);
+        }
+      });
+    })();
   </script>
 </body>
 

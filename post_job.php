@@ -1,6 +1,6 @@
 <?php
 include("connect.php");
-session_start();
+if (session_status() === PHP_SESSION_NONE) session_start();
 
 /* =================== Auth: company only =================== */
 $company_id = $_SESSION['company_id'] ?? null;
@@ -29,14 +29,15 @@ function price_after_discount(int $base, float $rate): int
 }
 
 /* =================== Fetch company info =================== */
-$stmt = $pdo->prepare("SELECT company_name, address, member FROM companies WHERE company_id=?");
-$stmt->execute([$company_id]);
-$company = $stmt->fetch(PDO::FETCH_ASSOC);
+$st = $pdo->prepare("SELECT company_name, address, member FROM companies WHERE company_id=? LIMIT 1");
+$st->execute([$company_id]);
+$company = $st->fetch(PDO::FETCH_ASSOC) ?: ['company_name' => '', 'address' => '', 'member' => 'normal'];
 
 /* =================== Compute upcoming promo (for UI preview) =================== */
 $stCount = $pdo->prepare("SELECT COUNT(*) FROM jobs WHERE company_id = ?");
 $stCount->execute([$company_id]);
 $existing_posts = (int) $stCount->fetchColumn();
+
 $future_total   = $existing_posts + 1; // after this post
 list($ui_rate, $ui_member) = promo_for_total_posts($future_total);
 $ui_fee = price_after_discount(JH_BASE_FEE, $ui_rate);
@@ -57,7 +58,7 @@ function e($v)
 }
 
 /* =================== Handle POST =================== */
-if ($_SERVER["REQUEST_METHOD"] == "POST") {
+if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $job_title           = trim($_POST['job_title'] ?? '');
     $job_description     = trim($_POST['job_description'] ?? '');
     $description_detail  = trim($_POST['description_detail'] ?? '');
@@ -104,7 +105,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         try {
             $pdo->beginTransaction();
 
-            // Re-count inside TX to be precise
+            // Re-check count in TX
             $st = $pdo->prepare("SELECT COUNT(*) FROM jobs WHERE company_id=? FOR UPDATE");
             $st->execute([$company_id]);
             $current_posts = (int) $st->fetchColumn();
@@ -136,12 +137,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             ]);
             $job_id = (int)$pdo->lastInsertId();
 
-            // 2) Update company member tier
-            // (Requires companies.member column)
-
-            
-            // $upd = $pdo->prepare("UPDATE companies SET member = ? WHERE company_id = ?");
-            // $upd->execute([$memberTierAfter, $company_id]);
+            // 2) Optionally update company member tier
+            // Uncomment if you want the company tier to immediately reflect the new total
+            /*
+            $upd = $pdo->prepare("UPDATE companies SET member = ? WHERE company_id = ?");
+            $upd->execute([$memberTierAfter, $company_id]);
+            */
 
             // 3) Build payment reference
             if (in_array($payment_method, ['KPay', 'AyaPay', 'Wave Pay'], true)) {
@@ -152,8 +153,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 $reference = $paypal_email; // PayPal
             }
 
-            // 4) Insert payment record (amount = discounted fee)
-            // Requires post_payment(company_id, amount, payment_date, payment_status, job_id, payment_method, reference)
+            // 4) Insert payment record
             $payment_status = 'Completed';
             $q = "
                 INSERT INTO post_payment (company_id, amount, payment_date, payment_status, job_id, payment_method, reference)
@@ -171,7 +171,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
             $pdo->commit();
 
-            $success = "Job posted successfully! You were charged " . number_format($final_fee) . " MMK (" . (int)round($rate * 100) . "% off, tier: " . strtoupper($memberTierAfter) . ").";
+            $success = "Job posted successfully! You were charged " . number_format($final_fee) . " MMK (" . (int)round($rate * 100) . "% off, tier after post: " . strtoupper($memberTierAfter) . ").";
             $form_data = [];
 
             // Refresh UI preview vars after commit
@@ -193,9 +193,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <meta charset="UTF-8">
     <title>JobHive | Post Job</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+
     <!-- Bootstrap + Icons -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+
     <style>
         body {
             background: #f7f9fb;
@@ -217,10 +219,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             letter-spacing: .5px;
             margin-bottom: 16px;
             text-align: center;
-        }
-
-        .promo {
-            margin: 10px auto 24px;
         }
 
         label {
@@ -279,12 +277,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             margin-right: auto;
         }
 
-        .copy-btn {
-            font-size: .98rem;
-            padding: 1px 8px;
-            margin-left: 6px;
-        }
-
         .gateway-box {
             background: #eef6ff;
             border: 1px solid #b6d4fe;
@@ -293,6 +285,118 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         .wallet-box {
             background: #fff7e6;
             border: 1px solid #ffd37a;
+        }
+
+        .copy-btn {
+            font-size: .98rem;
+            padding: 1px 8px;
+            margin-left: 6px;
+        }
+
+        /* ====== Attractive Promo Box for Companies ====== */
+        .promo-card {
+            --bg1: #e8f6ff;
+            --bg2: #e9fbff;
+            --ink: #0f3b57;
+            --accent: #0ea5e9;
+            --ring: rgba(14, 165, 233, .35);
+            background: linear-gradient(135deg, var(--bg1), var(--bg2));
+            border: 1px solid rgba(14, 165, 233, .18);
+            color: var(--ink);
+            border-radius: 18px;
+            padding: 18px 18px 14px;
+            box-shadow: 0 10px 24px rgba(14, 165, 233, .08);
+            margin: 10px auto 24px;
+        }
+
+        .promo-top {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 10px;
+        }
+
+        .promo-icon {
+            width: 38px;
+            height: 38px;
+            border-radius: 12px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: #fff;
+            color: var(--accent);
+            font-size: 20px;
+            box-shadow: 0 6px 14px rgba(14, 165, 233, .15);
+            border: 1px solid var(--ring);
+        }
+
+        .promo-eyebrow {
+            font-size: .85rem;
+            letter-spacing: .4px;
+            text-transform: uppercase;
+            color: #0a5b80;
+            opacity: .85;
+            font-weight: 700;
+        }
+
+        .promo-title {
+            font-weight: 800;
+            font-size: 1.1rem;
+            line-height: 1.1;
+        }
+
+        .promo-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin: 12px 0 6px;
+        }
+
+        .promo-stat {
+            background: #ffffffcc;
+            border: 1px solid rgba(14, 165, 233, .18);
+            border-radius: 14px;
+            padding: 10px 12px;
+            text-align: center;
+        }
+
+        .promo-stat .label {
+            font-size: .8rem;
+            color: #256086;
+            font-weight: 600;
+            letter-spacing: .2px;
+        }
+
+        .promo-stat .value {
+            font-size: 1.15rem;
+            font-weight: 800;
+            margin-top: 4px;
+            color: #0b4263;
+        }
+
+        .promo-stat .value .unit {
+            font-size: .8rem;
+            font-weight: 700;
+            color: #266b8f;
+        }
+
+        .promo-stat .sub {
+            font-size: .78rem;
+            color: #5e92ad;
+            margin-top: 2px;
+        }
+
+        .promo-note {
+            margin-top: 6px;
+            text-align: center;
+            font-size: .92rem;
+            color: #0a4d70;
+        }
+
+        @media (max-width:600px) {
+            .promo-stats {
+                grid-template-columns: 1fr;
+            }
         }
 
         @media (max-width: 600px) {
@@ -312,13 +416,35 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <div class="post-job-container">
         <h3>Post a Job</h3>
 
-        <!-- Live promo preview -->
-        <div class="promo alert alert-info">
-            <div class="d-flex flex-column gap-1 text-center">
-                <div><strong>Your tier after this post:</strong> <?= e(strtoupper($ui_member)) ?></div>
-                <div><strong>Discount:</strong> <?= (int)round($ui_rate * 100) ?>%</div>
-                <div><strong>Price for this post:</strong> <?= number_format($ui_fee) ?> MMK <span class="text-muted">(base <?= number_format(JH_BASE_FEE) ?>)</span></div>
-                <small class="text-muted">Tiers: ≥<?= TIER_1_MIN ?> → 10%, ≥<?= TIER_2_MIN ?> → 15%, ≥<?= TIER_3_MIN ?> → 20%.</small>
+        <!-- Attractive membership/promo banner -->
+        <div class="promo-card">
+            <div class="promo-top">
+                <div class="promo-icon"><i class="bi bi-megaphone-fill"></i></div>
+                <div class="promo-headings">
+                    <div class="promo-eyebrow">Membership Savings Preview</div>
+                    <div class="promo-title">Your next post unlocks better pricing</div>
+                </div>
+            </div>
+
+            <div class="promo-stats">
+                <div class="promo-stat">
+                    <div class="label">Next Tier</div>
+                    <div class="value"><?= e(strtoupper($ui_member)) ?></div>
+                </div>
+                <div class="promo-stat">
+                    <div class="label">Discount</div>
+                    <div class="value"><?= (int)round($ui_rate * 100) ?>%</div>
+                </div>
+                <div class="promo-stat">
+                    <div class="label">Price This Post</div>
+                    <div class="value"><?= number_format($ui_fee) ?> <span class="unit">MMK</span></div>
+                    <div class="sub">Base <?= number_format(JH_BASE_FEE) ?></div>
+                </div>
+            </div>
+
+            <div class="promo-note">
+                The more you post, the more you save — <strong>10% after 5 posts</strong>,
+                <strong>15% after 15 posts</strong>, and <strong>20% once you reach 25 posts</strong>.
             </div>
         </div>
 
@@ -398,11 +524,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 <div class="col-12">
                     <label>Choose Payment Method <span class="text-danger">*</span></label>
                     <div class="d-flex flex-wrap gap-3 align-items-center" id="payment-methods">
-                        <img src="payment_logos/kpay.webp" alt="KPay" class="pay-method-img<?= (($form_data['payment_method'] ?? '') == 'KPay')     ? ' selected' : '' ?>" data-method="KPay">
-                        <img src="payment_logos/ayapay.png" alt="AyaPay" class="pay-method-img<?= (($form_data['payment_method'] ?? '') == 'AyaPay')   ? ' selected' : '' ?>" data-method="AyaPay">
-                        <img src="payment_logos/wavepay.png" alt="Wave Pay" class="pay-method-img<?= (($form_data['payment_method'] ?? '') == 'Wave Pay') ? ' selected' : '' ?>" data-method="Wave Pay">
+                        <img src="payment_logos/kpay.webp" alt="KPay" class="pay-method-img<?= (($form_data['payment_method'] ?? '') == 'KPay')      ? ' selected' : '' ?>" data-method="KPay">
+                        <img src="payment_logos/ayapay.png" alt="AyaPay" class="pay-method-img<?= (($form_data['payment_method'] ?? '') == 'AyaPay')    ? ' selected' : '' ?>" data-method="AyaPay">
+                        <img src="payment_logos/wavepay.png" alt="Wave Pay" class="pay-method-img<?= (($form_data['payment_method'] ?? '') == 'Wave Pay')  ? ' selected' : '' ?>" data-method="Wave Pay">
                         <img src="payment_logos/visa.png" alt="Visa Card" class="pay-method-img<?= (($form_data['payment_method'] ?? '') == 'Visa Card') ? ' selected' : '' ?>" data-method="Visa Card">
-                        <img src="payment_logos/paypal.png" alt="PayPal" class="pay-method-img<?= (($form_data['payment_method'] ?? '') == 'PayPal')   ? ' selected' : '' ?>" data-method="PayPal">
+                        <img src="payment_logos/paypal.png" alt="PayPal" class="pay-method-img<?= (($form_data['payment_method'] ?? '') == 'PayPal')    ? ' selected' : '' ?>" data-method="PayPal">
                     </div>
                     <input type="hidden" name="payment_method" id="payment_method_input" required value="<?= e($form_data['payment_method'] ?? '') ?>">
                 </div>

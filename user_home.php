@@ -50,7 +50,6 @@ try {
     $email           = $row['email'] ?: $email;
     $profile_picture = $row['profile_picture'] ?? null;
     $package         = $row['package'] ?: 'normal';
-
     $_SESSION['full_name']       = $full_name;
     $_SESSION['email']           = $email;
     $_SESSION['profile_picture'] = $profile_picture;
@@ -65,17 +64,17 @@ $is_premium = (strtolower((string)$package) === 'premium');
 
 /* ===== Profile completion (must be 100% to upgrade) ===== */
 $REQUIRED = [
-  'full_name'        => 'Full name',
-  'email'            => 'Email',
-  'password'         => 'Password',
-  'gender'           => 'Gender',
-  'education'        => 'Education',
-  'phone'            => 'Phone',
-  'address'          => 'Address',
-  'b_date'           => 'Birth date',
-  'job_category'     => 'Job category',
+  'full_name' => 'Full name',
+  'email' => 'Email',
+  'password' => 'Password',
+  'gender' => 'Gender',
+  'education' => 'Education',
+  'phone' => 'Phone',
+  'address' => 'Address',
+  'b_date' => 'Birth date',
+  'job_category' => 'Job category',
   'current_position' => 'Current position',
-  'profile_picture'  => 'Profile picture'
+  'profile_picture' => 'Profile picture'
 ];
 $missing_fields = [];
 try {
@@ -109,9 +108,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($type === 'A') {
       $aid    = (int)($_POST['mark_one'] ?? 0);
       $status = trim($_POST['status_now'] ?? '');
-      if ($aid > 0 && ($status === 'Accepted' || $status === 'Rejected')) {
-        $seenApp[$aid] = $status;
-      }
+      if ($aid > 0 && ($status === 'Accepted' || $status === 'Rejected')) $seenApp[$aid] = $status;
     } elseif ($type === 'S') {
       $nid = trim($_POST['mark_one'] ?? '');
       if ($nid !== '') $seenSess[$nid] = 1;
@@ -134,9 +131,9 @@ $loc = '';
 $jt = '';
 $isSearch = false;
 if (isset($_GET['csearch'])) {
-  $q   = trim($_GET['q']   ?? '');
+  $q = trim($_GET['q'] ?? '');
   $loc = trim($_GET['loc'] ?? '');
-  $jt  = trim($_GET['jt']  ?? '');
+  $jt = trim($_GET['jt'] ?? '');
   $isSearch = true;
 } else {
   if (isset($_GET['q'])) {
@@ -156,7 +153,7 @@ if ($jt !== '' && !in_array($jt, ['Software', 'Network'], true)) $jt = '';
 
 $conds = [];
 $params = [];
-if ($q   !== '') {
+if ($q !== '') {
   $conds[] = "(j.job_title LIKE ? OR c.company_name LIKE ?)";
   $like = "%{$q}%";
   array_push($params, $like, $like);
@@ -286,6 +283,12 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <style>
+    :root {
+      --jh-gold: #ffaa2b;
+      --jh-gold-2: #ffc107;
+      --jh-dark: #1a202c;
+    }
+
     body {
       background: #f8fafc
     }
@@ -439,13 +442,6 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
       font-size: .82rem
     }
 
-    .footer {
-      background: #1a202c;
-      color: #fff;
-      padding: 30px 0 10px;
-      text-align: center
-    }
-
     .badge-dot {
       position: absolute;
       top: -6px;
@@ -508,12 +504,6 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
 
     .notif-card .card-body {
       padding: .85rem .9rem
-    }
-
-    @media (max-width:992px) {
-      .inbox-panel {
-        width: 100vw
-      }
     }
 
     .notif-card.unread {
@@ -651,6 +641,59 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
 
     #upgradeWarn.shake {
       animation: shakeX .35s ease-in-out 1;
+    }
+
+    /* ===== Footer (same as index) ===== */
+    .footer {
+      background: var(--jh-dark);
+      color: #e9ecef;
+      padding: 40px 0 16px;
+      flex-shrink: 0;
+      margin-top: 24px;
+    }
+
+    .footer a {
+      color: #f8f9fa;
+      text-decoration: none;
+    }
+
+    .footer a:hover {
+      color: var(--jh-gold);
+    }
+
+    .footer .brand {
+      font-weight: 800;
+      color: var(--jh-gold);
+    }
+
+    .footer .social a {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, .08);
+      margin-right: 8px;
+    }
+
+    .footer .social a:hover {
+      background: rgba(255, 193, 7, .2);
+    }
+
+    .footer hr {
+      border-top: 1px solid rgba(255, 255, 255, .12);
+      margin: 24px 0 12px;
+    }
+
+    .footer small {
+      color: #cbd5e1;
+    }
+
+    @media (max-width:992px) {
+      .inbox-panel {
+        width: 100vw
+      }
     }
   </style>
 </head>
@@ -910,15 +953,52 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
     </div>
   </section>
 
-  <!-- Footer -->
-  <footer class="footer">
+  <!-- ===== Footer (identical to index) ===== -->
+  <footer class="footer mt-auto">
     <div class="container">
-      <div class="mb-2">
-        <a href="#" class="text-white text-decoration-none me-3">About</a>
-        <a href="#" class="text-white text-decoration-none me-3">Contact</a>
-        <a href="#" class="text-white text-decoration-none">Privacy Policy</a>
+      <div class="row gy-4">
+        <div class="col-md-3">
+          <div class="brand h4 mb-2">JobHive</div>
+          <p class="mb-2">Find jobs. Apply fast. Get hired.</p>
+          <div class="social">
+            <a href="#" aria-label="Facebook"><i class="bi bi-facebook"></i></a>
+            <a href="#" aria-label="Twitter / X"><i class="bi bi-twitter-x"></i></a>
+            <a href="#" aria-label="LinkedIn"><i class="bi bi-linkedin"></i></a>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <h6 class="text-uppercase text-white-50 mb-3">Quick Links</h6>
+          <ul class="list-unstyled">
+            <li class="mb-2"><a href="index.php">Home</a></li>
+            <li class="mb-2"><a href="login.php">Login</a></li>
+            <li class="mb-2"><a href="sign_up.php">Register</a></li>
+            <li class="mb-2"><a href="c_sign_up.php">Company Register</a></li>
+            <li class="mb-2"><a href="index_all_companies.php">All Companies</a></li>
+          </ul>
+        </div>
+        <div class="col-md-3">
+          <h6 class="text-uppercase text-white-50 mb-3">Company</h6>
+          <ul class="list-unstyled">
+            <li class="mb-2"><a href="faq.php">FAQ</a></li>
+            <li class="mb-2"><a href="about.php">About Us</a></li>
+            <li class="mb-2"><a href="privacy.php">Privacy Policy</a></li>
+            <li class="mb-2"><a href="terms.php">Terms &amp; Conditions</a></li>
+          </ul>
+        </div>
+        <div class="col-md-3">
+          <h6 class="text-uppercase text-white-50 mb-3">Contact</h6>
+          <ul class="list-unstyled">
+            <li class="mb-2"><i class="bi bi-geo-alt me-2"></i>Yangon, Myanmar</li>
+            <li class="mb-2"><i class="bi bi-envelope me-2"></i><a href="mailto:support@jobhive.mm">support@jobhive.mm</a></li>
+            <li class="mb-2"><i class="bi bi-telephone me-2"></i><a href="tel:+95957433847">+95 957 433 847</a></li>
+          </ul>
+        </div>
       </div>
-      <small>&copy; <?= date('Y') ?> JobHive. All rights reserved.</small>
+      <hr>
+      <div class="d-flex flex-column flex-md-row justify-content-between align-items-center">
+        <small>&copy; <?= date('Y') ?> JobHive. All rights reserved.</small>
+        <small>Made with <span style="color:#e25555;">♥</span> in Myanmar</small>
+      </div>
     </div>
   </footer>
 
@@ -945,7 +1025,6 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
       document.body.classList.remove('inbox-open');
       document.body.style.overflow = '';
     }
-
     btnInbox.addEventListener('click', openInbox);
     btnClose.addEventListener('click', closeInbox);
     backdrop.addEventListener('click', closeInbox);
@@ -963,7 +1042,7 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
     <?php endif; ?>
 
     <?php if (!$is_premium): ?>
-        // === Premium modal logic (only for normal users) ===
+        // Premium modal logic
         (function() {
           const promoKey = 'jobhive_premium_shown';
           const modalEl = document.getElementById('premiumModal');
@@ -972,14 +1051,11 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
             backdrop: 'static',
             keyboard: true
           });
-
           const btnPremium = document.getElementById('btnPremium');
           btnPremium?.addEventListener('click', () => {
             premiumModal.show();
             sessionStorage.setItem(promoKey, '1');
           });
-
-          // Auto-show after 3s once per session
           window.addEventListener('load', () => {
             const hasShown = sessionStorage.getItem(promoKey) === '1';
             if (!hasShown) {
@@ -989,8 +1065,6 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
               }, 3000);
             }
           });
-
-          // Handle Upgrade Now inside modal
           const upg = document.getElementById('upgradeNow');
           const warn = document.getElementById('upgradeWarn');
           upg?.addEventListener('click', (e) => {
@@ -1006,12 +1080,11 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
         })();
     <?php endif; ?>
 
-      /* === Notification read persistence (localStorage per user) === */
+      // Notification read persistence (localStorage)
       (function() {
         const USER_ID = <?= (int)$user_id ?>;
-        const keyA = `jh_read_A_${USER_ID}`;
-        const keyS = `jh_read_S_${USER_ID}`;
-
+        const keyA = `jh_read_A_${USER_ID}`,
+          keyS = `jh_read_S_${USER_ID}`;
         const getA = () => {
           try {
             return JSON.parse(localStorage.getItem(keyA) || '{}');
@@ -1019,7 +1092,7 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
             return {};
           }
         };
-        const setA = obj => localStorage.setItem(keyA, JSON.stringify(obj || {}));
+        const setA = o => localStorage.setItem(keyA, JSON.stringify(o || {}));
         const getS = () => {
           try {
             return JSON.parse(localStorage.getItem(keyS) || '{}');
@@ -1027,21 +1100,12 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
             return {};
           }
         };
-        const setS = obj => localStorage.setItem(keyS, JSON.stringify(obj || {}));
-
-        const isRead = (ntype, id, status) => {
-          if (ntype === 'A') {
+        const setS = o => localStorage.setItem(keyS, JSON.stringify(o || {}));
+        const isRead = (t, id, st) => t === 'A' ? !!(getA()[id] && getA()[id] === (st || '')) : !!getS()[id];
+        const mark = (t, id, st) => {
+          if (t === 'A') {
             const m = getA();
-            return (m[id] && m[id] === (status || ''));
-          }
-          const s = getS();
-          return !!s[id];
-        };
-
-        const markOneInStorage = (ntype, id, status) => {
-          if (ntype === 'A') {
-            const m = getA();
-            m[id] = status || '';
+            m[id] = st || '';
             setA(m);
           } else {
             const s = getS();
@@ -1050,29 +1114,29 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
           }
         };
 
-        function updateBellBadge() {
+        function badge() {
           const cards = document.querySelectorAll('.notif-card');
           let unread = 0;
-          cards.forEach(card => {
-            const ntype = card.getAttribute('data-ntype');
-            const id = card.getAttribute('data-id');
-            const status = card.getAttribute('data-status') || '';
-            const domUnread = card.getAttribute('data-unread') === '1';
-            if (domUnread && !isRead(ntype, id, status)) unread++;
+          cards.forEach(c => {
+            const t = c.getAttribute('data-ntype'),
+              id = c.getAttribute('data-id'),
+              st = c.getAttribute('data-status') || '',
+              dom = c.getAttribute('data-unread') === '1';
+            if (dom && !isRead(t, id, st)) unread++;
           });
-          const badge = document.getElementById('notifBadge');
-          if (!badge) return;
+          const b = document.getElementById('notifBadge');
+          if (!b) return;
           if (unread > 0) {
-            badge.textContent = unread > 99 ? '99+' : unread;
-            badge.style.display = '';
+            b.textContent = unread > 99 ? '99+' : unread;
+            b.style.display = '';
           } else {
-            badge.style.display = 'none';
+            b.style.display = 'none';
           }
         }
 
-        function paintCardAsRead(card) {
-          const pill = card.querySelector('.js-pill');
-          const btn = card.querySelector('.js-mark-one');
+        function paint(card) {
+          const pill = card.querySelector('.js-pill'),
+            btn = card.querySelector('.js-mark-one');
           card.classList.remove('unread');
           card.classList.add('read');
           card.setAttribute('data-unread', '0');
@@ -1088,43 +1152,43 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
           }
         }
 
-        function applyStorageToUI() {
-          document.querySelectorAll('.notif-card').forEach(card => {
-            const ntype = card.getAttribute('data-ntype');
-            const id = card.getAttribute('data-id');
-            const status = card.getAttribute('data-status') || '';
-            if (isRead(ntype, id, status)) paintCardAsRead(card);
+        function apply() {
+          document.querySelectorAll('.notif-card').forEach(c => {
+            const t = c.getAttribute('data-ntype'),
+              id = c.getAttribute('data-id'),
+              st = c.getAttribute('data-status') || '';
+            if (isRead(t, id, st)) paint(c);
           });
-          updateBellBadge();
+          badge();
         }
 
-        document.addEventListener('click', function(e) {
+        document.addEventListener('click', e => {
           const btn = e.target.closest('.js-mark-one');
           if (!btn) return;
           const card = btn.closest('.notif-card');
           if (!card) return;
-          const ntype = card.getAttribute('data-ntype');
-          const id = card.getAttribute('data-id');
-          const status = card.getAttribute('data-status') || '';
-          markOneInStorage(ntype, id, status);
-          paintCardAsRead(card);
-          updateBellBadge();
+          const t = card.getAttribute('data-ntype'),
+            id = card.getAttribute('data-id'),
+            st = card.getAttribute('data-status') || '';
+          mark(t, id, st);
+          paint(card);
+          badge();
         }, false);
 
-        document.addEventListener('click', function(e) {
+        document.addEventListener('click', e => {
           const btn = e.target.closest('.js-mark-all');
           if (!btn) return;
           document.querySelectorAll('.notif-card').forEach(card => {
-            const ntype = card.getAttribute('data-ntype');
-            const id = card.getAttribute('data-id');
-            const status = card.getAttribute('data-status') || '';
-            markOneInStorage(ntype, id, status);
-            paintCardAsRead(card);
+            const t = card.getAttribute('data-ntype'),
+              id = card.getAttribute('data-id'),
+              st = card.getAttribute('data-status') || '';
+            mark(t, id, st);
+            paint(card);
           });
-          updateBellBadge();
+          badge();
         }, false);
 
-        document.addEventListener('DOMContentLoaded', applyStorageToUI);
+        document.addEventListener('DOMContentLoaded', apply);
       })();
   </script>
 </body>
