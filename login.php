@@ -24,8 +24,8 @@ use PHPMailer\PHPMailer\SMTP;
    SMTP settings 
    ============================================================ */
 
-const SMTP_USERNAME  = 'phonethawnaing11305@gmail.com';        
-const SMTP_PASSWORD  = 'iuwdzyrnczhmdzyn'; 
+const SMTP_USERNAME  = 'phonethawnaing11305@gmail.com';
+const SMTP_PASSWORD  = 'iuwdzyrnczhmdzyn';
 const SMTP_FROM_NAME = 'JobHive';
 
 /* Helpers */
@@ -81,7 +81,6 @@ function sendOtpEmail(string $to, string $code, ?string &$err = null): bool
       return false;
     }
   };
-
   if ($try('smtp.gmail.com', 587, 'tls')) return true;
   return $try('smtp.gmail.com', 465, 'ssl');
 }
@@ -106,7 +105,7 @@ function issueAndSendOtp(string $actor, int $actorId, string $accountEmail, ?str
   $ok = sendOtpEmail($accountEmail, $otp, $err);
   if ($ok) {
     $_SESSION['otp_last_sent']   = time();
-    $_SESSION['otp_expires_at']  = toEpoch($exp);     // store epoch for timer
+    $_SESSION['otp_expires_at']  = toEpoch($exp);
   }
   return $ok;
 }
@@ -243,7 +242,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $stage === 'otp') {
   }
 
   $raw   = $_POST['otp'] ?? '';
-  $code  = preg_replace('/\D/', '', $raw);   // digits only
+  $code  = preg_replace('/\D/', '', $raw);
 
   if ($raw === '' || $code === '') {
     $login_message = "Please enter the 6-digit code.";
@@ -274,7 +273,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $stage === 'otp') {
 
       $now     = new DateTime();
       $expires = isset($row['otp_login_expires']) ? new DateTime($row['otp_login_expires']) : null;
-      if ($expires) $_SESSION['otp_expires_at'] = $expires->getTimestamp(); // keep session in sync
+      if ($expires) $_SESSION['otp_expires_at'] = $expires->getTimestamp();
 
       $correct = $row && !empty($row['otp_login_code']) && hash_equals($row['otp_login_code'], $code);
       $fresh   = $expires && ($now <= $expires);
@@ -283,13 +282,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $stage === 'otp') {
         if ($actor === 'company') {
           $pdo->prepare("UPDATE companies SET otp_login_code=NULL, otp_login_expires=NULL WHERE company_id=?")->execute([$actorId]);
           $_SESSION['company_id'] = $actorId;
-          $_SESSION['user_type'] = 'company';
+          $_SESSION['user_type']  = 'company';
           $target = 'company_home.php';
         } else {
           $role = ($row['role'] ?? 'user');
           $pdo->prepare("UPDATE users SET otp_login_code=NULL, otp_login_expires=NULL WHERE user_id=?")->execute([$actorId]);
-          $_SESSION['user_id'] = $actorId;
-          $_SESSION['user_type'] = $role;
+          $_SESSION['user_id']    = $actorId;
+          $_SESSION['user_type']  = $role;
           $target = ($role === 'admin') ? 'admin.php' : 'user_home.php';
         }
         unset($_SESSION['otp_actor'], $_SESSION['otp_id'], $_SESSION['otp_email'], $_SESSION['otp_last_sent'], $_SESSION['otp_expires_at']);
@@ -305,9 +304,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $stage === 'otp') {
   }
 }
 
-/* ============================================================
-   For the client timer: get current expiry (epoch seconds)
-   ============================================================ */
+/* For the client timer (OTP stage) */
 $otpExpiresEpoch = $_SESSION['otp_expires_at'] ?? 0;
 ?>
 <!DOCTYPE html>
@@ -420,6 +417,10 @@ $otpExpiresEpoch = $_SESSION['otp_expires_at'] ?? 0;
       color: #666;
       font-size: 12px;
     }
+
+    .reg-buttons .btn {
+      border-radius: .6rem;
+    }
   </style>
 </head>
 
@@ -452,8 +453,13 @@ $otpExpiresEpoch = $_SESSION['otp_expires_at'] ?? 0;
         </div>
         <button type="submit" class="btn btn-warning w-100 py-2 mt-2">Continue</button>
         <a href="forgot_pw.php" class="small d-block text-center mt-2 text-decoration-none">Forgot password?</a>
-        <a href="sign_up.php" class="small d-block text-center text-decoration-none">Don't have an account? <span class="text-warning">Register</span></a>
       </form>
+
+      <!-- New: two register buttons -->
+      <div class="reg-buttons d-grid gap-2 mt-3">
+        <a class="btn btn-outline-secondary w-100" href="sign_up.php">Register as User</a>
+        <a class="btn btn-outline-secondary w-100" href="c_sign_up.php">Register as Company</a>
+      </div>
 
     <?php else: /* OTP stage */ ?>
       <form action="login.php" method="POST" autocomplete="off" class="mb-2">
@@ -466,12 +472,17 @@ $otpExpiresEpoch = $_SESSION['otp_expires_at'] ?? 0;
         <button type="submit" class="btn btn-warning w-100 py-2 mt-2">Verify &amp; Sign In</button>
       </form>
 
-      <!-- Resend OTP appears only after expiry (button starts disabled; JS enables at 0:00) -->
       <form action="login.php" method="POST" class="text-center">
         <input type="hidden" name="stage" value="resend" />
         <button id="btnResend" type="submit" class="btn btn-outline-secondary w-100 py-2" disabled>Send OTP</button>
         <div class="small text-muted mt-1">We’ll send a new code when the timer hits 0:00.</div>
       </form>
+
+      <!-- New: two register buttons also visible in OTP stage -->
+      <div class="reg-buttons d-grid gap-2 mt-3">
+        <a class="btn btn-outline-secondary w-100" href="sign_up.php">Register as User</a>
+        <a class="btn btn-outline-secondary w-100" href="c_signup.php">Register as Company</a>
+      </div>
     <?php endif; ?>
   </div>
 
@@ -481,7 +492,6 @@ $otpExpiresEpoch = $_SESSION['otp_expires_at'] ?? 0;
         var expiresEpoch = parseInt(document.body.dataset.otpExpires || "0", 10);
         var elTimer = document.getElementById('otp-timer');
         var btnResend = document.getElementById('btnResend');
-
         if (!expiresEpoch || !elTimer || !btnResend) return;
 
         function fmt(ms) {
@@ -492,16 +502,14 @@ $otpExpiresEpoch = $_SESSION['otp_expires_at'] ?? 0;
         }
 
         function tick() {
-          var now = Date.now();
-          var msLeft = (expiresEpoch * 1000) - now;
-
+          var msLeft = (expiresEpoch * 1000) - Date.now();
           if (msLeft > 0) {
             elTimer.textContent = 'Code expires in ' + fmt(msLeft);
             btnResend.disabled = true;
             setTimeout(tick, 250);
           } else {
             elTimer.textContent = 'Code expired. You can request a new one.';
-            btnResend.disabled = false; // ✅ show/enable only after expiry
+            btnResend.disabled = false;
           }
         }
         tick();
