@@ -375,108 +375,173 @@ $resetExpiresEpoch = $_SESSION['reset_expires_at'] ?? 0;
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <style>
-        body {
-            background: #f8fafc;
-            font-size: 14px;
+        :root {
+            --ink: #22223b;
+            --gold: #ffc107;
         }
 
+        html,
+        body {
+            height: 100%;
+        }
+
+        body {
+            margin: 0;
+            padding: 16px;
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            background: var(--gold);
+            display: flex;
+            flex-direction: column;
+            /* stack card + brand */
+            justify-content: center;
+            /* center vertically */
+            align-items: center;
+            /* center horizontally */
+            min-height: 100vh;
+        }
+
+        /* Card */
         .box {
-            max-width: 380px;
-            margin: 28px auto;
-            background: #fff;
-            padding: 1.3rem 1rem 1.6rem;
-            border-radius: 1rem;
-            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06)
+            width: 95%;
+            max-width: 560px;
+            background: var(--ink);
+            padding: 18px 22px;
+            border-radius: 12px;
+            box-shadow: 0 6px 14px rgba(0, 0, 0, .2);
+            margin: 0;
+            /* centered, no offset */
         }
 
         .title {
-            color: #ffaa2b;
-            font-weight: 600;
-            letter-spacing: .7px;
+            color: var(--gold);
+            font-weight: 700;
+            letter-spacing: .3px;
             text-align: center;
-            font-size: 1.25rem;
-            margin-bottom: 1rem;
+            font-size: 22px;
+            margin-bottom: 14px;
         }
 
         .form-label {
-            font-size: .97rem;
-            margin-bottom: .2rem;
+            color: var(--gold);
+            font-weight: 600;
+            font-size: 13px;
+            margin-bottom: 4px;
         }
 
         .form-control {
-            font-size: .93rem;
-            padding: .33rem .75rem;
-            border-radius: .5rem;
-            min-height: 34px;
+            background: #fff;
+            border: none;
+            border-radius: 6px;
+            height: 36px;
+            padding: 6px 10px;
+            font-size: 14px;
+            margin-bottom: 12px;
         }
 
         .form-control:focus {
-            border-color: #ffaa2b;
-            box-shadow: 0 0 0 .08rem rgba(255, 170, 43, .11)
+            box-shadow: 0 0 0 2px rgba(255, 193, 7, .3);
+            outline: none;
         }
 
         .btn-warning {
-            background: #ffaa2b;
+            background: var(--gold);
             border: none;
-            font-size: 1rem;
-            border-radius: .7rem;
-            padding: .42rem 0;
+            font-size: 14px;
+            border-radius: 6px;
+            padding: 12px 0;
+            font-weight: 600;
+            color: var(--ink);
+            width: 100%;
+            transition: transform .15s ease, box-shadow .15s ease;
         }
 
         .btn-warning:hover {
-            background: #ff8800;
+            transform: translateY(-1px);
+            box-shadow: 0 6px 12px rgba(255, 193, 7, .25);
+        }
+
+        .btn-outline-secondary {
+            border: 1px solid var(--gold);
+            color: var(--gold);
+            background: transparent;
+            font-weight: 600;
+            border-radius: 6px;
+            padding: 10px 0;
+            transition: background .15s ease, color .15s ease, transform .15s ease;
+        }
+
+        .btn-outline-secondary:hover {
+            background: var(--gold);
+            color: var(--ink);
+            transform: translateY(-1px);
+        }
+
+        .alert {
+            border-radius: 6px;
+            padding: 10px 12px;
+            margin-bottom: 14px;
+            font-size: 13px;
         }
 
         .alert-success.custom-success {
-            background: #fff8ec;
-            color: #ffaa2b;
-            border: 1px solid #ffaa2b;
-            font-weight: 500;
-            border-radius: .75rem;
-            font-size: 1rem;
+            background: rgba(47, 197, 94, .18);
+            color: #2fc55e;
+            border: 1px solid #2fc55e;
         }
 
         .alert-danger.custom-error {
-            background: #fbe8e6;
-            color: #e25617;
-            border: 1px solid #e25617;
-            font-weight: 500;
-            border-radius: .75rem;
-            font-size: 1rem;
+            background: rgba(239, 68, 68, .18);
+            color: #ef4444;
+            border: 1px solid #ef4444;
         }
 
         .alert-warning.custom-warn {
-            background: #fff7e6;
-            color: #9a6b00;
-            border: 1px solid #ffcc80;
-            font-weight: 500;
-            border-radius: .75rem;
-            font-size: 1rem;
-        }
-
-        .brand {
-            text-align: center;
-            font-size: 1.45rem;
-            font-weight: bold;
-            color: #ffaa2b;
-            letter-spacing: 1px;
-            margin-top: .8rem;
+            background: rgba(255, 193, 7, .18);
+            color: var(--gold);
+            border: 1px solid var(--gold);
         }
 
         .muted {
-            color: #666;
+            color: #d9c36a;
             font-size: 12px;
+            text-align: center;
         }
 
-        .back {
+        /* Brand link under the card */
+        .brand-logo {
+            color: var(--ink);
             text-align: center;
-            margin-top: .5rem;
+            display: block;
+            margin: 10px auto 0;
+            font-size: 14px;
+            font-weight: 700;
+            text-decoration: none;
+            width: 95%;
+            max-width: 560px;
+        }
+
+        .brand-logo span {
+            color: var(--gold);
+        }
+
+        .brand-logo:hover {
+            text-decoration: underline;
+        }
+
+        @media (max-width: 768px) {
+            .box {
+                width: 96%;
+                padding: 14px;
+            }
+
+            .title {
+                font-size: 20px;
+            }
         }
     </style>
 </head>
 
 <body data-reset-expires="<?= htmlspecialchars((string)$resetExpiresEpoch) ?>">
-    <div class="brand">JobHive</div>
     <div class="box">
         <div class="title">Forgot password</div>
 
@@ -494,9 +559,9 @@ $resetExpiresEpoch = $_SESSION['reset_expires_at'] ?? 0;
                     <label for="email" class="form-label">Email address</label>
                     <input type="email" class="form-control" id="email" name="email" required maxlength="100" />
                 </div>
-                <button type="submit" class="btn btn-warning w-100 py-2 mt-2">Send code</button>
+                <button type="submit" class="btn btn-warning mt-1">Send code</button>
             </form>
-            <div class="back"><a href="login.php" class="text-decoration-none">Back to login</a></div>
+            <div class="text-center mt-2"><a href="login.php" class="text-decoration-none" style="color:#ffe08a;font-weight:700;">Back to login</a></div>
 
         <?php elseif ($stage === 'otp'): ?>
             <form action="forgot_pw.php" method="POST" autocomplete="off" class="mb-2">
@@ -506,14 +571,14 @@ $resetExpiresEpoch = $_SESSION['reset_expires_at'] ?? 0;
                     <input type="text" pattern="\d{6}" maxlength="6" class="form-control" id="otp" name="otp" required />
                 </div>
                 <div id="otp-timer" class="muted mb-2"></div>
-                <button type="submit" class="btn btn-warning w-100 py-2 mt-2">Verify code</button>
+                <button type="submit" class="btn btn-warning">Verify code</button>
             </form>
             <form action="forgot_pw.php" method="POST" class="text-center">
                 <input type="hidden" name="stage" value="resend" />
-                <button id="btnResend" type="submit" class="btn btn-outline-secondary w-100 py-2" disabled>Send OTP</button>
-                <div class="small text-muted mt-1">We’ll send a new code when the timer hits 0:00.</div>
+                <button id="btnResend" type="submit" class="btn btn-outline-secondary w-100" disabled>Send OTP</button>
+                <div class="small muted mt-1">We’ll send a new code when the timer hits 0:00.</div>
             </form>
-            <div class="back"><a href="login.php" class="text-decoration-none">Back to login</a></div>
+            <div class="text-center mt-2"><a href="login.php" class="text-decoration-none" style="color:#ffe08a;font-weight:700;">Back to login</a></div>
 
         <?php elseif ($stage === 'setpw'): ?>
             <form action="forgot_pw.php" method="POST" autocomplete="off">
@@ -540,12 +605,15 @@ $resetExpiresEpoch = $_SESSION['reset_expires_at'] ?? 0;
                         pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()\-\_\=\+\[\]\{\};:,.?~]).{8,}"
                         title="<?= htmlspecialchars(PW_POLICY_HUMAN) ?>" />
                 </div>
-                <button type="submit" class="btn btn-warning w-100 py-2 mt-2">Change password</button>
+                <button type="submit" class="btn btn-warning mt-1">Change password</button>
                 <div class="muted mt-2"><?= htmlspecialchars(PW_POLICY_HUMAN) ?></div>
             </form>
-            <div class="back"><a href="login.php" class="text-decoration-none">Back to login</a></div>
+            <div class="text-center mt-2"><a href="login.php" class="text-decoration-none" style="color:#ffe08a;font-weight:700;">Back to login</a></div>
         <?php endif; ?>
     </div>
+
+    <!-- Brand link under card, like signup/login -->
+    <a href="index.php" class="brand-logo"><span>JobHive</span></a>
 
     <?php if ($stage === 'otp'): ?>
         <script>
@@ -558,7 +626,7 @@ $resetExpiresEpoch = $_SESSION['reset_expires_at'] ?? 0;
                 function fmt(ms) {
                     var s = Math.max(0, Math.floor(ms / 1000));
                     var mm = String(Math.floor(s / 60)).padStart(2, '0');
-                    var ss = String(s % 60).padStart(2, '0');
+                    var ss = String(s % 60, 10).padStart(2, '0');
                     return mm + ':' + ss;
                 }
 
@@ -579,7 +647,7 @@ $resetExpiresEpoch = $_SESSION['reset_expires_at'] ?? 0;
     <?php endif; ?>
 
     <?php if ($stage === 'setpw'): ?>
-        <!-- Optional live checklist for password strength -->
+        <!-- Optional live checklist for password strength (kept intact) -->
         <script>
             (function() {
                 var npw = document.getElementById('npw');
@@ -603,35 +671,24 @@ $resetExpiresEpoch = $_SESSION['reset_expires_at'] ?? 0;
 
                 var ul = document.getElementById('pw-req');
                 var li = {};
-                ['len', 'low', 'upp', 'dig', 'spe', 'spc', 'rep', 'match'].forEach(k => {
-                    li[k] = ul.querySelector('[data-k="' + k + '"]');
-                });
+                ['len', 'low', 'upp', 'dig', 'spe', 'spc', 'rep', 'match'].forEach(k => li[k] = ul.querySelector('[data-k="' + k + '"]'));
 
                 function setOK(el, ok) {
-                    el.style.color = ok ? '#198754' : '#666';
+                    el.style.color = ok ? '#2fc55e' : '#d9c36a';
                     el.style.fontWeight = ok ? '600' : '400';
                 }
 
                 function check() {
-                    var v = npw.value || '';
-                    var c = cpw.value || '';
-                    var okLen = v.length >= 8;
-                    var okLow = /[a-z]/.test(v);
-                    var okUpp = /[A-Z]/.test(v);
-                    var okDig = /\d/.test(v);
-                    var okSpe = /[!@#$%^&*()\-\_\=\+\[\]\{\};:,.?~]/.test(v);
-                    var okSpc = !/\s/.test(v);
-                    var okRep = !/(.)\1\1/.test(v);
-                    var okMatch = (v !== '' && v === c);
-
-                    setOK(li.len, okLen);
-                    setOK(li.low, okLow);
-                    setOK(li.upp, okUpp);
-                    setOK(li.dig, okDig);
-                    setOK(li.spe, okSpe);
-                    setOK(li.spc, okSpc);
-                    setOK(li.rep, okRep);
-                    setOK(li.match, okMatch);
+                    var v = npw.value || '',
+                        c = cpw.value || '';
+                    setOK(li.len, v.length >= 8);
+                    setOK(li.low, /[a-z]/.test(v));
+                    setOK(li.upp, /[A-Z]/.test(v));
+                    setOK(li.dig, /\d/.test(v));
+                    setOK(li.spe, /[!@#$%^&*()\-\_\=\+\[\]\{\};:,.?~]/.test(v));
+                    setOK(li.spc, !/\s/.test(v));
+                    setOK(li.rep, !/(.)\1\1/.test(v));
+                    setOK(li.match, v !== '' && v === c);
                 }
 
                 npw.addEventListener('input', check);
