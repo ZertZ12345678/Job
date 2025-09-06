@@ -1,7 +1,6 @@
 <?php
 require_once "connect.php";
 if (session_status() === PHP_SESSION_NONE) session_start();
-
 /* ===== Guard ===== */
 if (!isset($_SESSION['user_id'])) {
   header("Location: login.php");
@@ -10,11 +9,9 @@ if (!isset($_SESSION['user_id'])) {
 $user_id   = (int)$_SESSION['user_id'];
 $full_name = trim($_SESSION['full_name'] ?? '');
 $email     = trim($_SESSION['email'] ?? '');
-
 /* ===== Options ===== */
 $PROFILE_DIR = "profile_pics/";
 $LOGO_DIR    = "company_logos/";
-
 /* ===== Helpers ===== */
 function e($v)
 {
@@ -38,7 +35,6 @@ function initials($name)
   }
   return $ini ?: 'U';
 }
-
 /* ===== Fetch fresh user (now including package) ===== */
 $profile_picture = $_SESSION['profile_picture'] ?? null;
 $package = $_SESSION['package'] ?? 'normal';
@@ -61,7 +57,6 @@ try {
 } catch (PDOException $e) {
 }
 $is_premium = (strtolower((string)$package) === 'premium');
-
 /* ===== Profile completion (must be 100% to upgrade) ===== */
 $REQUIRED = [
   'full_name' => 'Full name',
@@ -90,13 +85,11 @@ try {
 } catch (PDOException $e) {
 }
 $can_upgrade = empty($missing_fields);
-
 /* ===== POST handlers (session-scoped read state) ===== */
 $_SESSION['app_seen_status']    = $_SESSION['app_seen_status']    ?? [];
 $_SESSION['session_notif_read'] = $_SESSION['session_notif_read'] ?? [];
 $seenApp  = &$_SESSION['app_seen_status'];
 $seenSess = &$_SESSION['session_notif_read'];
-
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   if (isset($_POST['mark_all'])) {
     $_SESSION['mark_all_pending'] = 1;
@@ -117,14 +110,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     exit;
   }
 }
-
 /* ===== Optional: set past-deadline jobs to Inactive ===== */
 try {
   $today = date('Y-m-d');
   $pdo->prepare("UPDATE jobs SET status='Inactive' WHERE status='Active' AND deadline<?")->execute([$today]);
 } catch (PDOException $e) {
 }
-
 /* ===== Search filters ===== */
 $q = '';
 $loc = '';
@@ -150,7 +141,6 @@ if (isset($_GET['csearch'])) {
   }
 }
 if ($jt !== '' && !in_array($jt, ['Software', 'Network'], true)) $jt = '';
-
 $conds = [];
 $params = [];
 if ($q !== '') {
@@ -167,7 +157,6 @@ if ($jt  !== '') {
   $params[] = $jt;
 }
 $whereSql = $conds ? ("WHERE " . implode(" AND ", $conds)) : "";
-
 /* ===== Jobs ===== */
 try {
   $sql = "SELECT j.job_id,j.job_title,j.job_description,j.location,j.status,j.posted_at,
@@ -183,7 +172,6 @@ try {
 } catch (PDOException $e) {
   $jobs = [];
 }
-
 /* ===== Applications for this user (for notifications) ===== */
 try {
   $apq = $pdo->prepare("
@@ -200,13 +188,11 @@ try {
 } catch (PDOException $e) {
   $apps = [];
 }
-
 /* ===== Build unified inbox ===== */
 $items = [];
 date_default_timezone_set('Asia/Yangon');
 if (!isset($_SESSION['already_notified'])) $_SESSION['already_notified'] = [];
 $alreadyNotified = &$_SESSION['already_notified'];
-
 foreach ($apps as $a) {
   $aid = (int)$a['application_id'];
   $stt = (string)$a['status'];
@@ -220,8 +206,8 @@ foreach ($apps as $a) {
       '_unread' => $unread,
       'title' => $stt . " — " . $a['job_title'],
       'body' => ($stt === 'Accepted'
-        ? "Great news! Your application to {$a['company_name']} for “{$a['job_title']}” was accepted."
-        : "Update: Your application to {$a['company_name']} for “{$a['job_title']}” was rejected."),
+        ? "Great news! Your application to {$a['company_name']} for \"{$a['job_title']}\" was accepted."
+        : "Update: Your application to {$a['company_name']} for \"{$a['job_title']}\" was rejected."),
       'when' => 'Applied: ' . date('M d, Y H:i', strtotime($a['applied_at'])),
       'link' => '',
       'pill' => $unread ? 'New' : 'Read',
@@ -230,7 +216,6 @@ foreach ($apps as $a) {
     ];
   }
 }
-
 /* Session custom notifications */
 $sessList = $_SESSION['notifications'] ?? [];
 if (is_array($sessList) && $sessList) {
@@ -252,7 +237,6 @@ if (is_array($sessList) && $sessList) {
     ];
   }
 }
-
 /* Mark all pending (session only) */
 if (!empty($_SESSION['mark_all_pending'])) {
   foreach ($items as $it) {
@@ -261,14 +245,12 @@ if (!empty($_SESSION['mark_all_pending'])) {
   }
   unset($_SESSION['mark_all_pending']);
 }
-
 /* Badge + shake */
 $badge_count = 0;
 foreach ($items as $it) if (!empty($it['_unread'])) $badge_count++;
 $prev_badge   = (int)($_SESSION['prev_badge_count'] ?? 0);
 $should_shake = $badge_count > $prev_badge;
 $_SESSION['prev_badge_count'] = $badge_count;
-
 /* Auto-open inbox param */
 $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
 ?>
@@ -282,420 +264,9 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-  <style>
-    :root {
-      --jh-gold: #ffaa2b;
-      --jh-gold-2: #ffc107;
-      --jh-dark: #1a202c;
-    }
 
-    body {
-      background: #f8fafc
-    }
 
-    .navbar .avatar {
-      width: 32px;
-      height: 32px;
-      border-radius: 50%;
-      background: #fff3cd;
-      color: #ff8c00;
-      font-weight: 700;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      border: 1px solid rgba(0, 0, 0, .06)
-    }
-
-    .navbar-nav .nav-item:not(.dropdown) .nav-link {
-      position: relative;
-      padding-bottom: 4px;
-      transition: color .2s
-    }
-
-    .navbar-nav .nav-item:not(.dropdown) .nav-link::after {
-      content: "";
-      position: absolute;
-      left: 0;
-      bottom: 0;
-      width: 0;
-      height: 2px;
-      background-color: #ffaa2b;
-      transition: width .25s
-    }
-
-    .navbar-nav .nav-item:not(.dropdown) .nav-link:hover::after {
-      width: 100%
-    }
-
-    .hero-section {
-      background: #f8fafc;
-      padding: 64px 0 44px;
-      text-align: center
-    }
-
-    .hero-section h1 {
-      font-weight: 700
-    }
-
-    .hero-section .lead {
-      color: #556
-    }
-
-    .search-bar {
-      max-width: 920px;
-      margin: 26px auto 0;
-      padding: 1rem 1.25rem;
-      background: #fff;
-      border-radius: 2rem;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, .06);
-      display: flex;
-      flex-direction: column;
-      gap: .9rem
-    }
-
-    .search-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: .75rem;
-      align-items: center;
-      margin-top: .1rem
-    }
-
-    .search-bar .form-control {
-      min-height: 52px;
-      border-radius: .8rem;
-      font-size: 1rem;
-      padding: .65rem .9rem
-    }
-
-    .search-row .form-select {
-      min-width: 220px;
-      max-width: 260px;
-      min-height: 48px;
-      border-radius: .8rem;
-      font-size: .98rem
-    }
-
-    .btn-search {
-      min-width: 140px;
-      min-height: 48px;
-      border-radius: .8rem;
-      background: #ffc107;
-      color: #fff;
-      border: none;
-      font-weight: 600;
-      font-size: 1rem;
-      padding: 0 .9rem
-    }
-
-    .btn-search:hover {
-      background: #ff9800;
-      color: #fff
-    }
-
-    .popular-label {
-      font-size: 1.05rem;
-      color: #22223b;
-      font-weight: 600;
-      margin-right: 36px
-    }
-
-    .popular-tags {
-      margin-top: 1rem;
-      display: flex;
-      gap: .6rem;
-      justify-content: center;
-      flex-wrap: wrap
-    }
-
-    .popular-btn {
-      border: 1.6px solid #ffc107;
-      color: #ffc107;
-      background: #fff;
-      font-size: .98rem;
-      border-radius: .55rem;
-      padding: .3rem 1.15rem;
-      font-weight: 500
-    }
-
-    .popular-btn:hover {
-      background: #fff8ec;
-      color: #ff8800;
-      border-color: #ff8800
-    }
-
-    .job-card {
-      border: 0;
-      border-radius: 1.25rem
-    }
-
-    .job-card .logo {
-      width: 56px;
-      height: 56px;
-      object-fit: cover;
-      border-radius: .75rem;
-      background: #fff;
-      border: 1px solid rgba(0, 0, 0, .05)
-    }
-
-    .job-badge {
-      font-size: .82rem
-    }
-
-    .badge-dot {
-      position: absolute;
-      top: -6px;
-      right: -6px;
-      font-size: .70rem
-    }
-
-    .inbox-panel {
-      position: fixed;
-      inset: 0 0 0 auto;
-      width: 50vw;
-      max-width: 900px;
-      min-width: 360px;
-      background: #fff;
-      box-shadow: -12px 0 28px rgba(0, 0, 0, .08);
-      transform: translateX(100%);
-      transition: transform .28s;
-      display: flex;
-      flex-direction: column;
-      z-index: 1080
-    }
-
-    .inbox-panel.open {
-      transform: translateX(0)
-    }
-
-    .inbox-header {
-      padding: 14px 18px;
-      border-bottom: 1px solid #eef0f2;
-      display: flex;
-      align-items: center;
-      justify-content: space-between
-    }
-
-    .inbox-body {
-      padding: 14px 16px;
-      overflow-y: auto;
-      height: 100%
-    }
-
-    .backdrop {
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, .25);
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity .28s;
-      z-index: 1079
-    }
-
-    .backdrop.show {
-      opacity: 1;
-      pointer-events: auto
-    }
-
-    .notif-card {
-      border: 1px solid #e9ecef;
-      border-radius: .75rem
-    }
-
-    .notif-card .card-body {
-      padding: .85rem .9rem
-    }
-
-    .notif-card.unread {
-      background: #fffdf5;
-      border-left: 4px solid #ffc107
-    }
-
-    .notif-card.read {
-      background: #f8f9fa;
-      border-left: 4px solid #e9ecef
-    }
-
-    .notif-chip {
-      font-size: .72rem
-    }
-
-    @keyframes bell {
-      0% {
-        transform: rotate(0)
-      }
-
-      15% {
-        transform: rotate(12deg)
-      }
-
-      30% {
-        transform: rotate(-10deg)
-      }
-
-      45% {
-        transform: rotate(8deg)
-      }
-
-      60% {
-        transform: rotate(-6deg)
-      }
-
-      75% {
-        transform: rotate(4deg)
-      }
-
-      100% {
-        transform: rotate(0)
-      }
-    }
-
-    .btn-bell-shake {
-      animation: bell .6s ease-in-out 1;
-      transform-origin: 50% 0%
-    }
-
-    .premium-highlight {
-      background: linear-gradient(135deg, #fff9e6, #fff);
-      border: 1px solid #ffe08a;
-      border-radius: 1rem;
-    }
-
-    .modal.fade .modal-dialog {
-      transform: translateY(18px);
-      transition: transform .28s ease, opacity .28s ease;
-    }
-
-    .modal.show .modal-dialog {
-      transform: none;
-    }
-
-    .sparkle {
-      background: linear-gradient(90deg, rgba(255, 193, 7, .25), rgba(255, 193, 7, .65), rgba(255, 193, 7, .25));
-      background-size: 200% 100%;
-      animation: shine 2.2s ease-in-out infinite;
-      border-radius: .6rem;
-      padding: .25rem .5rem;
-      display: inline-block;
-    }
-
-    @keyframes shine {
-      0% {
-        background-position: 200% 0
-      }
-
-      100% {
-        background-position: 0 0
-      }
-    }
-
-    .price-wrap {
-      display: flex;
-      align-items: baseline;
-      gap: .6rem
-    }
-
-    .price-old {
-      text-decoration: line-through;
-      color: #6c757d
-    }
-
-    .price-new {
-      font-weight: 800;
-      font-size: 1.35rem;
-      color: #198754
-    }
-
-    .badge-save {
-      background: #198754;
-      color: #fff;
-      border-radius: .5rem;
-      padding: .2rem .5rem;
-      font-size: .75rem;
-      font-weight: 600
-    }
-
-    @keyframes shakeX {
-
-      0%,
-      100% {
-        transform: translateX(0)
-      }
-
-      20% {
-        transform: translateX(-4px)
-      }
-
-      40% {
-        transform: translateX(4px)
-      }
-
-      60% {
-        transform: translateX(-3px)
-      }
-
-      80% {
-        transform: translateX(3px)
-      }
-    }
-
-    #upgradeWarn.shake {
-      animation: shakeX .35s ease-in-out 1;
-    }
-
-    /* ===== Footer (same as index) ===== */
-    .footer {
-      background: var(--jh-dark);
-      color: #e9ecef;
-      padding: 40px 0 16px;
-      flex-shrink: 0;
-      margin-top: 24px;
-    }
-
-    .footer a {
-      color: #f8f9fa;
-      text-decoration: none;
-    }
-
-    .footer a:hover {
-      color: var(--jh-gold);
-    }
-
-    .footer .brand {
-      font-weight: 800;
-      color: var(--jh-gold);
-    }
-
-    .footer .social a {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 38px;
-      height: 38px;
-      border-radius: 50%;
-      background: rgba(255, 255, 255, .08);
-      margin-right: 8px;
-    }
-
-    .footer .social a:hover {
-      background: rgba(255, 193, 7, .2);
-    }
-
-    .footer hr {
-      border-top: 1px solid rgba(255, 255, 255, .12);
-      margin: 24px 0 12px;
-    }
-
-    .footer small {
-      color: #cbd5e1;
-    }
-
-    @media (max-width:992px) {
-      .inbox-panel {
-        width: 100vw
-      }
-    }
-  </style>
+  <link rel="stylesheet" href="css/user_home.css">
 </head>
 
 <body>
@@ -704,13 +275,11 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
     <div class="container">
       <a class="navbar-brand fw-bold text-warning" href="user_home.php">JobHive</a>
       <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"><span class="navbar-toggler-icon"></span></button>
-
       <div class="collapse navbar-collapse justify-content-end" id="navbarNav">
         <ul class="navbar-nav align-items-lg-center">
           <li class="nav-item"><a class="nav-link active" aria-current="page" href="user_home.php">Home</a></li>
           <li class="nav-item"><a class="nav-link" href="user_dashboard.php">Dashboard</a></li>
           <li class="nav-item"><a class="nav-link" href="all_companies.php">All Companies</a></li>
-
           <!-- Envelope -->
           <li class="nav-item ms-lg-2">
             <button id="btnInbox" class="btn btn-outline-secondary position-relative <?= $should_shake ? 'btn-bell-shake' : '' ?>" type="button" title="Notifications">
@@ -722,7 +291,6 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
               <?php endif; ?>
             </button>
           </li>
-
           <!-- Premium control -->
           <li class="nav-item ms-lg-2 d-none d-lg-block">
             <?php if (!$is_premium): ?>
@@ -735,7 +303,6 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
               </button>
             <?php endif; ?>
           </li>
-
           <!-- User dropdown -->
           <li class="nav-item dropdown ms-lg-2">
             <a class="nav-link dropdown-toggle d-flex align-items-center gap-2" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
@@ -758,20 +325,17 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
       </div>
     </div>
   </nav>
-
   <!-- Hero -->
   <section class="hero-section">
     <div class="container">
       <h1 class="display-6 fw-bold">Welcome back<?= $full_name ? ', ' . e($full_name) : '' ?>!</h1>
       <p class="lead mb-2">Ready to discover your next opportunity?</p>
-
       <?php if ($is_premium): ?>
         <div class="alert alert-success d-inline-flex align-items-center gap-2 py-2 px-3 mt-2" role="alert">
           <i class="bi bi-patch-check-fill"></i>
-          <span>You’re on <strong>Premium</strong> — enjoy auto-fill resumes and pro templates.</span>
+          <span>You're on <strong>Premium</strong> — enjoy auto-fill resumes and pro templates.</span>
         </div>
       <?php endif; ?>
-
       <!-- Search -->
       <form class="search-bar" autocomplete="off" method="get" action="user_home.php">
         <input class="form-control mb-2" type="text" name="q" placeholder="Job title or company..." value="<?= e($q) ?>">
@@ -785,7 +349,6 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
           <button class="btn btn-search" type="submit" name="csearch" value="1">Search</button>
         </div>
       </form>
-
       <!-- Popular by Job Type -->
       <div class="popular-tags">
         <span class="popular-label">Popular:</span>
@@ -803,7 +366,6 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
         </form>
       </div>
   </section>
-
   <!-- Slide-in Notifications -->
   <div id="backdrop" class="backdrop"></div>
   <aside id="inboxPanel" class="inbox-panel" aria-hidden="true">
@@ -861,7 +423,6 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
       endif; ?>
     </div>
   </aside>
-
   <?php if (!$is_premium): ?>
     <!-- Premium Promo Modal (only for normal users) -->
     <div class="modal fade" id="premiumModal" tabindex="-1" aria-hidden="true">
@@ -873,12 +434,10 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
             </h5>
             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
-
           <div class="modal-body pt-2">
             <p class="mb-3">
               Unlock <strong>Premium Resume</strong>: beautiful templates + <strong>auto-fill</strong> from your profile. Apply faster and look professional.
             </p>
-
             <div class="d-flex align-items-center justify-content-between p-3 bg-white rounded-3 border">
               <div class="price-wrap">
                 <span class="price-old">50,000 MMK</span>
@@ -886,13 +445,11 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
               </div>
               <span class="badge-save">You save 20,000 MMK</span>
             </div>
-
             <ul class="mt-3 mb-0 small text-muted">
               <li>Premium resume templates (ATS-friendly)</li>
               <li>One-click auto-fill from your JobHive profile</li>
               <li>Download as PDF/PNG anytime</li>
             </ul>
-
             <div id="upgradeWarn" class="alert alert-warning mt-3 mb-0 p-2" style="display: <?= $can_upgrade ? 'none' : 'block' ?>;">
               <small>
                 <strong>Fill all data…</strong>
@@ -901,7 +458,6 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
               </small>
             </div>
           </div>
-
           <div class="modal-footer border-0 pt-0">
             <a id="upgradeNow" href="premium.php" class="btn btn-warning" data-can="<?= $can_upgrade ? '1' : '0' ?>">
               <i class="bi bi-lightning-charge-fill me-1"></i> Upgrade Now
@@ -912,7 +468,6 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
       </div>
     </div>
   <?php endif; ?>
-
   <!-- Featured Jobs -->
   <section class="py-5">
     <div class="container">
@@ -952,7 +507,6 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
       <?php endif; ?>
     </div>
   </section>
-
   <!-- ===== Footer (identical to index) ===== -->
   <footer class="footer mt-auto">
     <div class="container">
@@ -1002,7 +556,39 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
     </div>
   </footer>
 
-  <!-- Panel + Notification Persistence JS -->
+  <!-- Chatbot UI -->
+  <div id="chatbot-container" class="position-fixed bottom-0 end-0 p-3" style="z-index: 1050; width: 350px; max-width: 90vw;">
+    <!-- Chat Button -->
+    <button id="chatbot-toggle" class="btn btn-warning rounded-circle shadow" style="width: 60px; height: 60px; position: fixed; bottom: 20px; right: 20px;">
+      <i class="bi bi-chat-dots-fill fs-4"></i>
+    </button>
+
+    <!-- Chat Window -->
+    <div id="chatbot-window" class="card shadow-lg border-0 d-none" style="position: fixed; bottom: 90px; right: 20px; width: 350px; max-width: 90vw;">
+      <div class="card-header bg-warning text-white d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">JobHive Assistant</h5>
+        <button id="chatbot-close" class="btn btn-sm btn-light">
+          <i class="bi bi-x-lg"></i>
+        </button>
+      </div>
+      <div id="chatbot-messages" class="card-body" style="height: 300px; overflow-y: auto; background-color: #f8f9fa;">
+        <div class="text-center text-muted my-3">
+          <i class="bi bi-robot fs-1"></i>
+          <p class="mt-2">Hello! I'm your JobHive assistant. How can I help you today?</p>
+        </div>
+      </div>
+      <div class="card-footer">
+        <form id="chatbot-form" class="d-flex">
+          <input type="text" id="chatbot-input" class="form-control me-2" placeholder="Type your message..." autocomplete="off">
+          <button type="submit" class="btn btn-warning">
+            <i class="bi bi-send"></i>
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  // Panel + Notification Persistence JS
   <script>
     // Inbox Panel
     const panel = document.getElementById('inboxPanel');
@@ -1025,6 +611,7 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
       document.body.classList.remove('inbox-open');
       document.body.style.overflow = '';
     }
+
     btnInbox.addEventListener('click', openInbox);
     btnClose.addEventListener('click', closeInbox);
     backdrop.addEventListener('click', closeInbox);
@@ -1161,7 +748,6 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
           });
           badge();
         }
-
         document.addEventListener('click', e => {
           const btn = e.target.closest('.js-mark-one');
           if (!btn) return;
@@ -1174,7 +760,6 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
           paint(card);
           badge();
         }, false);
-
         document.addEventListener('click', e => {
           const btn = e.target.closest('.js-mark-all');
           if (!btn) return;
@@ -1187,9 +772,184 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
           });
           badge();
         }, false);
-
         document.addEventListener('DOMContentLoaded', apply);
       })();
+
+    // Chatbot functionality
+    document.addEventListener('DOMContentLoaded', function() {
+      const chatbotToggle = document.getElementById('chatbot-toggle');
+      const chatbotWindow = document.getElementById('chatbot-window');
+      const chatbotClose = document.getElementById('chatbot-close');
+      const chatbotForm = document.getElementById('chatbot-form');
+      const chatbotInput = document.getElementById('chatbot-input');
+      const chatbotMessages = document.getElementById('chatbot-messages');
+
+      // Toggle chat window and control animation
+      chatbotToggle.addEventListener('click', function() {
+        const isOpen = !chatbotWindow.classList.contains('d-none');
+        if (isOpen) {
+          // Close the chat window
+          chatbotWindow.classList.add('d-none');
+          // Resume bounce animation
+          chatbotToggle.classList.remove('paused');
+        } else {
+          // Open the chat window
+          chatbotWindow.classList.remove('d-none');
+          // Pause bounce animation
+          chatbotToggle.classList.add('paused');
+          // Reset animation for chat window
+          chatbotWindow.style.animation = 'none';
+          setTimeout(() => {
+            chatbotWindow.style.animation = 'slideIn 0.3s ease-out';
+          }, 10);
+          // Focus on input
+          chatbotInput.focus();
+        }
+      });
+
+      // Close chat window and resume animation
+      chatbotClose.addEventListener('click', function() {
+        chatbotWindow.classList.add('d-none');
+        chatbotToggle.classList.remove('paused');
+      });
+
+      // Function to show typing indicator
+      function showTypingIndicator() {
+        const typingDiv = document.createElement('div');
+        typingDiv.className = 'chatbot-message chatbot-bot';
+        typingDiv.id = 'typing-indicator';
+
+        const typingContent = document.createElement('div');
+        typingContent.className = 'd-flex align-items-center';
+        typingContent.innerHTML = `
+          <span class="me-2">Bot is typing</span>
+          <span class="chatbot-typing"></span>
+          <span class="chatbot-typing"></span>
+          <span class="chatbot-typing"></span>
+        `;
+
+        typingDiv.appendChild(typingContent);
+        chatbotMessages.appendChild(typingDiv);
+        chatbotMessages.scrollTop = chatbotMessages.scrollHeight;
+
+        return typingDiv;
+      }
+
+      // Function to add message to chat
+      function addMessage(message, sender, buttons, image) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `chatbot-message chatbot-${sender}`;
+
+        const now = new Date();
+        const timeString = now.toLocaleTimeString([], {
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+
+        // Create message content
+        const messageContent = document.createElement('div');
+        messageContent.innerHTML = message;
+
+        messageDiv.appendChild(messageContent);
+
+        // Add image if it exists
+        if (image && sender === 'bot') {
+          const imageContainer = document.createElement('div');
+          imageContainer.className = 'mt-2 mb-2 text-center';
+
+          const imageElement = document.createElement('img');
+          imageElement.src = image;
+          imageElement.className = 'img-fluid rounded';
+          imageElement.style.maxWidth = '100%';
+          imageElement.style.height = 'auto';
+          imageElement.style.maxHeight = '200px';
+          imageElement.alt = 'Preview';
+
+          imageContainer.appendChild(imageElement);
+          messageDiv.appendChild(imageContainer);
+        }
+
+        // Add buttons if they exist
+        if (buttons && Array.isArray(buttons) && buttons.length > 0) {
+          const buttonsContainer = document.createElement('div');
+          buttonsContainer.className = 'chatbot-buttons mt-2';
+
+          buttons.forEach(button => {
+            const buttonElement = document.createElement('button');
+            buttonElement.className = 'btn btn-warning btn-sm';
+            buttonElement.textContent = button.text;
+            buttonElement.onclick = function() {
+              window.location.href = button.href;
+            };
+            buttonsContainer.appendChild(buttonElement);
+          });
+
+          messageDiv.appendChild(buttonsContainer);
+        }
+
+        // Add timestamp
+        const timestamp = document.createElement('div');
+        timestamp.className = 'chatbot-timestamp';
+        timestamp.textContent = timeString;
+        messageDiv.appendChild(timestamp);
+
+        chatbotMessages.appendChild(messageDiv);
+        chatbotMessages.scrollTop = chatbotMessages.scrollHeight;
+
+        // Add animation for new messages
+        messageDiv.style.animation = 'none';
+        setTimeout(() => {
+          messageDiv.style.animation = `${sender === 'user' ? 'bounce' : 'fadeIn'} 0.5s ease-out`;
+        }, 10);
+      }
+
+      // Handle form submission
+      chatbotForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+
+        const message = chatbotInput.value.trim();
+        if (message === '') return;
+
+        // Add user message to chat
+        addMessage(message, 'user');
+
+        // Clear input
+        chatbotInput.value = '';
+
+        // Show typing indicator
+        const typingIndicator = showTypingIndicator();
+
+        // Send to server and get response
+        fetch('chatbot.php', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: 'message=' + encodeURIComponent(message)
+          })
+          .then(response => response.json())
+          .then(data => {
+            // Remove typing indicator
+            if (typingIndicator) {
+              typingIndicator.remove();
+            }
+
+            if (data.response) {
+              addMessage(data.response, 'bot', data.buttons, data.image);
+            }
+          })
+          .catch(error => {
+            console.error('Error:', error);
+            // Remove typing indicator
+            if (typingIndicator) {
+              typingIndicator.remove();
+            }
+            addMessage("Sorry, I'm having trouble responding right now. Please try again later.", 'bot');
+          });
+      });
+
+    
+    });
   </script>
 </body>
 
