@@ -1,9 +1,7 @@
 <?php
-// job_detail.php
-require_once "connect.php"; // provides $pdo (PDO)
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+// job_detail.php (fixed)
+require_once "connect.php";
+if (session_status() === PHP_SESSION_NONE) session_start();
 
 $LOGO_DIR = "company_logos/";
 
@@ -18,13 +16,18 @@ function fmt_date($d)
     $ts = strtotime($d);
     return $ts ? date('M d, Y', $ts) : $d;
 }
+function app_badge($s)
+{
+    $map = ['Pending' => 'secondary', 'Submitted' => 'secondary', 'Under Review' => 'info', 'Interview' => 'warning', 'Phone Screen' => 'warning', 'Accepted' => 'success', 'Offer' => 'success', 'Rejected' => 'danger'];
+    $c = $map[$s] ?? 'secondary';
+    return '<span class="badge text-bg-' . $c . '">' . e($s) . '</span>';
+}
 
 /* ---------- Viewer info (for premium routing) ---------- */
 $is_logged_in = isset($_SESSION['user_id']);
 $user_id = $_SESSION['user_id'] ?? null;
 $package = $_SESSION['package'] ?? null;
 
-// If logged in but package missing in session, refresh from DB
 if ($is_logged_in && ($package === null || $package === '')) {
     try {
         $st = $pdo->prepare("SELECT package FROM users WHERE user_id=? LIMIT 1");
@@ -37,37 +40,42 @@ if ($is_logged_in && ($package === null || $package === '')) {
 }
 $is_premium = (strtolower((string)$package) === 'premium');
 
-/* ---------- 1) Validate job id ---------- */
-$job_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+/* ---------- Accept both ?job_id= and ?id= ---------- */
+$job_id = 0;
+if (isset($_GET['job_id'])) {
+    $job_id = (int)$_GET['job_id'];
+} elseif (isset($_GET['id'])) {
+    $job_id = (int)$_GET['id'];
+}
+
 if ($job_id <= 0) {
     http_response_code(400);
     $error = "Invalid job id.";
 }
 
-/* ---------- 2) Auto-inactivate if past deadline ---------- */
+/* ---------- Auto-inactivate if past deadline ---------- */
 if (empty($error)) {
     try {
         $today = date('Y-m-d');
         $up = $pdo->prepare("UPDATE jobs SET status='Inactive' WHERE job_id=? AND status='Active' AND deadline < ?");
         $up->execute([$job_id, $today]);
-    } catch (PDOException $e) {
-        /* optional: log */
+    } catch (PDOException $e) { /* optional: log */
     }
 }
 
-/* ---------- 3) Fetch job + company ---------- */
+/* ---------- Fetch job + company ---------- */
 $job = null;
 if (empty($error)) {
     try {
         $sql = "
-          SELECT j.job_id, j.job_title, j.description_detail, j.employment_type, j.requirements,
-                 j.salary, j.location, j.deadline, j.status, j.posted_at,
-                 c.company_id, c.company_name, c.email AS company_email, c.phone AS company_phone, c.logo AS company_logo
-          FROM jobs j
-          JOIN companies c ON c.company_id = j.company_id
-          WHERE j.job_id = ?
-          LIMIT 1
-        ";
+      SELECT j.job_id, j.job_title, j.description_detail, j.employment_type, j.requirements,
+             j.salary, j.location, j.deadline, j.status, j.posted_at,
+             c.company_id, c.company_name, c.email AS company_email, c.phone AS company_phone, c.logo AS company_logo
+      FROM jobs j
+      JOIN companies c ON c.company_id = j.company_id
+      WHERE j.job_id = ?
+      LIMIT 1
+    ";
         $stmt = $pdo->prepare($sql);
         $stmt->execute([$job_id]);
         $job = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -81,12 +89,28 @@ if (empty($error)) {
     }
 }
 
-/* ---------- 4) Status badge class ---------- */
-$badgeClass = "bg-secondary";
+/* ---------- Fetch MY application to this job (if any) ---------- */
+$myApp = null;
+if (empty($error) && $is_logged_in) {
+    try {
+        $s = $pdo->prepare("
+      SELECT application_id, status, applied_at, resume
+      FROM application
+      WHERE user_id=? AND job_id=?
+      ORDER BY applied_at DESC
+      LIMIT 1
+    ");
+        $s->execute([$user_id, $job_id]);
+        $myApp = $s->fetch(PDO::FETCH_ASSOC) ?: null;
+    } catch (PDOException $e) {
+        $myApp = null;
+    }
+}
+
+/* ---------- Status badge (job status) ---------- */
+$jobBadge = "bg-secondary";
 if ($job && isset($job['status'])) {
-    $badgeClass = ($job['status'] === 'Active')
-        ? 'bg-success'
-        : (($job['status'] === 'Closed') ? 'bg-danger' : 'bg-secondary');
+    $jobBadge = ($job['status'] === 'Active') ? 'bg-success' : (($job['status'] === 'Closed') ? 'bg-danger' : 'bg-secondary');
 }
 ?>
 <!DOCTYPE html>
@@ -161,12 +185,20 @@ if ($job && isset($job['status'])) {
                     <div class="col-12 col-lg-8">
                         <div class="card p-4">
                             <div class="d-flex align-items-start">
-                                <img class="logo" src="<?= e($LOGO_DIR . $job['company_logo']) ?>" alt="Company Logo" onerror="this.src='https://via.placeholder.com/72'">
+                                <img class="logo" src="<?= e($LOGO_DIR . ($job['company_logo'] ?? '')) ?>" alt="Company Logo"
+                                    onerror="this.src='https://via.placeholder.com/72'">
                                 <div class="ms-3">
                                     <h2 class="h4 mb-1"><?= e($job['job_title']) ?></h2>
-                                    <div class="d-flex align-items-center gap-2">
+                                    <div class="d-flex align-items-center gap-2 flex-wrap">
                                         <span class="text-muted"><?= e($job['company_name']) ?></span>
-                                        <span class="badge <?= $badgeClass ?>"><?= e($job['status']) ?></span>
+                                        <span class="badge <?= $jobBadge ?>"><?= e($job['status']) ?></span>
+                                        <?php if ($myApp): ?>
+                                            <!-- show my application status -->
+                                            <span class="ms-1">
+                                                <?= app_badge($myApp['status']) ?>
+                                            </span>
+                                            <small class="text-muted">Applied: <?= e(date('Y-m-d', strtotime($myApp['applied_at']))) ?></small>
+                                        <?php endif; ?>
                                     </div>
                                     <div class="meta mt-1">
                                         <small>Location: <?= e($job['location']) ?></small><br>
@@ -194,7 +226,7 @@ if ($job && isset($job['status'])) {
                                 </div>
                                 <div class="col-12 col-md-6 mb-3">
                                     <div class="fw-semibold">Status</div>
-                                    <div><span class="badge <?= $badgeClass ?>"><?= e($job['status']) ?></span></div>
+                                    <div><span class="badge <?= $jobBadge ?>"><?= e($job['status']) ?></span></div>
                                 </div>
                             </div>
 
@@ -211,10 +243,8 @@ if ($job && isset($job['status'])) {
                                 <?php if ($can_apply): ?>
                                     <?php
                                     if (!$is_logged_in) {
-                                        // Not logged in: go to login; after login, router sends to right page
                                         $apply_href = "login.php?next=" . urlencode('resume_entry.php?job_id=' . (int)$job['job_id']);
                                     } else {
-                                        // Logged in: route by package
                                         $apply_href = ($is_premium ? 'resume_premium.php?job_id=' : 'resume.php?job_id=') . (int)$job['job_id'];
                                     }
                                     ?>
@@ -245,7 +275,7 @@ if ($job && isset($job['status'])) {
                             <div class="mb-2"><span class="fw-semibold">Phone:</span> <?= e($job['company_phone']) ?></div>
                             <div class="mb-2"><span class="fw-semibold">Location:</span> <?= e($job['location']) ?></div>
                             <hr>
-                            <a class="btn btn-outline-secondary w-100" href="companies.php">View all companies</a>
+                            <a class="btn btn-outline-secondary w-100" href="all_companies.php">View all companies</a>
                         </div>
                     </div>
                 </div>

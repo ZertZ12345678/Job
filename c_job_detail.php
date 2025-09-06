@@ -84,6 +84,8 @@ if ($job && isset($job['status'])) {
             border-bottom: 1px solid rgba(0, 0, 0, .06);
         }
 
+        
+
         .logo {
             width: 72px;
             height: 72px;

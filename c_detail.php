@@ -109,10 +109,53 @@ if (!$company) {
             color: #22223b;
         }
 
+        /* ===== Navbar brand (JobHive logo) ===== */
         .navbar-brand {
             font-weight: 700;
             color: #ffaa2b !important;
+            text-decoration: none !important;
+            /* prevent underline */
         }
+
+        .navbar-brand:hover {
+            color: #ffaa2b !important;
+            text-decoration: none !important;
+            /* still no underline on hover */
+        }
+
+        /* ===== Navbar links ===== */
+        .navbar-nav .nav-item:not(.dropdown) .nav-link {
+            position: relative;
+            padding-bottom: 4px;
+            transition: color 0.2s ease-in-out;
+            text-decoration: none !important;
+            /* remove default underline */
+        }
+
+        /* yellow underline effect */
+        .navbar-nav .nav-item:not(.dropdown) .nav-link::after {
+            content: "";
+            position: absolute;
+            left: 0;
+            bottom: 0;
+            width: 0%;
+            height: 2px;
+            background-color: #ffaa2b;
+            transition: width 0.25s ease-in-out;
+        }
+
+        /* expand underline on hover OR when active */
+        .navbar-nav .nav-item:not(.dropdown) .nav-link:hover::after,
+        .navbar-nav .nav-item:not(.dropdown) .nav-link.active::after {
+            width: 100%;
+        }
+
+        /* active link stays yellow */
+        .navbar-nav .nav-item:not(.dropdown) .nav-link.active {
+            font-weight: bold;
+            color: #ffaa2b !important;
+        }
+
 
         .company-card {
             border: 0;

@@ -197,6 +197,27 @@ $avatarSrc = $hasPhoto ? ('profile_pics/' . e($user['profile_picture'])) : svg_a
 
         /* hide page scrollbar */
 
+        .navbar-nav .nav-item:not(.dropdown) .nav-link {
+            position: relative;
+            padding-bottom: 4px;
+            transition: color .2s
+        }
+
+        .navbar-nav .nav-item:not(.dropdown) .nav-link::after {
+            content: "";
+            position: absolute;
+            left: 0;
+            bottom: 0;
+            width: 0;
+            height: 2px;
+            background-color: #ffaa2b;
+            transition: width .25s
+        }
+
+        .navbar-nav .nav-item:not(.dropdown) .nav-link:hover::after {
+            width: 100%
+        }
+
         .profile-card {
             width: min(1100px, 96vw);
             margin: 24px auto;
