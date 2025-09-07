@@ -5,6 +5,25 @@ function e($v)
 {
     return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
 }
+
+/* Dynamic Home URL (same rules) */
+$user_id = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null;
+$homeUrl = "index.php";
+$return  = $_GET['return'] ?? null;
+
+if ($return === 'index') {
+    $homeUrl = "index.php";
+} elseif ($return === 'user_home' && $user_id) {
+    $homeUrl = "user_home.php?" . http_build_query(['user_id' => $user_id]);
+} else {
+    $homeUrl = $user_id ? "user_home.php?" . http_build_query(['user_id' => $user_id]) : "index.php";
+}
+
+$returnParam = ($return === 'index' || $return === 'user_home') ? $return : ($user_id ? 'user_home' : 'index');
+$aboutUrl   = "about.php?"   . http_build_query(['return' => $returnParam]);
+$faqUrl     = "faq.php?"     . http_build_query(['return' => $returnParam]);
+$termsUrl   = "terms.php?"   . http_build_query(['return' => $returnParam]);
+$privacyUrl = "privacy.php?" . http_build_query(['return' => $returnParam]); // self
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -16,7 +35,6 @@ function e($v)
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-
     <style>
         :root {
             --jh-gold: #ffaa2b;
@@ -25,65 +43,82 @@ function e($v)
         }
 
         html {
-            scroll-behavior: smooth;
+            scroll-behavior: smooth
         }
 
         body {
-            background: #f8fafc;
+            background: #f8fafc
         }
 
-        /* ---------- HERO (compact) ---------- */
+        .navbar-nav .nav-link {
+            position: relative;
+            padding-bottom: 4px;
+            transition: color .2s
+        }
+
+        .navbar-nav .nav-link::after {
+            content: "";
+            position: absolute;
+            left: 0;
+            bottom: 0;
+            width: 0;
+            height: 2px;
+            background-color: var(--jh-gold);
+            transition: width .25s
+        }
+
+        .navbar-nav .nav-link:hover::after {
+            width: 100%
+        }
+
         .pp-hero {
             background: var(--jh-ink);
             color: #fff;
             padding: 28px 0;
-            text-align: center;
+            text-align: center
         }
 
         .pp-hero h1 {
             margin: 0 0 .25rem;
             font-size: clamp(22px, 3vw, 34px);
-            line-height: 1.2;
+            line-height: 1.2
         }
 
         .pp-hero .lead {
             margin: 0;
             opacity: .9;
-            font-size: clamp(14px, 2.2vw, 18px);
+            font-size: clamp(14px, 2.2vw, 18px)
         }
 
-        /* ---------- LAYOUT ---------- */
         .pp-wrap {
             max-width: 1200px;
-            margin: 0 auto;
+            margin: 0 auto
         }
 
         .pp-main {
-            padding: 24px 0 40px;
+            padding: 24px 0 40px
         }
 
-        /* sticky sidebar TOC (desktop) */
         .pp-aside {
             position: sticky;
-            top: 84px;
+            top: 84px
         }
 
         .pp-card {
             background: #fff;
             border: 1px solid rgba(15, 23, 42, .08);
             border-radius: 1rem;
-            box-shadow: 0 8px 28px rgba(2, 8, 20, .06);
+            box-shadow: 0 8px 28px rgba(2, 8, 20, .06)
         }
 
-        /* TOC list */
         .pp-toc {
             list-style: none;
             padding: 10px 12px;
-            margin: 0;
+            margin: 0
         }
 
         .pp-toc li {
-            margin: 2px 0;
+            margin: 2px 0
         }
 
         .pp-toc a {
@@ -95,7 +130,7 @@ function e($v)
             color: #0f172a;
             text-decoration: none;
             font-weight: 500;
-            border: 1px solid transparent;
+            border: 1px solid transparent
         }
 
         .pp-toc a .pp-idx {
@@ -106,53 +141,48 @@ function e($v)
             align-items: center;
             justify-content: center;
             background: #f1f5f9;
-            font-size: .85rem;
+            font-size: .85rem
         }
 
         .pp-toc a:hover {
             background: #fff8ec;
             border-color: #ffd48a;
-            color: #b45309;
+            color: #b45309
         }
 
         .pp-toc a.active {
             background: #fff4df;
             border-color: #ffc76a;
-            color: #a16207;
+            color: #a16207
         }
 
-        /* mobile TOC drawer button */
         .pp-toc-toggle {
-            display: none;
+            display: none
         }
 
         @media (max-width: 991.98px) {
             .pp-aside {
-                position: static;
+                position: static
             }
 
             .pp-toc-toggle {
                 display: flex;
                 align-items: center;
-                gap: 8px;
+                gap: 8px
             }
 
             .pp-aside .pp-card {
-                display: none;
+                display: none
             }
 
-            /* hidden until toggled */
             .pp-aside.show .pp-card {
-                display: block;
+                display: block
             }
-
-            /* show when toggled */
         }
 
-        /* ---------- CONTENT ---------- */
         .pp-prose {
             color: var(--jh-sub);
-            line-height: 1.75;
+            line-height: 1.75
         }
 
         .pp-prose h2 {
@@ -160,7 +190,7 @@ function e($v)
             margin: 0 0 .5rem;
             display: flex;
             align-items: center;
-            gap: .5rem;
+            gap: .5rem
         }
 
         .pp-kicker {
@@ -174,40 +204,25 @@ function e($v)
             color: #b45309;
             font-weight: 700;
             font-size: .9rem;
-            border: 1px solid #ffd48a;
+            border: 1px solid #ffd48a
         }
 
         .pp-section {
-            padding: 18px 18px;
-            margin-bottom: 16px;
+            padding: 18px;
+            margin-bottom: 16px
         }
 
         .pp-callout {
             border-left: 4px solid var(--jh-gold);
             background: #fff8e1;
             padding: .85rem 1rem;
-            border-radius: .75rem;
+            border-radius: .75rem
         }
 
-        /* back-to-top */
-        .pp-top {
-            position: fixed;
-            right: 16px;
-            bottom: 18px;
-            z-index: 1040;
-            display: none;
-        }
-
-        .pp-top.show {
-            display: block;
-        }
-
-        /* footer */
         .footer {
             background: #0f172a;
             color: #e9ecef;
-            padding: 40px 0 16px;
-            flex-shrink: 0
+            padding: 40px 0 16px
         }
 
         .footer a {
@@ -247,31 +262,26 @@ function e($v)
         .footer small {
             color: #cbd5e1
         }
-
-
     </style>
 </head>
 
 <body>
-
-    <!-- ===== KEEP YOUR EXISTING NAVBAR EXACTLY AS-IS ===== -->
+    <!-- Navbar (only required items) -->
     <nav class="navbar navbar-expand-lg bg-white shadow-sm">
         <div class="container">
-            <a class="navbar-brand fw-bold text-warning" href="index.php">JobHive</a>
+            <a class="navbar-brand fw-bold text-warning" href="<?= e($homeUrl) ?>">JobHive</a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navP"><span class="navbar-toggler-icon"></span></button>
             <div class="collapse navbar-collapse justify-content-end" id="navP">
                 <ul class="navbar-nav">
-                    <li class="nav-item"><a class="nav-link" href="about.php">About</a></li>
-                    <li class="nav-item"><a class="nav-link" href="faq.php">FAQ</a></li>
-                    <li class="nav-item"><a class="nav-link" href="terms.php">Terms</a></li>
-                    <li class="nav-item"><a class="nav-link" href="login.php">Login</a></li>
-                    <li class="nav-item"><a class="btn btn-warning ms-2 text-white" href="sign_up.php">Register</a></li>
-                    <li class="nav-item"><a class="btn btn-outline-warning ms-2" href="c_sign_up.php">Company Register</a></li>
+                    <li class="nav-item"><a class="nav-link" href="<?= e($homeUrl) ?>">Home</a></li>
+                    <li class="nav-item"><a class="nav-link" href="<?= e($aboutUrl) ?>">About</a></li>
+                    <li class="nav-item"><a class="nav-link" href="<?= e($faqUrl) ?>">FAQ</a></li>
+                    <li class="nav-item"><a class="nav-link" href="<?= e($termsUrl) ?>">Terms &amp; Conditions</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="<?= e($privacyUrl) ?>">Privacy Policy</a></li>
                 </ul>
             </div>
         </div>
     </nav>
-    <!-- ==================================================== -->
 
     <main>
         <section class="pp-hero">
@@ -289,7 +299,6 @@ function e($v)
                         <button class="btn btn-outline-warning w-100 pp-toc-toggle mb-2" type="button">
                             <i class="bi bi-list"></i> Contents
                         </button>
-
                         <div class="pp-aside pp-card">
                             <ul id="ppToc" class="pp-toc">
                                 <li><a href="#scope"><span class="pp-idx">1</span> Scope</a></li>
@@ -394,12 +403,12 @@ function e($v)
         </section>
 
         <!-- back to top -->
-        <button id="ppTop" class="btn btn-warning rounded-circle pp-top" aria-label="Back to top">
+        <button id="ppTop" class="btn btn-warning rounded-circle pp-top" style="position:fixed;right:16px;bottom:18px;display:none">
             <i class="bi bi-arrow-up-short fs-4 text-white"></i>
         </button>
     </main>
 
-    <!-- Footer -->
+    <!-- Footer (unchanged) -->
     <footer class="footer mt-auto">
         <div class="container">
             <div class="row gy-4">
@@ -407,48 +416,31 @@ function e($v)
                     <div class="brand h4 mb-2">JobHive</div>
                     <p class="mb-2">Find jobs. Apply fast. Get hired.</p>
                     <div class="social">
-                        <a href="#" aria-label="Facebook"><i class="bi bi-facebook"></i></a>
-                        <a href="#" aria-label="Twitter / X"><i class="bi bi-twitter-x"></i></a>
-                        <a href="#" aria-label="LinkedIn"><i class="bi bi-linkedin"></i></a>
+                        <a href="#"><i class="bi bi-facebook"></i></a>
+                        <a href="#"><i class="bi bi-twitter-x"></i></a>
+                        <a href="#"><i class="bi bi-linkedin"></i></a>
                     </div>
                 </div>
                 <div class="col-md-3">
                     <h6 class="text-uppercase text-white-50 mb-3">Quick Links</h6>
                     <ul class="list-unstyled">
-                        <li class="mb-2"><a href="index.php">Home</a></li>
-                        <li class="mb-2"><a href="login.php">Login</a></li>
-                        <li class="mb-2"><a href="sign_up.php">Register</a></li>
-                        <li class="mb-2"><a href="c_sign_up.php">Company Register</a></li>
-                        <li class="mb-2"><a href="index_all_companies.php">All Companies</a></li>
+                        <li class="mb-2"><a href="<?= e($homeUrl) ?>">Home</a></li>
+                        <li class="mb-2"><a href="<?= e($aboutUrl) ?>">About</a></li>
+                        <li class="mb-2"><a href="<?= e($faqUrl) ?>">FAQ</a></li>
+                        <li class="mb-2"><a href="<?= e($privacyUrl) ?>">Privacy Policy</a></li>
+                        <li class="mb-2"><a href="<?= e($termsUrl) ?>">Terms &amp; Conditions</a></li>
                     </ul>
                 </div>
-
-
-                <div class="col-md-3">
-                    <br>
-                    <ul class="list-unstyled">
-                        <li class="mb-2"><a href="faq.php">FAQ</a></li>
-                        <li class="mb-2"><a href="about.php">About Us</a></li>
-                        <li class="mb-2"><a href="privacy.php">Privacy Policy</a></li>
-                        <li class="mb-2"><a href="terms.php">Terms &amp; Conditions</a></li>
-
-                    </ul>
-                </div>
-
-
-
+                <div class="col-md-3"><br></div>
                 <div class="col-md-3">
                     <h6 class="text-uppercase text-white-50 mb-3">Contact</h6>
                     <ul class="list-unstyled">
                         <li class="mb-2"><i class="bi bi-geo-alt me-2"></i>Yangon, Myanmar</li>
-                        <li class="mb-2"><i class="bi bi-envelope me-2"></i> <a href="https://mail.google.com/mail/?view=cm&fs=1&to=phonethawnaing11305@gmail.com" target="_blank" rel="noopener">
-                                phonethawnaing11305@gmail.com
-                            </a></li>
+                        <li class="mb-2"><i class="bi bi-envelope me-2"></i><a href="https://mail.google.com/mail/?view=cm&fs=1&to=phonethawnaing11305@gmail.com" target="_blank" rel="noopener">phonethawnaing11305@gmail.com</a></li>
                         <li class="mb-2"><i class="bi bi-telephone me-2"></i><a href="tel:+95957433847">+95 957 433 847</a></li>
                     </ul>
                 </div>
             </div>
-
             <hr>
             <div class="d-flex flex-column flex-md-row justify-content-between align-items-center">
                 <small>&copy; <?= date('Y') ?> JobHive. All rights reserved.</small>
@@ -459,13 +451,10 @@ function e($v)
 
     <script>
         // Mobile TOC toggle
-        const tocToggle = document.querySelector('.pp-toc-toggle');
-        const aside = document.querySelector('.pp-aside')?.parentElement; // aside column
-        tocToggle?.addEventListener('click', () => {
-            document.querySelector('.pp-aside')?.parentElement.classList.toggle('show');
+        document.querySelector('.pp-toc-toggle')?.addEventListener('click', () => {
+            document.querySelector('.pp-aside')?.classList.toggle('show');
         });
-
-        // Active link highlight while scrolling
+        // Active link highlight
         const links = Array.from(document.querySelectorAll('#ppToc a'));
         const sections = links.map(a => document.querySelector(a.getAttribute('href')));
         const markActive = () => {
@@ -480,14 +469,12 @@ function e($v)
             passive: true
         });
         markActive();
-
         // Back to top
         const topBtn = document.getElementById('ppTop');
-        const onScroll = () => {
-            if (window.scrollY > 300) topBtn.classList.add('show');
-            else topBtn.classList.remove('show');
-        };
-        document.addEventListener('scroll', onScroll, {
+        document.addEventListener('scroll', () => {
+            if (window.scrollY > 300) topBtn.style.display = 'block';
+            else topBtn.style.display = 'none';
+        }, {
             passive: true
         });
         topBtn?.addEventListener('click', () => window.scrollTo({

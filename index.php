@@ -524,10 +524,10 @@ $LOGO_DIR = "company_logos/";
         <div class="col-md-3">
           <h6 class="text-uppercase text-white-50 mb-3">Contact</h6>
           <ul class="list-unstyled">
-            <li class="mb-2"><a href="faq.php">FAQ</a></li>
-            <li class="mb-2"><a href="about.php">About Us</a></li>
-            <li class="mb-2"><a href="privacy.php">Privacy Policy</a></li>
-            <li class="mb-2"><a href="terms.php">Terms &amp; Conditions</a></li>
+            <li class="mb-2"><a href="faq.php?return=index">FAQ</a></li>
+            <li class="mb-2"><a href="about.php?return=index">About</a></li>
+            <li class="mb-2"><a href="privacy.php?return=index">Privacy Policy</a></li>
+            <li class="mb-2"><a href="terms.php?return=index">Terms &amp; Conditions</a></li>
 
           </ul>
         </div>

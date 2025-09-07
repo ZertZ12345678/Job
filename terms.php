@@ -5,6 +5,25 @@ function e($v)
 {
     return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
 }
+
+/* Dynamic Home URL (same rules) */
+$user_id = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null;
+$homeUrl = "index.php";
+$return  = $_GET['return'] ?? null;
+
+if ($return === 'index') {
+    $homeUrl = "index.php";
+} elseif ($return === 'user_home' && $user_id) {
+    $homeUrl = "user_home.php?" . http_build_query(['user_id' => $user_id]);
+} else {
+    $homeUrl = $user_id ? "user_home.php?" . http_build_query(['user_id' => $user_id]) : "index.php";
+}
+
+$returnParam = ($return === 'index' || $return === 'user_home') ? $return : ($user_id ? 'user_home' : 'index');
+$aboutUrl   = "about.php?"   . http_build_query(['return' => $returnParam]);
+$faqUrl     = "faq.php?"     . http_build_query(['return' => $returnParam]);
+$termsUrl   = "terms.php?"   . http_build_query(['return' => $returnParam]); // self
+$privacyUrl = "privacy.php?" . http_build_query(['return' => $returnParam]);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -20,7 +39,7 @@ function e($v)
         :root {
             --jh-gold: #ffaa2b;
             --jh-gold-2: #ffc107;
-            --jh-dark: #1a202c;
+            --jh-dark: #1a202c
         }
 
         html,
@@ -43,11 +62,10 @@ function e($v)
             flex: 1 0 auto
         }
 
-        /* ===== Navbar link underline on hover ===== */
         .navbar-nav .nav-link {
             position: relative;
             padding-bottom: 4px;
-            transition: color 0.2s ease-in-out;
+            transition: color .2s
         }
 
         .navbar-nav .nav-link::after {
@@ -55,50 +73,35 @@ function e($v)
             position: absolute;
             left: 0;
             bottom: 0;
-            width: 0%;
+            width: 0;
             height: 2px;
             background-color: var(--jh-gold);
-            transition: width 0.25s ease-in-out;
+            transition: width .25s
         }
 
         .navbar-nav .nav-link:hover::after {
-            width: 100%;
+            width: 100%
         }
 
-        /* Compact hero */
         .page-hero {
             background: #0f172a;
             color: #fff;
             padding: 24px 0;
-            text-align: center;
+            text-align: center
         }
 
         .page-hero h1 {
             margin: 0 0 .25rem;
-            /* remove extra top/bottom space */
             font-size: clamp(22px, 3vw, 34px);
-            /* scale smoothly */
-            line-height: 1.2;
+            line-height: 1.2
         }
 
         .page-hero .lead {
             margin: 0;
             color: #f8fafc;
             opacity: .9;
-            font-size: clamp(14px, 2.2vw, 18px);
+            font-size: clamp(14px, 2.2vw, 18px)
         }
-
-        /* tighten section spacing a bit so the page breathes less */
-        .content-wrap {
-            max-width: 900px;
-            margin: 0 auto;
-        }
-
-        .section-card {
-            padding: 1.25rem;
-            margin-bottom: 1rem;
-        }
-
 
         .content-wrap {
             max-width: 900px;
@@ -128,10 +131,7 @@ function e($v)
         }
 
         .toc a {
-            text-decoration: none
-        }
-
-        .toc a {
+            text-decoration: none;
             color: #374151;
             transition: color .2s
         }
@@ -140,12 +140,10 @@ function e($v)
             color: #ff9800
         }
 
-        /* footer */
         .footer {
             background: var(--jh-dark);
             color: #e9ecef;
-            padding: 40px 0 16px;
-            flex-shrink: 0
+            padding: 40px 0 16px
         }
 
         .footer a {
@@ -189,18 +187,18 @@ function e($v)
 </head>
 
 <body>
-    <!-- Navbar -->
+    <!-- Navbar (only required items) -->
     <nav class="navbar navbar-expand-lg bg-white shadow-sm">
         <div class="container">
-            <a class="navbar-brand fw-bold text-warning" href="index.php">JobHive</a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#nav3"><span class="navbar-toggler-icon"></span></button>
-            <div class="collapse navbar-collapse justify-content-end" id="nav3">
+            <a class="navbar-brand fw-bold text-warning" href="<?= e($homeUrl) ?>">JobHive</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navT"><span class="navbar-toggler-icon"></span></button>
+            <div class="collapse navbar-collapse justify-content-end" id="navT">
                 <ul class="navbar-nav">
-                    <li class="nav-item"><a class="nav-link" href="about.php">About</a></li>
-                    <li class="nav-item"><a class="nav-link" href="faq.php">FAQ</a></li>
-                    <li class="nav-item"><a class="nav-link" href="login.php">Login</a></li>
-                    <li class="nav-item"><a class="btn btn-warning ms-2 text-white" href="sign_up.php">Register</a></li>
-                    <li class="nav-item"><a class="btn btn-outline-warning ms-2" href="c_sign_up.php">Company Register</a></li>
+                    <li class="nav-item"><a class="nav-link" href="<?= e($homeUrl) ?>">Home</a></li>
+                    <li class="nav-item"><a class="nav-link" href="<?= e($aboutUrl) ?>">About</a></li>
+                    <li class="nav-item"><a class="nav-link" href="<?= e($faqUrl) ?>">FAQ</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="<?= e($termsUrl) ?>">Terms &amp; Conditions</a></li>
+                    <li class="nav-item"><a class="nav-link" href="<?= e($privacyUrl) ?>">Privacy Policy</a></li>
                 </ul>
             </div>
         </div>
@@ -260,7 +258,7 @@ function e($v)
 
                 <div class="section-card prose" id="privacy">
                     <h2>6. Privacy</h2>
-                    <p>Your data is handled according to our Privacy Policy (see this page). We use personal data to operate and improve JobHive.</p>
+                    <p>Your data is handled according to our Privacy Policy. We use personal data to operate and improve JobHive.</p>
                 </div>
 
                 <div class="section-card prose" id="conduct">
@@ -289,19 +287,15 @@ function e($v)
 
                 <div class="section-card prose" id="contact">
                     <h2>11. Contact</h2>
-                    <p>Questions? Email <a href="https://mail.google.com/mail/?view=cm&fs=1&to=phonethawnaing11305@gmail.com" target="_blank" rel="noopener">
-                            phonethawnaing11305@gmail.com
-                        </a>.</p>
+                    <p>Questions? Email <a href="https://mail.google.com/mail/?view=cm&fs=1&to=phonethawnaing11305@gmail.com" target="_blank" rel="noopener">phonethawnaing11305@gmail.com</a>.</p>
                 </div>
 
-                <div class="section-card">
-                    Tip: Use the <strong>table of contents</strong> above—smooth scroll will take you to any section.
-                </div>
+                <div class="section-card">Tip: Use the <strong>table of contents</strong> above—smooth scroll will take you to any section.</div>
             </div>
         </section>
     </main>
 
-    <!-- Footer -->
+    <!-- Footer (unchanged) -->
     <footer class="footer mt-auto">
         <div class="container">
             <div class="row gy-4">
@@ -309,48 +303,31 @@ function e($v)
                     <div class="brand h4 mb-2">JobHive</div>
                     <p class="mb-2">Find jobs. Apply fast. Get hired.</p>
                     <div class="social">
-                        <a href="#" aria-label="Facebook"><i class="bi bi-facebook"></i></a>
-                        <a href="#" aria-label="Twitter / X"><i class="bi bi-twitter-x"></i></a>
-                        <a href="#" aria-label="LinkedIn"><i class="bi bi-linkedin"></i></a>
+                        <a href="#"><i class="bi bi-facebook"></i></a>
+                        <a href="#"><i class="bi bi-twitter-x"></i></a>
+                        <a href="#"><i class="bi bi-linkedin"></i></a>
                     </div>
                 </div>
                 <div class="col-md-3">
                     <h6 class="text-uppercase text-white-50 mb-3">Quick Links</h6>
                     <ul class="list-unstyled">
-                        <li class="mb-2"><a href="index.php">Home</a></li>
-                        <li class="mb-2"><a href="login.php">Login</a></li>
-                        <li class="mb-2"><a href="sign_up.php">Register</a></li>
-                        <li class="mb-2"><a href="c_sign_up.php">Company Register</a></li>
-                        <li class="mb-2"><a href="index_all_companies.php">All Companies</a></li>
+                        <li class="mb-2"><a href="<?= e($homeUrl) ?>">Home</a></li>
+                        <li class="mb-2"><a href="<?= e($aboutUrl) ?>">About</a></li>
+                        <li class="mb-2"><a href="<?= e($faqUrl) ?>">FAQ</a></li>
+                        <li class="mb-2"><a href="<?= e($privacyUrl) ?>">Privacy Policy</a></li>
+                        <li class="mb-2"><a href="<?= e($termsUrl) ?>">Terms &amp; Conditions</a></li>
                     </ul>
                 </div>
-
-
-                <div class="col-md-3">
-                    <br>
-                    <ul class="list-unstyled">
-                        <li class="mb-2"><a href="faq.php">FAQ</a></li>
-                        <li class="mb-2"><a href="about.php">About Us</a></li>
-                        <li class="mb-2"><a href="pri">Privacy Policy</a></li>
-                        <li class="mb-2"><a href="terms.php">Terms &amp; Conditions</a></li>
-
-                    </ul>
-                </div>
-
-
-
+                <div class="col-md-3"><br></div>
                 <div class="col-md-3">
                     <h6 class="text-uppercase text-white-50 mb-3">Contact</h6>
                     <ul class="list-unstyled">
                         <li class="mb-2"><i class="bi bi-geo-alt me-2"></i>Yangon, Myanmar</li>
-                        <li class="mb-2"><i class="bi bi-envelope me-2"></i> <a href="https://mail.google.com/mail/?view=cm&fs=1&to=phonethawnaing11305@gmail.com" target="_blank" rel="noopener">
-                                phonethawnaing11305@gmail.com
-                            </a></li>
+                        <li class="mb-2"><i class="bi bi-envelope me-2"></i><a href="https://mail.google.com/mail/?view=cm&fs=1&to=phonethawnaing11305@gmail.com" target="_blank" rel="noopener">phonethawnaing11305@gmail.com</a></li>
                         <li class="mb-2"><i class="bi bi-telephone me-2"></i><a href="tel:+95957433847">+95 957 433 847</a></li>
                     </ul>
                 </div>
             </div>
-
             <hr>
             <div class="d-flex flex-column flex-md-row justify-content-between align-items-center">
                 <small>&copy; <?= date('Y') ?> JobHive. All rights reserved.</small>

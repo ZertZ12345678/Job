@@ -523,20 +523,20 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
         <div class="col-md-3">
           <h6 class="text-uppercase text-white-50 mb-3">Quick Links</h6>
           <ul class="list-unstyled">
-            <li class="mb-2"><a href="index.php">Home</a></li>
-            <li class="mb-2"><a href="login.php">Login</a></li>
+            <li class="mb-2"><a href="user_home.php">Home</a></li>
             <li class="mb-2"><a href="sign_up.php">Register</a></li>
             <li class="mb-2"><a href="c_sign_up.php">Company Register</a></li>
-            <li class="mb-2"><a href="index_all_companies.php">All Companies</a></li>
+            <li class="mb-2"><a href="all_companies.php">All Companies</a></li>
+            <li class="mb-2"><a href="logout.php">Logout</a></li>
           </ul>
         </div>
         <div class="col-md-3">
           <h6 class="text-uppercase text-white-50 mb-3">Company</h6>
           <ul class="list-unstyled">
-            <li class="mb-2"><a href="faq.php">FAQ</a></li>
-            <li class="mb-2"><a href="about.php">About Us</a></li>
-            <li class="mb-2"><a href="privacy.php">Privacy Policy</a></li>
-            <li class="mb-2"><a href="terms.php">Terms &amp; Conditions</a></li>
+            <li class="mb-2"><a href="faq.php?return=user_home">FAQ</a></li>
+            <li class="mb-2"><a href="about.php?return=user_home">About</a></li>
+            <li class="mb-2"><a href="privacy.php?return=user_home">Privacy Policy</a></li>
+            <li class="mb-2"><a href="terms.php?return=user_home">Terms &amp; Conditions</a></li>
           </ul>
         </div>
         <div class="col-md-3">
@@ -920,7 +920,7 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
         const typingIndicator = showTypingIndicator();
 
         // Send to server and get response
-        fetch('chatbot.php', {
+        fetch('user_chatbot.php', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/x-www-form-urlencoded',
@@ -948,7 +948,7 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
           });
       });
 
-    
+
     });
   </script>
 </body>
