@@ -253,7 +253,6 @@ unset($_SESSION['show_member_after_login']);
       padding: .3rem 1.15rem;
       font-weight: 500;
       text-decoration: none;
-      /* ✅ remove underline */
     }
 
     .popular-btn:hover {
@@ -261,9 +260,7 @@ unset($_SESSION['show_member_after_login']);
       color: #ff8800;
       border-color: #ff8800;
       text-decoration: none;
-      /* ✅ keep underline off even on hover */
     }
-
 
     .badge-dot {
       position: absolute;
@@ -405,7 +402,6 @@ unset($_SESSION['show_member_after_login']);
       transform: none
     }
 
-    /* Actions in the notification card */
     .app-actions {
       display: flex;
       gap: .42rem;
@@ -413,14 +409,12 @@ unset($_SESSION['show_member_after_login']);
       align-items: center
     }
 
-    /* Small action buttons */
     .btn-icon-sm {
       padding: .28rem .55rem;
       font-size: .84rem;
       line-height: 1
     }
 
-    /* Detail button look */
     .btn-detail {
       background: #0dcaf0;
       color: #fff;
@@ -431,7 +425,6 @@ unset($_SESSION['show_member_after_login']);
       background: #0bb8db;
       color: #fff
     }
-
 
     .footer {
       background: var(--jh-dark);
@@ -483,6 +476,25 @@ unset($_SESSION['show_member_after_login']);
       .inbox-panel {
         width: 100vw
       }
+    }
+
+    /* Chatbot styles */
+    #chatbot-container {
+      font-family: inherit;
+    }
+
+    .bot-message,
+    .user-message {
+      margin-bottom: 1rem;
+    }
+
+    .user-message .d-flex {
+      justify-content: flex-end;
+    }
+
+    .user-message .bg-light {
+      background-color: #ffc107 !important;
+      color: #000;
     }
   </style>
 </head>
@@ -608,7 +620,6 @@ unset($_SESSION['show_member_after_login']);
                   href="app_user_detail.php?application_id=<?= (int)$a['application_id'] ?>">
                   Detail
                 </a>
-
                 <?php if ($isUnread): ?>
                   <form method="post" class="m-0 d-inline">
                     <button class="btn btn-light btn-icon-sm js-mark-one"
@@ -621,7 +632,6 @@ unset($_SESSION['show_member_after_login']);
                   <button class="btn btn-light btn-icon-sm" disabled>Marked</button>
                 <?php endif; ?>
               </div>
-
             </div>
           </div>
       <?php endforeach;
@@ -721,7 +731,7 @@ unset($_SESSION['show_member_after_login']);
         <div class="modal-body pt-2">
           <div class="text-center">
             <div class="mb-2">
-              <div class="fw-semibold">You’re currently on</div>
+              <div class="fw-semibold">You're currently on</div>
               <span class="badge rounded-pill <?= $badgeClass ?>"><?= e(ucfirst($company_member)) ?></span>
               <span class="ms-2 text-muted">(<?= $totalPosts ?> posts)</span>
             </div>
@@ -752,6 +762,40 @@ unset($_SESSION['show_member_after_login']);
       </div>
     </div>
   </div>
+
+  <!-- Chatbot Interface -->
+  <div id="chatbot-container">
+    <button id="chatbot-toggle" class="btn btn-warning rounded-circle position-fixed" style="bottom: 20px; right: 20px; width: 60px; height: 60px; z-index: 1050; box-shadow: 0 2px 10px rgba(0,0,0,0.2);">
+      <i class="bi bi-chat-dots-fill"></i>
+    </button>
+
+    <div id="chatbot-window" class="card position-fixed" style="bottom: 90px; right: 20px; width: 350px; max-width: 90vw; display: none; z-index: 1050; box-shadow: 0 5px 15px rgba(0,0,0,0.2);">
+      <div class="card-header d-flex justify-content-between align-items-center bg-warning text-dark">
+        <span class="fw-bold">JobHive Assistant</span>
+        <button id="chatbot-close" class="btn btn-sm btn-light">
+          <i class="bi bi-x-lg"></i>
+        </button>
+      </div>
+      <div id="chatbot-messages" class="card-body" style="height: 300px; overflow-y: auto;">
+        <div class="text-center text-muted mb-3">How can I help you today?</div>
+        <div class="bot-message mb-3">
+          <div class="d-flex align-items-start">
+            <div class="avatar-initials me-2" style="width: 32px; height: 32px; font-size: 0.8rem;">JH</div>
+            <div class="bg-light p-2 rounded" style="max-width: 80%;">
+              Hello! I'm the JobHive assistant. I can help you with posting jobs, managing applications, or account questions.
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card-footer d-flex">
+        <input type="text" id="chatbot-input" class="form-control me-2" placeholder="Type a message...">
+        <button id="chatbot-send" class="btn btn-warning">
+          <i class="bi bi-send"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <script>
     const panel = document.getElementById('inboxPanel');
     const backdrop = document.getElementById('backdrop');
@@ -896,6 +940,147 @@ unset($_SESSION['show_member_after_login']);
         }
       });
     })();
+  </script>
+
+  <!-- Chatbot JavaScript -->
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const toggleBtn = document.getElementById('chatbot-toggle');
+      const closeBtn = document.getElementById('chatbot-close');
+      const chatWindow = document.getElementById('chatbot-window');
+      const chatInput = document.getElementById('chatbot-input');
+      const sendBtn = document.getElementById('chatbot-send');
+      const messagesContainer = document.getElementById('chatbot-messages');
+
+      // Toggle chat window
+      toggleBtn.addEventListener('click', function() {
+        chatWindow.style.display = chatWindow.style.display === 'block' ? 'none' : 'block';
+        if (chatWindow.style.display === 'block') {
+          chatInput.focus();
+        }
+      });
+
+      closeBtn.addEventListener('click', function() {
+        chatWindow.style.display = 'none';
+      });
+
+      // Send message function
+      function sendMessage() {
+        const message = chatInput.value.trim();
+        if (message === '') return;
+
+        // Add user message
+        const userMessage = document.createElement('div');
+        userMessage.className = 'user-message';
+        userMessage.innerHTML = `
+            <div class="d-flex align-items-start">
+                <div class="bg-light p-2 rounded" style="max-width: 80%;">${message}</div>
+                <div class="avatar-initials ms-2" style="width: 32px; height: 32px; font-size: 0.8rem;"><?= e(name_initials($company_name)) ?></div>
+            </div>
+        `;
+        messagesContainer.appendChild(userMessage);
+
+        // Clear input
+        chatInput.value = '';
+
+        // Show typing indicator
+        const typingIndicator = document.createElement('div');
+        typingIndicator.className = 'bot-message mb-3';
+        typingIndicator.innerHTML = `
+            <div class="d-flex align-items-start">
+                <div class="avatar-initials me-2" style="width: 32px; height: 32px; font-size: 0.8rem;">JH</div>
+                <div class="bg-light p-2 rounded" style="max-width: 80%;">
+                    <div class="spinner-border spinner-border-sm me-2" role="status"></span>
+                    Typing...
+                </div>
+            </div>
+        `;
+        messagesContainer.appendChild(typingIndicator);
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+        // Send to server and get response
+        fetch('company_chatbot.php', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            credentials: 'same-origin', // Ensure cookies are sent
+            body: 'message=' + encodeURIComponent(message)
+          })
+          .then(response => response.json())
+          .then(data => {
+            // Remove typing indicator
+            messagesContainer.removeChild(typingIndicator);
+
+            // Add bot response
+            const botMessage = document.createElement('div');
+            botMessage.className = 'bot-message mb-3';
+
+            let responseHtml = `
+                <div class="d-flex align-items-start">
+                    <div class="avatar-initials me-2" style="width: 32px; height: 32px; font-size: 0.8rem;">JH</div>
+                    <div class="bg-light p-2 rounded" style="max-width: 80%;">${data.response}</div>
+                </div>
+            `;
+
+            botMessage.innerHTML = responseHtml;
+            messagesContainer.appendChild(botMessage);
+
+            // Add buttons if available
+            if (data.buttons && data.buttons.length > 0) {
+              const buttonsDiv = document.createElement('div');
+              buttonsDiv.className = 'd-flex flex-wrap gap-2 mt-2';
+
+              data.buttons.forEach(button => {
+                const buttonEl = document.createElement('button');
+                buttonEl.className = 'btn btn-sm btn-outline-warning';
+                buttonEl.textContent = button.text;
+
+                if (button.href && button.href !== 'javascript:void(0)') {
+                  buttonEl.addEventListener('click', function() {
+                    window.location.href = button.href;
+                  });
+                } else if (button.onclick) {
+                  buttonEl.setAttribute('onclick', button.onclick);
+                }
+
+                buttonsDiv.appendChild(buttonEl);
+              });
+
+              botMessage.appendChild(buttonsDiv);
+            }
+
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+          })
+          .catch(error => {
+            console.error('Error:', error);
+            // Remove typing indicator
+            messagesContainer.removeChild(typingIndicator);
+
+            // Show error message
+            const errorMessage = document.createElement('div');
+            errorMessage.className = 'bot-message mb-3';
+            errorMessage.innerHTML = `
+                <div class="d-flex align-items-start">
+                    <div class="avatar-initials me-2" style="width: 32px; height: 32px; font-size: 0.8rem;">JH</div>
+                    <div class="bg-light p-2 rounded" style="max-width: 80%;">Sorry, I'm having trouble responding right now. Please try again later.</div>
+                </div>
+            `;
+            messagesContainer.appendChild(errorMessage);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+          });
+
+        // Scroll to bottom
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      }
+
+      sendBtn.addEventListener('click', sendMessage);
+      chatInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+          sendMessage();
+        }
+      });
+    });
   </script>
 </body>
 
