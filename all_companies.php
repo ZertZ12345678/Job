@@ -3,13 +3,22 @@
 require_once "connect.php";
 if (session_status() === PHP_SESSION_NONE) session_start();
 
-/* ===== Guard ===== */
-if (!isset($_SESSION['user_id'])) {
+/* ===== Allow user OR company (block only unauthenticated) ===== */
+$isUser    = isset($_SESSION['user_id']);
+$isCompany = isset($_SESSION['company_id']);
+
+if (!$isUser && !$isCompany) {
     header("Location: login.php");
     exit;
 }
-$user_id   = (int)($_SESSION['user_id'] ?? 0);
-$user_name = trim($_SESSION['full_name'] ?? 'User');
+
+$user_id      = (int)($_SESSION['user_id'] ?? 0);
+$user_name    = trim($_SESSION['full_name'] ?? 'User');
+$company_id   = (int)($_SESSION['company_id'] ?? 0);
+$company_name = trim($_SESSION['company_name'] ?? 'Company');
+
+/* Home URL per role */
+$homeUrl = $isUser ? 'user_home.php' : 'company_home.php';
 
 /* ===== Helpers ===== */
 function e($v)
@@ -59,9 +68,7 @@ function svg_initials_circle_avatar(string $text, int $size = 40): string
     $svg = <<<SVG
 <svg xmlns="http://www.w3.org/2000/svg" width="{$size}" height="{$size}">
   <defs><clipPath id="clipCircle"><circle cx="{$r}" cy="{$r}" r="{$r}"/></clipPath></defs>
-  <g clip-path="url(#clipCircle)">
-    <rect width="100%" height="100%" fill="{$bg}"/>
-  </g>
+  <g clip-path="url(#clipCircle)"><rect width="100%" height="100%" fill="{$bg}"/></g>
   <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle"
         font-family="Arial, sans-serif"
         font-size="{$fontSize}" fill="{$fg}" font-weight="700">{$ini}</text>
@@ -75,39 +82,34 @@ function company_logo_src(?string $filename, string $company_name, string $dir =
 {
     $file = trim((string)$filename);
     if ($file !== '') {
-        $safe = basename($file);                      // prevent path traversal / stored path
+        $safe = basename($file);
         $web  = rtrim($dir, '/') . '/' . $safe;
         $fs   = __DIR__ . '/' . $web;
         if (is_readable($fs)) {
-            $ver = @filemtime($fs) ?: time();         // cache-bust when logo changes
+            $ver = @filemtime($fs) ?: time();
             return $web . '?v=' . $ver;
         }
     }
     return svg_initials_avatar($company_name, 48);
 }
 
-/**
- * User profile photo (show real file if exists; else initials SVG).
- * Adds cache-busting query (?v=filemtime) so when user uploads/replaces the same filename,
- * the browser shows the NEW image immediately instead of the cached one.
- */
+/** User profile photo (with cache-busting) */
 function user_photo_src(?string $filename, string $full_name, string $dir = "profile_pics"): string
 {
     $file = trim((string)$filename);
     if ($file !== '') {
-        $safe = basename($file);                      // handle cases where DB stored full/relative paths
+        $safe = basename($file);
         $web  = rtrim($dir, '/') . '/' . $safe;
         $fs   = __DIR__ . '/' . $web;
         if (is_readable($fs)) {
-            $ver = @filemtime($fs) ?: time();         // cache-bust after upload/change
-            return $web . '?v=' . $ver;               // ✅ real uploaded photo
+            $ver = @filemtime($fs) ?: time();
+            return $web . '?v=' . $ver;
         }
     }
-    // ❌ no valid file → inline initials avatar
     return svg_initials_circle_avatar($full_name, 40);
 }
 
-/* ===== Query companies ===== */
+/* ===== Query companies (table data) ===== */
 $stmt = $pdo->query("
   SELECT company_id, company_name, email, phone, address, logo
   FROM companies
@@ -115,16 +117,29 @@ $stmt = $pdo->query("
 ");
 $companies = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
 
-/* ===== Current user (for navbar avatar) ===== */
-try {
-    // NOTE: ensure your users table column is named `photo`. If it's different (e.g., profile_photo),
-    // change the column name here accordingly.
-    $u = $pdo->prepare("SELECT profile_picture FROM users WHERE user_id = ?");
-    $u->execute([$user_id]);
-    $row = $u->fetch(PDO::FETCH_ASSOC);
-    $navPhoto = user_photo_src($row['profile_picture'] ?? '', $user_name);
-} catch (Throwable $e) {
-    $navPhoto = user_photo_src(null, $user_name);
+/* ===== Navbar avatar/name per role ===== */
+$navName  = $isUser ? $user_name : $company_name;
+$navPhoto = '';
+
+if ($isUser) {
+    try {
+        $u = $pdo->prepare("SELECT profile_picture FROM users WHERE user_id = ?");
+        $u->execute([$user_id]);
+        $row = $u->fetch(PDO::FETCH_ASSOC);
+        $navPhoto = user_photo_src($row['profile_picture'] ?? '', $user_name);
+    } catch (Throwable $e) {
+        $navPhoto = user_photo_src(null, $user_name);
+    }
+} else {
+    // company avatar
+    try {
+        $c = $pdo->prepare("SELECT logo, company_name FROM companies WHERE company_id = ?");
+        $c->execute([$company_id]);
+        $crow = $c->fetch(PDO::FETCH_ASSOC) ?: [];
+        $navPhoto = company_logo_src($crow['logo'] ?? '', $crow['company_name'] ?? $company_name);
+    } catch (Throwable $e) {
+        $navPhoto = company_logo_src('', $company_name);
+    }
 }
 ?>
 <!doctype html>
@@ -145,7 +160,6 @@ try {
             color: #22223b;
         }
 
-        /* Navbar brand + links */
         .navbar-brand {
             font-weight: bold;
             color: #ffaa2b !important;
@@ -156,7 +170,6 @@ try {
             color: #ffaa2b !important;
         }
 
-        /* underline only on main nav links, NOT profile dropdown */
         .navbar-nav .nav-item:not(.dropdown) .nav-link {
             position: relative;
             padding-bottom: 4px;
@@ -178,7 +191,6 @@ try {
             width: 100%;
         }
 
-        /* Nav avatar + name */
         .nav-profile img {
             width: 36px;
             height: 36px;
@@ -186,7 +198,6 @@ try {
             border-radius: 50%;
             border: 2px solid #ffaa2b;
             background: #fff;
-            /* looks nicer behind transparent PNGs */
         }
 
         .nav-profile span {
@@ -194,7 +205,6 @@ try {
             font-weight: 600;
         }
 
-        /* Company table */
         .card {
             background-color: #ffffff;
         }
@@ -241,7 +251,6 @@ try {
             background: #fff;
         }
 
-        /* Button theme */
         .btn-warning {
             background-color: #ffaa2b;
             border: none;
@@ -255,7 +264,6 @@ try {
             color: #fff;
         }
 
-        /* Center Action button */
         .company-table td.action-cell {
             text-align: center;
             vertical-align: middle;
@@ -267,25 +275,35 @@ try {
 
     <nav class="navbar navbar-expand-lg navbar-white bg-white shadow-sm sticky-top">
         <div class="container">
-            <a class="navbar-brand" href="user_home.php">JobHive</a>
+            <a class="navbar-brand" href="<?= e($homeUrl) ?>">JobHive</a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav">
                 <span class="navbar-toggler-icon"></span>
             </button>
 
             <div class="collapse navbar-collapse" id="mainNav">
                 <ul class="navbar-nav ms-auto align-items-center">
-                    <li class="nav-item"><a class="nav-link" href="user_home.php">Home</a></li>
-                    <li class="nav-item"><a class="nav-link" href="user_dashboard.php">Dashboard</a></li>
+                    <li class="nav-item"><a class="nav-link" href="<?= e($homeUrl) ?>">Home</a></li>
+
+                    <?php if ($isUser): ?>
+                        <li class="nav-item"><a class="nav-link" href="user_dashboard.php">Dashboard</a></li>
+                    <?php else: ?>
+                        <!-- Company role: no user dashboard -->
+                    <?php endif; ?>
+
                     <li class="nav-item"><a class="nav-link active" href="all_companies.php">All Companies</a></li>
 
-                    <!-- Profile photo (real file if exists; otherwise initials) + name -->
+                    <!-- Right profile (user or company) -->
                     <li class="nav-item dropdown d-flex align-items-center ms-3 nav-profile">
                         <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" data-bs-toggle="dropdown">
                             <img src="<?= e($navPhoto) ?>" alt="Profile">
-                            <span class="ms-2"><?= e($user_name) ?></span>
+                            <span class="ms-2"><?= e($navName) ?></span>
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end">
-                            <li><a class="dropdown-item" href="user_profile.php">Profile</a></li>
+                            <?php if ($isUser): ?>
+                                <li><a class="dropdown-item" href="user_profile.php">Profile</a></li>
+                            <?php else: ?>
+                                <li><a class="dropdown-item" href="company_profile.php">Profile</a></li>
+                            <?php endif; ?>
                             <li><a class="dropdown-item" href="logout.php">Logout</a></li>
                         </ul>
                     </li>
@@ -327,7 +345,6 @@ try {
                                         <td class="logo-cell"><img src="<?= e($logoSrc) ?>" alt="Logo"></td>
                                         <td class="action-cell">
                                             <a href="c_detail.php?company_id=<?= urlencode((string)$c['company_id']) ?>" class="btn btn-sm btn-warning">About Company</a>
-
                                         </td>
                                     </tr>
                             <?php endforeach;

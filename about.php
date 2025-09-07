@@ -7,31 +7,37 @@ function e($v)
     return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
 }
 
-/* ============================================================
-   Dynamic "Home" URL for About page
-   - ?return=index        -> Home: index.php
-   - ?return=user_home    -> Home: user_home.php?user_id=...  (only if logged in)
-   - else fallback by session
-============================================================ */
-$user_id = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null;
+/* ========= 3-way return flow ========= */
+$company_id = $_SESSION['company_id'] ?? null;
+$user_id    = $_SESSION['user_id'] ?? null;
+$return     = $_GET['return'] ?? null;
 
-$homeUrl = "index.php";
-$return  = $_GET['return'] ?? null;
+$homeUrl     = 'index.php';
+$returnParam = 'index';
 
-if ($return === 'index') {
-    $homeUrl = "index.php";
+if ($return === 'company_home' && $company_id) {
+    $homeUrl = 'company_home.php';
+    $returnParam = 'company_home';
 } elseif ($return === 'user_home' && $user_id) {
-    $homeUrl = "user_home.php?" . http_build_query(['user_id' => $user_id]);
+    $homeUrl = 'user_home.php?' . http_build_query(['user_id' => $user_id]);
+    $returnParam = 'user_home';
+} elseif ($return === 'index') {
+    $homeUrl = 'index.php';
+    $returnParam = 'index';
 } else {
-    $homeUrl = $user_id ? "user_home.php?" . http_build_query(['user_id' => $user_id]) : "index.php";
+    if ($company_id) {
+        $homeUrl = 'company_home.php';
+        $returnParam = 'company_home';
+    } elseif ($user_id) {
+        $homeUrl = 'user_home.php?' . http_build_query(['user_id' => $user_id]);
+        $returnParam = 'user_home';
+    }
 }
 
-/* Build sibling links with same return flow */
-$returnParam = ($return === 'index' || $return === 'user_home') ? $return : ($user_id ? 'user_home' : 'index');
-$aboutUrl   = "about.php?"   . http_build_query(['return' => $returnParam]); // self (optional)
-$faqUrl     = "faq.php?"     . http_build_query(['return' => $returnParam]);
-$termsUrl   = "terms.php?"   . http_build_query(['return' => $returnParam]);
-$privacyUrl = "privacy.php?" . http_build_query(['return' => $returnParam]);
+$aboutUrl   = 'about.php?'   . http_build_query(['return' => $returnParam]);
+$faqUrl     = 'faq.php?'     . http_build_query(['return' => $returnParam]);
+$termsUrl   = 'terms.php?'   . http_build_query(['return' => $returnParam]);
+$privacyUrl = 'privacy.php?' . http_build_query(['return' => $returnParam]);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -43,11 +49,13 @@ $privacyUrl = "privacy.php?" . http_build_query(['return' => $returnParam]);
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
     <style>
         :root {
             --jh-gold: #ffaa2b;
             --jh-gold-2: #ffc107;
-            --jh-dark: #1a202c;
+            --jh-dark: #151b24;
+            /* a touch darker to match your screenshot */
         }
 
         html,
@@ -70,10 +78,11 @@ $privacyUrl = "privacy.php?" . http_build_query(['return' => $returnParam]);
             flex: 1 0 auto
         }
 
+        /* navbar hover underline */
         .navbar-nav .nav-link {
             position: relative;
             padding-bottom: 4px;
-            transition: color .2s
+            transition: color .2s ease-in-out
         }
 
         .navbar-nav .nav-link::after {
@@ -81,16 +90,17 @@ $privacyUrl = "privacy.php?" . http_build_query(['return' => $returnParam]);
             position: absolute;
             left: 0;
             bottom: 0;
-            width: 0;
             height: 2px;
+            width: 0%;
             background-color: var(--jh-gold);
-            transition: width .25s
+            transition: width .25s ease-in-out
         }
 
         .navbar-nav .nav-link:hover::after {
             width: 100%
         }
 
+        /* hero */
         .page-hero {
             background: #0f172a;
             color: #fff;
@@ -145,14 +155,29 @@ $privacyUrl = "privacy.php?" . http_build_query(['return' => $returnParam]);
             border-radius: .5rem
         }
 
+        /* ===== footer (matches your screenshot) ===== */
         .footer {
-            background: var(--jh-dark);
-            color: #e9ecef;
-            padding: 40px 0 16px
+            background: #121821;
+            /* very dark */
+            color: #e0e6ed;
+            padding: 56px 0 12px;
+            flex-shrink: 0
+        }
+
+        .footer .brand {
+            font-weight: 800;
+            color: var(--jh-gold);
+            font-size: 1.75rem
+        }
+
+        .footer .tagline {
+            color: #cbd5e1;
+            font-size: 1.05rem;
+            margin-top: .25rem
         }
 
         .footer a {
-            color: #f8f9fa;
+            color: #eaf0f6;
             text-decoration: none
         }
 
@@ -160,47 +185,57 @@ $privacyUrl = "privacy.php?" . http_build_query(['return' => $returnParam]);
             color: var(--jh-gold)
         }
 
-        .footer .brand {
-            font-weight: 800;
-            color: var(--jh-gold)
+        .footer h6 {
+            color: #8ea0b5;
+            letter-spacing: .02em
         }
 
         .footer .social a {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            width: 38px;
-            height: 38px;
+            width: 42px;
+            height: 42px;
             border-radius: 50%;
-            background: rgba(255, 255, 255, .08);
-            margin-right: 8px
+            background: #1e2631;
+            margin-right: 10px
         }
 
         .footer .social a:hover {
-            background: rgba(255, 193, 7, .2)
+            background: #273140
+        }
+
+        .footer .muted {
+            color: #9fb0c3
         }
 
         .footer hr {
-            border-top: 1px solid rgba(255, 255, 255, .12);
-            margin: 24px 0 12px
+            border-top: 1px solid rgba(255, 255, 255, .08);
+            margin: 28px 0 12px
         }
 
-        .footer small {
-            color: #cbd5e1
+        .footer-bottom {
+            color: #9fb0c3
+        }
+
+        .footer-bottom span.heart {
+            color: #e25555
         }
     </style>
 </head>
 
 <body>
-    <!-- Navbar (only required items) -->
+    <!-- Navbar -->
     <nav class="navbar navbar-expand-lg bg-white shadow-sm">
         <div class="container">
             <a class="navbar-brand fw-bold text-warning" href="<?= e($homeUrl) ?>">JobHive</a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navA"><span class="navbar-toggler-icon"></span></button>
-            <div class="collapse navbar-collapse justify-content-end" id="navA">
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navStatic">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse justify-content-end" id="navStatic">
                 <ul class="navbar-nav">
                     <li class="nav-item"><a class="nav-link" href="<?= e($homeUrl) ?>">Home</a></li>
-                    <li class="nav-item"><a class="nav-link active" href="<?= e($aboutUrl) ?>">About</a></li>
+                    <li class="nav-item"><a class="nav-link" href="<?= e($aboutUrl) ?>">About</a></li>
                     <li class="nav-item"><a class="nav-link" href="<?= e($faqUrl) ?>">FAQ</a></li>
                     <li class="nav-item"><a class="nav-link" href="<?= e($termsUrl) ?>">Terms &amp; Conditions</a></li>
                     <li class="nav-item"><a class="nav-link" href="<?= e($privacyUrl) ?>">Privacy Policy</a></li>
@@ -245,6 +280,7 @@ $privacyUrl = "privacy.php?" . http_build_query(['return' => $returnParam]);
                                 <p class="mb-0 text-muted">Resume templates, export, and premium gating launched.</p>
                             </div>
                         </div>
+
                         <div class="col-md-6">
                             <div class="p-3 border rounded-3 h-100">
                                 <div class="text-warning fw-bold">2026</div>
@@ -257,49 +293,71 @@ $privacyUrl = "privacy.php?" . http_build_query(['return' => $returnParam]);
 
                 <div class="section-card prose">
                     <h2>Contact</h2>
-                    <p>Email <a href="https://mail.google.com/mail/?view=cm&fs=1&to=phonethawnaing11305@gmail.com" target="_blank" rel="noopener">phonethawnaing11305@gmail.com</a> or call <a href="tel:+95957433847">+95 957 433 847</a>.</p>
+                    <p>Email <a href="mailto:phonethawnaing11305@gmail.com">phonethawnaing11305@gmail.com</a>
+                        or call <a href="tel:+95957433847">+95 957 433 847</a>. We’d love to hear from you.</p>
                 </div>
             </div>
         </section>
     </main>
 
-    <!-- Footer (unchanged) -->
+    <!-- ================= Footer (matches your screenshot) ================= -->
     <footer class="footer mt-auto">
         <div class="container">
             <div class="row gy-4">
-                <div class="col-md-3">
-                    <div class="brand h4 mb-2">JobHive</div>
-                    <p class="mb-2">Find jobs. Apply fast. Get hired.</p>
-                    <div class="social">
-                        <a href="#"><i class="bi bi-facebook"></i></a>
-                        <a href="#"><i class="bi bi-twitter-x"></i></a>
-                        <a href="#"><i class="bi bi-linkedin"></i></a>
+                <!-- Brand + tagline + social -->
+                <div class="col-md-4">
+                    <div class="brand mb-2">JobHive</div>
+                    <div class="tagline">Find jobs. Apply fast. Get hired.</div>
+                    <div class="social mt-3">
+                        <a href="#" aria-label="Facebook"><i class="bi bi-facebook"></i></a>
+                        <a href="#" aria-label="Twitter / X"><i class="bi bi-twitter-x"></i></a>
+                        <a href="#" aria-label="LinkedIn"><i class="bi bi-linkedin"></i></a>
                     </div>
                 </div>
+
+                <!-- Quick Links -->
                 <div class="col-md-3">
-                    <h6 class="text-uppercase text-white-50 mb-3">Quick Links</h6>
+                    <h6 class="text-uppercase muted mb-3">Quick Links</h6>
                     <ul class="list-unstyled">
                         <li class="mb-2"><a href="<?= e($homeUrl) ?>">Home</a></li>
+                        <li class="mb-2"><a href="login.php">Login</a></li>
+                        <li class="mb-2"><a href="sign_up.php">Register</a></li>
+                        <li class="mb-2"><a href="c_sign_up.php">Company Register</a></li>
+                        <li class="mb-2"><a href="index_all_companies.php">All Companies</a></li>
+                    </ul>
+                </div>
+
+                <!-- Contact Links (FAQ/About/Privacy/Terms) -->
+                <div class="col-md-3">
+                    <h6 class="text-uppercase muted mb-3">Contact</h6>
+                    <ul class="list-unstyled">
                         <li class="mb-2"><a href="<?= e($faqUrl) ?>">FAQ</a></li>
                         <li class="mb-2"><a href="<?= e($aboutUrl) ?>">About</a></li>
                         <li class="mb-2"><a href="<?= e($privacyUrl) ?>">Privacy Policy</a></li>
                         <li class="mb-2"><a href="<?= e($termsUrl) ?>">Terms &amp; Conditions</a></li>
                     </ul>
                 </div>
-                <div class="col-md-3"><br></div>
-                <div class="col-md-3">
-                    <h6 class="text-uppercase text-white-50 mb-3">Contact</h6>
+
+                <!-- Contact Info -->
+                <div class="col-md-2">
+                    <h6 class="text-uppercase muted mb-3">Contact</h6>
                     <ul class="list-unstyled">
                         <li class="mb-2"><i class="bi bi-geo-alt me-2"></i>Yangon, Myanmar</li>
-                        <li class="mb-2"><i class="bi bi-envelope me-2"></i><a href="https://mail.google.com/mail/?view=cm&fs=1&to=phonethawnaing11305@gmail.com" target="_blank" rel="noopener">phonethawnaing11305@gmail.com</a></li>
-                        <li class="mb-2"><i class="bi bi-telephone me-2"></i><a href="tel:+95957433847">+95 957 433 847</a></li>
+                        <li class="mb-2"><i class="bi bi-envelope me-2"></i>
+                            <a href="mailto:support@jobhive.mm">support@jobhive.mm</a>
+                        </li>
+                        <li class="mb-2"><i class="bi bi-telephone me-2"></i>
+                            <a href="tel:+95957433847">+95 957 433 847</a>
+                        </li>
                     </ul>
                 </div>
             </div>
+
             <hr>
-            <div class="d-flex flex-column flex-md-row justify-content-between align-items-center">
-                <small>&copy; <?= date('Y') ?> JobHive. All rights reserved.</small>
-                <small>Made with <span style="color:#e25555;">♥</span> in Myanmar</small>
+
+            <div class="d-flex flex-column flex-md-row justify-content-between align-items-center footer-bottom">
+                <small>© <?= date('Y') ?> JobHive. All rights reserved.</small>
+                <small>Made with <span class="heart">♥</span> in Myanmar</small>
             </div>
         </div>
     </footer>

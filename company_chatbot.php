@@ -37,6 +37,35 @@ elseif (strpos($lowerMessage, 'dashboard') !== false) {
         ['text' => 'Go to Dashboard', 'href' => 'c_dashboard.php']
     ];
 }
+
+// FAQ
+elseif (strpos($lowerMessage, 'faq') !== false || strpos($lowerMessage, 'frequently asked questions') !== false) {
+    $response = "Check our Frequently Asked Questions section for answers to common questions about using JobHive, finding jobs, and managing your account.";
+    $buttons = [
+        ['text' => 'View FAQ', 'href' => 'faq.php']
+    ];
+}
+// About Us
+elseif (strpos($lowerMessage, 'about us') !== false || strpos($lowerMessage, 'about') !== false) {
+    $response = "Learn more about JobHive, our mission, and our team. We're dedicated to connecting job seekers with great opportunities and helping companies find talented professionals.";
+    $buttons = [
+        ['text' => 'About JobHive', 'href' => 'about.php']
+    ];
+}
+// Privacy Policy
+elseif (strpos($lowerMessage, 'privacy policy') !== false || strpos($lowerMessage, 'privacy') !== false) {
+    $response = "Read our Privacy Policy to understand how we collect, use, and protect your personal information. Your privacy is important to us.";
+    $buttons = [
+        ['text' => 'View Privacy Policy', 'href' => 'privacy.php']
+    ];
+}
+// Terms & Conditions
+elseif (strpos($lowerMessage, 'terms & conditions') !== false || strpos($lowerMessage, 'terms') !== false || strpos($lowerMessage, 'conditions') !== false) {
+    $response = "Review our Terms & Conditions to understand the rules and guidelines for using JobHive. These terms govern your use of our platform and services.";
+    $buttons = [
+        ['text' => 'View Terms & Conditions', 'href' => 'terms.php']
+    ];
+}
 // Post Job
 elseif (strpos($lowerMessage, 'post') !== false && strpos($lowerMessage, 'job') !== false) {
     if (strpos($lowerMessage, 'how') !== false || strpos($lowerMessage, 'process') !== false) {
