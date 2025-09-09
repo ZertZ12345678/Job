@@ -130,6 +130,64 @@ try {
 }
 $show_member_after_login = (int)($_SESSION['show_member_after_login'] ?? 0);
 unset($_SESSION['show_member_after_login']);
+
+//feedback
+$company_name = $company_logo = $company_member = $company_email = '';
+try {
+  $st = $pdo->prepare("SELECT company_name, email, logo, member FROM companies WHERE company_id=? LIMIT 1");
+  $st->execute([$company_id]);
+  if ($row = $st->fetch(PDO::FETCH_ASSOC)) {
+    $company_name   = (string)($row['company_name'] ?? '');
+    $company_email  = (string)($row['email'] ?? '');
+    $company_logo   = (string)($row['logo'] ?? '');
+    $company_member = (string)($row['member'] ?? 'normal');
+  }
+} catch (PDOException $e) {
+}
+
+// ===== COMPANY FEEDBACK: CSRF + POST HANDLER (ADD THIS) =====
+if (empty($_SESSION['csrf'])) {
+  $_SESSION['csrf'] = bin2hex(random_bytes(16));
+}
+$csrf = $_SESSION['csrf'];
+
+$fb_success = "";
+$fb_error   = "";
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'company_feedback') {
+  $token = $_POST['csrf'] ?? '';
+  if (!hash_equals($_SESSION['csrf'], $token)) {
+    $fb_error = "Invalid request. Please refresh and try again.";
+  } else {
+    $fb_name    = trim($_POST['fb_name'] ?? $company_name);
+    $fb_email   = trim($_POST['fb_email'] ?? $company_email);
+    $fb_message = trim($_POST['fb_message'] ?? '');
+    $hp         = trim($_POST['fb_hp'] ?? ''); // honeypot
+
+    if ($hp !== '') {
+      $fb_error = "Spam detected.";
+    } elseif ($fb_message === '') {
+      $fb_error = "Please write your feedback.";
+    } elseif (mb_strlen($fb_message) > 4000) {
+      $fb_error = "Feedback is too long (max 4000 chars).";
+    } else {
+      try {
+        // NOTE: works with your existing feedback table (id, user_id, name, email, message, submitted_at)
+        $stmt = $pdo->prepare("
+  INSERT INTO feedback (user_id, company_id, name, email, message)
+  VALUES (NULL, ?, ?, ?, ?)
+");
+        $ok = $stmt->execute([(int)$company_id, $fb_name, $fb_email, $fb_message]);
+
+        $fb_success = $ok ? "Thanks! Your feedback was sent." : "Could not save feedback. Please try again.";
+      } catch (PDOException $e) {
+        $fb_error = "Database error. Please try again later.";
+      }
+    }
+  }
+}
+
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -1007,6 +1065,10 @@ unset($_SESSION['show_member_after_login']);
             <li class="mb-2"><i class="bi bi-geo-alt me-2"></i>Yangon, Myanmar</li>
             <li class="mb-2"><i class="bi bi-envelope me-2"></i><a href="mailto:support@jobhive.mm">support@jobhive.mm</a></li>
             <li class="mb-2"><i class="bi bi-telephone me-2"></i><a href="tel:+95957433847">+95 957 433 847</a></li>
+            <button type="button" class="btn btn-warning btn-sm mt-2" data-bs-toggle="modal" data-bs-target="#companyFeedbackModal">
+              <i class="bi bi-chat-text me-1"></i> Send Feedback
+            </button>
+
           </ul>
         </div>
       </div>
@@ -1090,6 +1152,60 @@ unset($_SESSION['show_member_after_login']);
       </div>
     </div>
   </div>
+
+  <!-- Company Feedback Modal -->
+  <div class="modal fade" id="companyFeedbackModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <form method="post" class="modal-content">
+        <input type="hidden" name="action" value="company_feedback">
+        <input type="hidden" name="csrf" value="<?= e($csrf) ?>">
+        <!-- Honeypot -->
+        <input type="text" name="fb_hp" value="" style="display:none !important" tabindex="-1" autocomplete="off">
+
+        <div class="modal-header">
+          <h5 class="modal-title">
+            <i class="bi bi-chat-left-quote me-2 text-warning"></i>
+            Send Feedback
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+
+        <div class="modal-body">
+          <?php if (!empty($fb_success)): ?>
+            <div class="alert alert-success py-2 mb-3"><?= e($fb_success) ?></div>
+          <?php elseif (!empty($fb_error)): ?>
+            <div class="alert alert-danger py-2 mb-3"><?= e($fb_error) ?></div>
+          <?php else: ?>
+            <p class="text-muted small">Tell us what we can improve for employers. We read every message.</p>
+          <?php endif; ?>
+
+          <div class="mb-3">
+            <label class="form-label">Company</label>
+            <input type="text" class="form-control" name="fb_name" value="<?= e($company_name) ?>" required>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Email</label>
+            <input type="email" class="form-control" name="fb_email" value="<?= e($company_email) ?>" required>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Message</label>
+            <textarea class="form-control" name="fb_message" rows="5" placeholder="Your feedback..." required></textarea>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="submit" class="btn btn-warning">
+            <i class="bi bi-send me-1"></i> Submit
+          </button>
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
 
   <script>
     const panel = document.getElementById('inboxPanel');
@@ -1414,6 +1530,16 @@ unset($_SESSION['show_member_after_login']);
 
 
     });
+
+
+    // Show feedback modal if there's a message
+    (function() {
+      const hasFbMsg = <?= (!empty($fb_success) || !empty($fb_error)) ? 'true' : 'false' ?>;
+      if (hasFbMsg) {
+        const el = document.getElementById('companyFeedbackModal');
+        if (el) new bootstrap.Modal(el).show();
+      }
+    })();
   </script>
 </body>
 

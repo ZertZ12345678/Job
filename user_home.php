@@ -253,6 +253,52 @@ $should_shake = $badge_count > $prev_badge;
 $_SESSION['prev_badge_count'] = $badge_count;
 /* Auto-open inbox param */
 $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
+
+
+
+/* ===== Feedback: CSRF + POST handler ===== */
+if (empty($_SESSION['csrf'])) {
+  $_SESSION['csrf'] = bin2hex(random_bytes(16));
+}
+$csrf = $_SESSION['csrf'];
+
+$fb_success = "";
+$fb_error   = "";
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'feedback') {
+  $token = $_POST['csrf'] ?? '';
+  if (!hash_equals($_SESSION['csrf'], $token)) {
+    $fb_error = "Invalid request. Please refresh and try again.";
+  } else {
+    $fb_name    = trim($_POST['fb_name'] ?? $full_name);
+    $fb_email   = trim($_POST['fb_email'] ?? $email);
+    $fb_message = trim($_POST['fb_message'] ?? '');
+    $hp         = trim($_POST['fb_hp'] ?? ''); // honeypot (should stay empty)
+
+    if ($hp !== '') {
+      $fb_error = "Spam detected.";
+    } elseif ($fb_message === '') {
+      $fb_error = "Please write your feedback.";
+    } elseif (mb_strlen($fb_message) > 4000) {
+      $fb_error = "Feedback is too long (max 4000 chars).";
+    } else {
+      try {
+        $stmt = $pdo->prepare("INSERT INTO feedback (user_id, name, email, message) VALUES (?, ?, ?, ?)");
+        $ok = $stmt->execute([$user_id, $fb_name, $fb_email, $fb_message]);
+        if ($ok) {
+          $fb_success = "Thanks! Your feedback was sent.";
+        } else {
+          $fb_error = "Could not save feedback. Please try again.";
+        }
+      } catch (PDOException $e) {
+        $fb_error = "Database error. Please try again later.";
+      }
+    }
+  }
+}
+
+
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -468,6 +514,57 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
       </div>
     </div>
   <?php endif; ?>
+
+  <!-- Feedback Modal -->
+<div class="modal fade" id="feedbackModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <form method="post" class="modal-content">
+      <input type="hidden" name="action" value="feedback">
+      <input type="hidden" name="csrf" value="<?= e($csrf) ?>">
+      <!-- Honeypot -->
+      <input type="text" name="fb_hp" value="" style="display:none !important" tabindex="-1" autocomplete="off">
+
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-chat-left-quote me-2 text-warning"></i>Send Feedback</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+
+      <div class="modal-body">
+        <?php if (!empty($fb_success)): ?>
+          <div class="alert alert-success py-2 mb-3"><?= e($fb_success) ?></div>
+        <?php elseif (!empty($fb_error)): ?>
+          <div class="alert alert-danger py-2 mb-3"><?= e($fb_error) ?></div>
+        <?php else: ?>
+          <p class="text-muted small">Tell us what you like or what we should improve. We read every message.</p>
+        <?php endif; ?>
+
+        <div class="mb-3">
+          <label class="form-label">Name</label>
+          <input type="text" class="form-control" name="fb_name" value="<?= e($full_name) ?>" required>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Email</label>
+          <input type="email" class="form-control" name="fb_email" value="<?= e($email) ?>" required>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Message</label>
+          <textarea class="form-control" name="fb_message" rows="5" placeholder="Your feedback..." required></textarea>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="submit" class="btn btn-warning">
+          <i class="bi bi-send me-1"></i> Submit
+        </button>
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+
   <!-- Featured Jobs -->
   <section class="py-5">
     <div class="container">
@@ -545,6 +642,10 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
             <li class="mb-2"><i class="bi bi-geo-alt me-2"></i>Yangon, Myanmar</li>
             <li class="mb-2"><i class="bi bi-envelope me-2"></i><a href="mailto:support@jobhive.mm">support@jobhive.mm</a></li>
             <li class="mb-2"><i class="bi bi-telephone me-2"></i><a href="tel:+95957433847">+95 957 433 847</a></li>
+            <button type="button" class="btn btn-warning btn-sm mt-2" data-bs-toggle="modal" data-bs-target="#feedbackModal">
+              <i class="bi bi-chat-text me-1"></i> Send Feedback
+            </button>
+
           </ul>
         </div>
       </div>
@@ -951,6 +1052,18 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
 
 
     });
+
+    // Feedback modal auto-show if message exists
+  (function() {
+    const hasFbMsg = <?= (!empty($fb_success) || !empty($fb_error)) ? 'true' : 'false' ?>;
+    if (hasFbMsg) {
+      const el = document.getElementById('feedbackModal');
+      if (el) new bootstrap.Modal(el).show();
+    }
+  })();
+
+
+
   </script>
 </body>
 

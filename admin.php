@@ -247,6 +247,54 @@ try {
 } catch (PDOException $e) {
   $profile_admin = [];
 }
+
+/* -------------------- Feedback (seekers & companies) -------------------- */
+if (!function_exists('jh_words_preview')) {
+  function jh_words_preview($text, $maxWords = 10, $ellipsis = '…')
+  {
+    $text = trim(strip_tags((string)$text));
+    if ($text === '') return '';
+    $parts = preg_split('/\s+/u', $text);
+    if (count($parts) <= $maxWords) return $text;
+    return implode(' ', array_slice($parts, 0, $maxWords)) . $ellipsis;
+  }
+}
+
+$fb_seekers = [];
+$fb_companies = [];
+
+try {
+  // Seekers feedback
+  $qS = "
+    SELECT f.id, f.user_id, u.full_name, u.email, u.package, f.message, f.submitted_at
+    FROM feedback f
+    LEFT JOIN users u ON u.user_id = f.user_id
+    WHERE f.user_id IS NOT NULL
+    ORDER BY f.submitted_at DESC, f.id DESC
+  ";
+  $fb_seekers = $pdo->query($qS)->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+  $fb_seekers = [];
+}
+
+try {
+  // Companies feedback
+  $qC = "
+    SELECT f.id, f.company_id, c.company_name, c.email, c.member, f.message, f.submitted_at
+    FROM feedback f
+    LEFT JOIN companies c ON c.company_id = f.company_id
+    WHERE f.company_id IS NOT NULL
+    ORDER BY f.submitted_at DESC, f.id DESC
+  ";
+  $fb_companies = $pdo->query($qC)->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+  $fb_companies = [];
+}
+
+// Counts for the title bar (used by JS)
+$fb_seekers_count   = isset($fb_seekers)   ? count($fb_seekers)   : 0;
+$fb_companies_count = isset($fb_companies) ? count($fb_companies) : 0;
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -301,6 +349,38 @@ try {
       margin-bottom: 2.4rem;
     }
 
+    /* inline edit button inside inputs */
+    .field-control {
+      position: relative;
+    }
+
+    .field-control .form-control {
+      padding-right: 5.5rem;
+    }
+
+    /* leave room for the button */
+    .edit-inline {
+      position: absolute;
+      right: 10px;
+      top: 63%;
+      transform: translateY(-50%);
+      border: 0;
+      background: transparent;
+      color: #ffc107;
+      font-weight: 600;
+      cursor: pointer;
+      padding: 0 .25rem;
+    }
+
+    .edit-inline:hover {
+      color: #ffca2c;
+    }
+
+    .edit-inline:focus {
+      outline: none;
+    }
+
+
     .content {
       margin-left: 250px;
       padding: 40px 30px 30px;
@@ -319,7 +399,6 @@ try {
       }
     }
 
-    /* ======= Unified Title Bar (use for all sections) ======= */
     .section .companies-title-bar {
       background: #22223b;
       color: #ffc107;
@@ -333,14 +412,12 @@ try {
       display: inline-block;
     }
 
-    /* ======= UNIFIED TABLE STYLES (apply to ALL tables) ======= */
     .dark-table {
       background: #22223b;
       color: #ffc107;
       border-radius: 0.7rem;
       overflow: hidden;
       width: 100%;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     }
 
     .dark-table th,
@@ -383,11 +460,6 @@ try {
       margin: 0 auto;
     }
 
-    .small-hint {
-      font-size: .86rem;
-      color: #6c757d;
-    }
-
     .form-card {
       background: #fff;
       border-radius: 0.9rem;
@@ -426,18 +498,6 @@ try {
       border-radius: .6rem;
     }
 
-    .input-note {
-      font-size: .85rem;
-      color: #6c757d;
-    }
-
-    .form-actions {
-      display: flex;
-      gap: 10px;
-      align-items: center;
-    }
-
-    /* Profile */
     .profile-card {
       max-width: 740px;
       margin: 10px auto 0;
@@ -464,13 +524,6 @@ try {
       font-size: 1.02rem;
     }
 
-    .form-edit-row {
-      display: flex;
-      align-items: center;
-      gap: 1rem;
-      margin-bottom: 1.0rem;
-    }
-
     .edit-btn {
       margin-left: 8px;
       color: #ffc107;
@@ -480,7 +533,6 @@ try {
       font-size: 1.05rem;
     }
 
-    /* ====== Jobs table row highlighting ====== */
     .jobs-table tr.row-inactive td {
       background: #fde7e7 !important;
       color: #842029 !important;
@@ -493,35 +545,33 @@ try {
       border-color: #d3d6d8 !important;
     }
 
-    /* ====== Applied Jobs status colors ====== */
     .apps-table tr.status-accepted td {
       background: #d1e7dd !important;
       color: #0f5132 !important;
-      /* light green bg, dark green text */
     }
 
     .apps-table tr.status-rejected td {
       background: #f8d7da !important;
       color: #842029 !important;
-      /* light red bg, dark red text   */
     }
 
     .apps-table tr.status-pending td {
       background: #cff4fc !important;
       color: #055160 !important;
-      /* light blue bg, dark blue text */
     }
   </style>
 
   <script>
+    // Remember last opened section (admins or feedback) and restore on refresh
     function showSection(sectionId, linkElement) {
       document.querySelectorAll('.section').forEach(el => el.style.display = 'none');
       if (sectionId) document.getElementById(sectionId).style.display = 'block';
       document.querySelectorAll('.sidebar .nav-link').forEach(link => link.classList.remove('active'));
       if (linkElement) linkElement.classList.add('active');
 
-      if (sectionId === 'adminsSection') {
-        sessionStorage.setItem('lastSection', 'adminsSection');
+      const remember = ['adminsSection', 'feedbackSection'];
+      if (remember.includes(sectionId)) {
+        sessionStorage.setItem('lastSection', sectionId);
       } else {
         sessionStorage.removeItem('lastSection');
       }
@@ -529,10 +579,15 @@ try {
 
     window.addEventListener('DOMContentLoaded', () => {
       const last = sessionStorage.getItem('lastSection');
-      if (last) {
-        showSection('adminsSection', document.getElementById('adminsLink'));
+      const linkMap = {
+        adminsSection: document.getElementById('adminsLink'),
+        feedbackSection: document.getElementById('feedbackLink'),
+        dashboardSection: document.getElementById('dashboardLink')
+      };
+      if (last && document.getElementById(last)) {
+        showSection(last, linkMap[last] || linkMap.dashboardSection);
       } else {
-        showSection('dashboardSection', document.getElementById('dashboardLink'));
+        showSection('dashboardSection', linkMap.dashboardSection);
       }
     });
 
@@ -579,6 +634,7 @@ try {
       <a id="appliedLink" class="nav-link" onclick="showSection('appliedSection', this)">Applied Jobs</a>
       <a id="adminsLink" class="nav-link" onclick="showSection('adminsSection', this)">Add Admin Role</a>
       <a class="nav-link" onclick="showSection('profileSection', this)">Profile</a>
+      <a id="feedbackLink" class="nav-link" onclick="showSection('feedbackSection', this)">Feedback</a>
       <a class="nav-link" href="index.php">Logout</a>
     </nav>
   </div>
@@ -875,7 +931,6 @@ try {
               <input type="text" name="phone" class="form-control" pattern="[0-9+\-()\s]{6,20}" title="Phone only" required>
             </div>
 
-            <!-- Address and Photo side-by-side -->
             <div class="col-6">
               <label class="form-label">Address</label>
               <input type="text" name="address" class="form-control" required>
@@ -950,58 +1005,59 @@ try {
             <img src="<?php echo !empty($profile_admin['profile_picture']) ? 'profile_pics/' . htmlspecialchars($profile_admin['profile_picture']) : 'default_user.png'; ?>"
               class="profile-img" id="profilePreview" alt="Profile">
             <div style="max-width:320px;margin:6px auto 0;">
-              <input type="file" name="p_profile_picture" accept="image/*" class="form-control"
-                onchange="previewProfilePic(this)">
+              <input type="file" name="p_profile_picture" accept="image/*" class="form-control" onchange="previewProfilePic(this)">
             </div>
           </div>
 
           <div class="form-edit-row">
-            <div style="flex:1">
+            <div style="flex:1" class="field-control">
               <div class="field-label">Full Name</div>
               <input type="text" name="p_full_name" class="form-control"
                 value="<?php echo htmlspecialchars($profile_admin['full_name'] ?? ''); ?>"
                 <?php echo !empty($profile_admin['full_name']) ? 'readonly' : ''; ?> required>
+              <?php if (!empty($profile_admin['full_name'])): ?>
+                <button type="button" class="edit-inline" onclick="toggleEdit(this)">✎ Edit</button>
+              <?php endif; ?>
             </div>
-            <?php if (!empty($profile_admin['full_name'])): ?>
-              <button type="button" class="edit-btn" onclick="toggleEdit(this)">✎ Edit</button>
-            <?php endif; ?>
           </div>
 
           <div class="form-edit-row">
-            <div style="flex:1">
+            <div style="flex:1" class="field-control">
               <div class="field-label">Email</div>
               <input type="email" name="p_email" class="form-control"
                 value="<?php echo htmlspecialchars($profile_admin['email'] ?? ''); ?>"
                 <?php echo !empty($profile_admin['email']) ? 'readonly' : ''; ?> required>
+              <?php if (!empty($profile_admin['email'])): ?>
+                <button type="button" class="edit-inline" onclick="toggleEdit(this)">✎ Edit</button>
+              <?php endif; ?>
             </div>
-            <?php if (!empty($profile_admin['email'])): ?>
-              <button type="button" class="edit-btn" onclick="toggleEdit(this)">✎ Edit</button>
-            <?php endif; ?>
           </div>
 
           <div class="form-edit-row">
-            <div style="flex:1">
+            <div style="flex:1" class="field-control">
               <div class="field-label">Phone</div>
               <input type="text" name="p_phone" class="form-control"
                 value="<?php echo htmlspecialchars($profile_admin['phone'] ?? ''); ?>"
                 <?php echo !empty($profile_admin['phone']) ? 'readonly' : ''; ?>>
+              <?php if (!empty($profile_admin['phone'])): ?>
+                <button type="button" class="edit-inline" onclick="toggleEdit(this)">✎ Edit</button>
+              <?php endif; ?>
             </div>
-            <?php if (!empty($profile_admin['phone'])): ?>
-              <button type="button" class="edit-btn" onclick="toggleEdit(this)">✎ Edit</button>
-            <?php endif; ?>
           </div>
 
+
           <div class="form-edit-row">
-            <div style="flex:1">
+            <div style="flex:1" class="field-control">
               <div class="field-label">Address</div>
               <input type="text" name="p_address" class="form-control"
                 value="<?php echo htmlspecialchars($profile_admin['address'] ?? ''); ?>"
                 <?php echo !empty($profile_admin['address']) ? 'readonly' : ''; ?> required>
+              <?php if (!empty($profile_admin['address'])): ?>
+                <button type="button" class="edit-inline" onclick="toggleEdit(this)">✎ Edit</button>
+              <?php endif; ?>
             </div>
-            <?php if (!empty($profile_admin['address'])): ?>
-              <button type="button" class="edit-btn" onclick="toggleEdit(this)">✎ Edit</button>
-            <?php endif; ?>
           </div>
+
 
           <div class="mt-3 text-center">
             <button type="submit" class="btn btn-warning px-4">Save Changes</button>
@@ -1010,7 +1066,245 @@ try {
       </div>
     </div>
 
- 
+    <!-- Feedback Section -->
+    <div id="feedbackSection" class="section" style="display:none;">
+      <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+        <div id="fbCountTitle"
+          class="companies-title-bar mb-0"
+          data-seekers-count="<?= (int)$fb_seekers_count ?>"
+          data-companies-count="<?= (int)$fb_companies_count ?>">
+          <?= (int)$fb_seekers_count ?> Feedback Messages
+        </div>
+        <div class="btn-group">
+          <button type="button" class="btn btn-warning fw-semibold js-fb-tab" data-tab="seekers">Seekers</button>
+          <button type="button" class="btn btn-outline-warning fw-semibold js-fb-tab" data-tab="companies">Companies</button>
+        </div>
+      </div>
+
+      <!-- SEEKERS TABLE -->
+      <div id="fbSeekersWrap">
+        <?php if (empty($fb_seekers)): ?>
+          <div class="alert alert-info">No seekers feedback yet.</div>
+        <?php else: ?>
+          <div class="table-responsive">
+            <table class="table dark-table align-middle">
+              <thead>
+                <tr>
+                  <th style="width:70px;">ID</th>
+                  <th style="width:120px;">USER ID</th>
+                  <th>NAME</th>
+                  <th>EMAIL</th>
+                  <th style="width:140px;">PACKAGE</th>
+                  <th>MESSAGE (PREVIEW)</th>
+                  <th style="width:120px;">SUBMITTED</th>
+                  <th style="width:90px;">ACTION</th>
+                </tr>
+              </thead>
+              <tbody>
+                <?php foreach ($fb_seekers as $r): ?>
+                  <?php $ts = $r['submitted_at'] ?? ''; ?>
+                  <tr>
+                    <td><?= (int)$r['id'] ?></td>
+                    <td><?= $r['user_id'] !== null ? ('#' . (int)$r['user_id']) : '—' ?></td>
+                    <td><?= htmlspecialchars($r['full_name'] ?? '—') ?></td>
+                    <td><?= htmlspecialchars($r['email'] ?? '—') ?></td>
+                    <td class="fw-semibold text-uppercase"><?= htmlspecialchars($r['package'] ?? 'normal') ?></td>
+                    <td><?= htmlspecialchars(jh_words_preview($r['message'] ?? '', 10)) ?></td>
+                    <td><?= htmlspecialchars($ts ? date('M d, Y H:i', strtotime($ts)) : '') ?></td>
+                    <td>
+                      <button
+                        class="btn btn-warning btn-sm js-fb-view"
+                        data-fb-type="seeker"
+                        data-id="<?= (int)$r['user_id'] ?>"
+                        data-name="<?= htmlspecialchars($r['full_name'] ?? '—', ENT_QUOTES) ?>"
+                        data-email="<?= htmlspecialchars($r['email'] ?? '—', ENT_QUOTES) ?>"
+                        data-tier="<?= htmlspecialchars($r['package'] ?? 'normal', ENT_QUOTES) ?>"
+                        data-when="<?= htmlspecialchars($ts ? date('M d, Y H:i', strtotime($ts)) : '—', ENT_QUOTES) ?>"
+                        data-msg="<?= htmlspecialchars($r['message'] ?? '', ENT_QUOTES) ?>">View</button>
+                    </td>
+                  </tr>
+                <?php endforeach; ?>
+              </tbody>
+            </table>
+          </div>
+        <?php endif; ?>
+      </div>
+
+      <!-- COMPANIES TABLE -->
+      <div id="fbCompaniesWrap" class="d-none">
+        <?php if (empty($fb_companies)): ?>
+          <div class="alert alert-info">No companies feedback yet.</div>
+        <?php else: ?>
+          <div class="table-responsive">
+            <table class="table dark-table align-middle">
+              <thead>
+                <tr>
+                  <th style="width:70px;">ID</th>
+                  <th style="width:140px;">COMPANY ID</th>
+                  <th>NAME</th>
+                  <th>EMAIL</th>
+                  <th style="width:160px;">MEMBER</th>
+                  <th>MESSAGE (PREVIEW)</th>
+                  <th style="width:120px;">SUBMITTED</th>
+                  <th style="width:90px;">ACTION</th>
+                </tr>
+              </thead>
+              <tbody>
+                <?php foreach ($fb_companies as $r): ?>
+                  <?php $ts = $r['submitted_at'] ?? ''; ?>
+                  <tr>
+                    <td><?= (int)$r['id'] ?></td>
+                    <td><?= $r['company_id'] !== null ? ('#' . (int)$r['company_id']) : '—' ?></td>
+                    <td><?= htmlspecialchars($r['company_name'] ?? '—') ?></td>
+                    <td><?= htmlspecialchars($r['email'] ?? '—') ?></td>
+                    <td class="fw-semibold text-capitalize"><?= htmlspecialchars($r['member'] ?? 'normal') ?></td>
+                    <td><?= htmlspecialchars(jh_words_preview($r['message'] ?? '', 10)) ?></td>
+                    <td><?= htmlspecialchars($ts ? date('M d, Y H:i', strtotime($ts)) : '') ?></td>
+                    <td>
+                      <button
+                        class="btn btn-warning btn-sm js-fb-view"
+                        data-fb-type="company"
+                        data-id="<?= (int)$r['company_id'] ?>"
+                        data-name="<?= htmlspecialchars($r['company_name'] ?? '—', ENT_QUOTES) ?>"
+                        data-email="<?= htmlspecialchars($r['email'] ?? '—', ENT_QUOTES) ?>"
+                        data-tier="<?= htmlspecialchars($r['member'] ?? 'normal', ENT_QUOTES) ?>"
+                        data-when="<?= htmlspecialchars($ts ? date('M d, Y H:i', strtotime($ts)) : '—', ENT_QUOTES) ?>"
+                        data-msg="<?= htmlspecialchars($r['message'] ?? '', ENT_QUOTES) ?>">View</button>
+                    </td>
+                  </tr>
+                <?php endforeach; ?>
+              </tbody>
+            </table>
+          </div>
+        <?php endif; ?>
+      </div>
+    </div>
+
+    <!-- View Feedback Modal -->
+    <div class="modal fade" id="fbViewModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header" style="background:#22223b;color:#ffc107;">
+            <h5 class="modal-title"><span id="fbModalTitle">Feedback</span></h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <div class="row g-3">
+              <div class="col-md-4">
+                <div class="small text-muted">ID</div>
+                <div id="fbMetaId" class="fw-semibold">—</div>
+              </div>
+              <div class="col-md-4">
+                <div class="small text-muted">Name</div>
+                <div id="fbMetaName" class="fw-semibold">—</div>
+              </div>
+              <div class="col-md-4">
+                <div class="small text-muted">Email</div>
+                <div id="fbMetaEmail" class="fw-semibold">—</div>
+              </div>
+              <div class="col-md-4">
+                <div class="small text-muted" id="fbTierLabel">Package</div>
+                <div id="fbMetaTier" class="fw-semibold text-uppercase">—</div>
+              </div>
+              <div class="col-md-4">
+                <div class="small text-muted">Submitted</div>
+                <div id="fbMetaWhen" class="fw-semibold">—</div>
+              </div>
+            </div>
+            <hr>
+            <div class="small text-muted mb-1">Message</div>
+            <div id="fbMessage" style="white-space:pre-wrap;"></div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // Feedback tab switcher (no navigation)
+      (function() {
+        const seekersBtn = document.querySelector('.js-fb-tab[data-tab="seekers"]');
+        const companiesBtn = document.querySelector('.js-fb-tab[data-tab="companies"]');
+        const seekersWrap = document.getElementById('fbSeekersWrap');
+        const companiesWrap = document.getElementById('fbCompaniesWrap');
+        const countEl = document.getElementById('fbCountTitle');
+
+        function updateCount(tab) {
+          if (!countEl) return;
+          const s = parseInt(countEl.dataset.seekersCount || '0', 10);
+          const c = parseInt(countEl.dataset.companiesCount || '0', 10);
+          countEl.textContent = (tab === 'companies' ? c : s) + ' Feedback Messages';
+        }
+
+        function setTab(tab) {
+          if (tab === 'companies') {
+            companiesWrap?.classList.remove('d-none');
+            seekersWrap?.classList.add('d-none');
+            companiesBtn?.classList.remove('btn-outline-warning');
+            companiesBtn?.classList.add('btn-warning');
+            seekersBtn?.classList.remove('btn-warning');
+            seekersBtn?.classList.add('btn-outline-warning');
+          } else {
+            seekersWrap?.classList.remove('d-none');
+            companiesWrap?.classList.add('d-none');
+            seekersBtn?.classList.remove('btn-outline-warning');
+            seekersBtn?.classList.add('btn-warning');
+            companiesBtn?.classList.remove('btn-warning');
+            companiesBtn?.classList.add('btn-outline-warning');
+            tab = 'seekers';
+          }
+          sessionStorage.setItem('fb_tab', tab);
+          updateCount(tab);
+        }
+
+        seekersBtn?.addEventListener('click', () => setTab('seekers'));
+        companiesBtn?.addEventListener('click', () => setTab('companies'));
+
+        // When clicking the sidebar "Feedback", default to seekers
+        document.getElementById('feedbackLink')?.addEventListener('click', () => {
+          setTimeout(() => setTab(sessionStorage.getItem('fb_tab') || 'seekers'), 0);
+        });
+
+        // If feedback is already visible (restored by lastSection), apply saved tab
+        window.addEventListener('DOMContentLoaded', () => {
+          const fbSec = document.getElementById('feedbackSection');
+          if (fbSec && fbSec.style.display !== 'none') {
+            setTab(sessionStorage.getItem('fb_tab') || 'seekers');
+          }
+        });
+      })();
+
+      // Feedback view modal
+      document.addEventListener('click', function(e) {
+        const btn = e.target.closest('.js-fb-view');
+        if (!btn) return;
+
+        const type = btn.getAttribute('data-fb-type') || 'seeker';
+        const id = btn.getAttribute('data-id') || '—';
+        const name = btn.getAttribute('data-name') || '—';
+        const email = btn.getAttribute('data-email') || '—';
+        const tier = btn.getAttribute('data-tier') || '—';
+        const when = btn.getAttribute('data-when') || '—';
+        const msg = btn.getAttribute('data-msg') || '';
+
+        document.getElementById('fbModalTitle').textContent = type === 'company' ? 'Company Feedback' : 'Seeker Feedback';
+        document.getElementById('fbTierLabel').textContent = type === 'company' ? 'Member' : 'Package';
+
+        document.getElementById('fbMetaId').textContent = (type === 'company' ? 'Company #' : 'User #') + id;
+        document.getElementById('fbMetaName').textContent = name;
+        document.getElementById('fbMetaEmail').textContent = email;
+        document.getElementById('fbMetaTier').textContent = tier;
+        document.getElementById('fbMetaWhen').textContent = when;
+        document.getElementById('fbMessage').textContent = msg;
+
+        const modalEl = document.getElementById('fbViewModal');
+        const m = new bootstrap.Modal(modalEl);
+        m.show();
+      });
+    </script>
+
   </div>
 </body>
 
