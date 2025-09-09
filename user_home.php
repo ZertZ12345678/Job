@@ -588,7 +588,8 @@ $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
     </div>
   </div>
 
-  // Panel + Notification Persistence JS
+  <!--------- Panel + Notification Persistence JS !------>
+
   <script>
     // Inbox Panel
     const panel = document.getElementById('inboxPanel');

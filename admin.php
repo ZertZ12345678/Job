@@ -579,7 +579,6 @@ try {
       <a id="appliedLink" class="nav-link" onclick="showSection('appliedSection', this)">Applied Jobs</a>
       <a id="adminsLink" class="nav-link" onclick="showSection('adminsSection', this)">Add Admin Role</a>
       <a class="nav-link" onclick="showSection('profileSection', this)">Profile</a>
-      <a class="nav-link" onclick="showSection('settingsSection', this)">Settings</a>
       <a class="nav-link" href="index.php">Logout</a>
     </nav>
   </div>
@@ -1011,11 +1010,7 @@ try {
       </div>
     </div>
 
-    <!-- Settings -->
-    <div id="settingsSection" class="section" style="display:none;">
-      <div class="companies-title-bar mb-4">Settings</div>
-      <p class="small-hint">Settings content here.</p>
-    </div>
+ 
   </div>
 </body>
 

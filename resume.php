@@ -277,11 +277,16 @@ if ($job && isset($job['status'])) {
         </div>
     </main>
 
-    <footer class="mt-5 py-4 bg-dark text-white">
+    <<footer class="mt-5 py-4 bg-dark text-white">
         <div class="container d-flex flex-column align-items-center">
-            <small>&copy; 2025 JobHive. All rights reserved.</small>
+            <div class="mb-2">
+                <a href="#" class="text-white text-decoration-none me-3">About</a>
+                <a href="#" class="text-white text-decoration-none me-3">Contact</a>
+                <a href="#" class="text-white text-decoration-none">Privacy Policy</a>
+            </div>
+            <small>&copy; <?= date('Y') ?> JobHive. All rights reserved.</small>
         </div>
-    </footer>
+        </footer>
 </body>
 
 </html>
