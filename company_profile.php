@@ -1,20 +1,17 @@
 <?php
 include("connect.php");
 if (session_status() === PHP_SESSION_NONE) session_start();
-
 /* ===== 0) Auth / session ===== */
 $company_id = $_SESSION['company_id'] ?? null;
 if (!$company_id) {
     header("Location: login.php");
     exit;
 }
-
 /* ===== Helpers ===== */
 function e($v)
 {
     return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
 }
-
 /** Return 1–2 letter initials from a name */
 function initials_from_name($name): string
 {
@@ -28,7 +25,6 @@ function initials_from_name($name): string
     }
     return $ini ?: 'C';
 }
-
 /** Build square SVG avatar (data: URI) for initials */
 function svg_avatar_data_uri(string $name, int $size = 112): string
 {
@@ -39,7 +35,6 @@ function svg_avatar_data_uri(string $name, int $size = 112): string
     $font   = (int) round($size * 0.42);
     $radius = 16;
     $inner  = $size - 4;
-
     $svg = <<<SVG
 <svg xmlns="http://www.w3.org/2000/svg" width="$size" height="$size" viewBox="0 0 $size $size">
   <rect x="2" y="2" width="$inner" height="$inner" rx="$radius" ry="$radius"
@@ -51,14 +46,12 @@ function svg_avatar_data_uri(string $name, int $size = 112): string
 SVG;
     return 'data:image/svg+xml;base64,' . base64_encode($svg);
 }
-
 /** Disable attribute when field already has a value (same behavior as user profile) */
 function field_edit_attr($val, $type = 'input')
 {
     if (empty($val)) return '';
     return $type === 'select' ? 'disabled' : 'readonly';
 }
-
 /* ===== 1) Fetch current company ===== */
 $company = [];
 $error_message = '';
@@ -69,7 +62,6 @@ try {
 } catch (PDOException $e) {
     $error_message = "Could not load company profile: " . $e->getMessage();
 }
-
 /* ===== 2) Handle POST (update) ===== */
 $success_message = '';
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
@@ -78,14 +70,12 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $phone        = trim($_POST['phone'] ?? '');
     $address      = trim($_POST['address'] ?? '');
     $c_detail     = trim($_POST['c_detail'] ?? '');   // <-- NEW: Detail Company
-
     // ---- Optional: logo upload ----
     $logo = null;
     if (isset($_FILES['logo']) && ($_FILES['logo']['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK) {
         $allowed = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
         $ext  = strtolower(pathinfo($_FILES['logo']['name'], PATHINFO_EXTENSION));
         $size = $_FILES['logo']['size'] ?? 0;
-
         if (!in_array($ext, $allowed, true)) {
             $error_message = "Invalid image type. Allowed: " . implode(', ', $allowed);
         } elseif ($size > 3 * 1024 * 1024) {
@@ -93,10 +83,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         } else {
             $dir = __DIR__ . "/company_logos";
             if (!is_dir($dir)) @mkdir($dir, 0775, true);
-
             $filename = "logo_c{$company_id}_" . time() . "." . $ext;
             $destFS   = $dir . "/" . $filename;
-
             if (move_uploaded_file($_FILES['logo']['tmp_name'], $destFS)) {
                 $logo = $filename;
                 // Remove old logo if any
@@ -109,7 +97,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             }
         }
     }
-
     if ($error_message === '') {
         $sql = "UPDATE companies SET 
                   company_name = :company_name,
@@ -130,7 +117,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             $params[':logo'] = $logo;
         }
         $sql .= " WHERE company_id = :company_id";
-
         try {
             $upd = $pdo->prepare($sql);
             if ($upd->execute($params)) {
@@ -149,7 +135,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         }
     }
 }
-
 /* ===== 3) Compute avatar source (logo OR initials SVG) ===== */
 $hasLogo  = !empty($company['logo']) && is_file(__DIR__ . '/company_logos/' . $company['logo']);
 $avatarSrc = $hasLogo ? ('company_logos/' . e($company['logo'])) : svg_avatar_data_uri($company['company_name'] ?? '', 112);
@@ -162,19 +147,68 @@ $avatarSrc = $hasLogo ? ('company_logos/' . e($company['logo'])) : svg_avatar_da
     <title>JobHive | Company Profile</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <style>
+        :root {
+            /* Light mode variables */
+            --bg-color: #f8fafc;
+            --text-color: #334155;
+            --card-bg: #ffffff;
+            --border-color: rgba(15, 23, 42, 0.06);
+            --header-bg: #ffffff;
+            --input-bg: #ffffff;
+            --button-bg: #ffc107;
+            --button-text: #000000;
+            --link-color: #ffaa2b;
+            --section-bg: #f8fafc;
+            --card-shadow: 0 8px 30px rgba(0, 0, 0, .06);
+            --transition-speed: 0.3s;
+            --bg-tertiary: #f3f4f6;
+        }
+
+        /* Dark mode variables */
+        [data-theme="dark"] {
+            --bg-color: #121212;
+            --text-color: #e0e0e0;
+            --card-bg: #1e1e1e;
+            --border-color: rgba(255, 255, 255, 0.1);
+            --header-bg: #1a1a1a;
+            --input-bg: #2d2d2d;
+            --button-bg: #ffc107;
+            --button-text: #000000;
+            --link-color: #ffaa2b;
+            --section-bg: #1a1a1a;
+            --card-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+            --bg-tertiary: #2d2d2d;
+        }
+
+        /* Global transitions */
+        body,
+        .navbar,
+        .card,
+        .form-control,
+        .form-select,
+        .btn {
+            transition: background-color var(--transition-speed) ease,
+                color var(--transition-speed) ease,
+                border-color var(--transition-speed) ease,
+                box-shadow var(--transition-speed) ease;
+        }
+
         body {
-            background: #f8fafc;
+            background: var(--bg-color);
+            color: var(--text-color);
         }
 
         .profile-card {
             max-width: 760px;
             margin: 40px auto;
-            background: #fff;
+            background: var(--card-bg);
             border-radius: 1.5rem;
-            box-shadow: 0 3px 16px rgba(30, 30, 60, .07);
+            box-shadow: var(--card-shadow);
             padding: 2.5rem 2rem 2rem;
+            border: 1px solid var(--border-color);
         }
 
         .profile-img {
@@ -183,7 +217,7 @@ $avatarSrc = $hasLogo ? ('company_logos/' . e($company['logo'])) : svg_avatar_da
             object-fit: cover;
             border-radius: 16px;
             border: 3px solid #ffc107;
-            background: #fafafa;
+            background: var(--card-bg);
             margin-bottom: 1rem;
         }
 
@@ -202,11 +236,11 @@ $avatarSrc = $hasLogo ? ('company_logos/' . e($company['logo'])) : svg_avatar_da
 
         .field-label {
             font-weight: 600;
-            color: #6c757d;
+            color: var(--text-color);
             margin-bottom: .1rem;
             font-size: 1.04rem;
+            opacity: 0.8;
         }
-
 
         /* ===== Navbar link underline on hover ===== */
         .navbar-nav .nav-link {
@@ -233,8 +267,9 @@ $avatarSrc = $hasLogo ? ('company_logos/' . e($company['logo'])) : svg_avatar_da
 
         .profile-form input[readonly],
         .profile-form textarea[readonly] {
-            background: #f7f7fa;
+            background: var(--bg-tertiary);
             cursor: not-allowed;
+            color: var(--text-color);
         }
 
         .form-edit-row {
@@ -246,6 +281,112 @@ $avatarSrc = $hasLogo ? ('company_logos/' . e($company['logo'])) : svg_avatar_da
 
         textarea.form-control {
             min-height: 120px;
+            background-color: var(--input-bg);
+            color: var(--text-color);
+            border-color: var(--border-color);
+        }
+
+        /* Navbar styling */
+        .navbar {
+            background-color: var(--header-bg) !important;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        [data-theme="dark"] .navbar {
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .navbar-brand {
+            color: var(--text-color) !important;
+        }
+
+        .navbar-nav .nav-link {
+            color: var(--text-color) !important;
+        }
+
+        .navbar-toggler {
+            border-color: var(--border-color) !important;
+        }
+
+        .navbar-toggler-icon {
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba%2333, 0.75)' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e") !important;
+        }
+
+        [data-theme="dark"] .navbar-toggler-icon {
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba%23255, 255, 255, 0.75)' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e") !important;
+        }
+
+        /* Alert styles */
+        .alert-success {
+            background-color: #d1e7dd;
+            border-color: #badbcc;
+            color: #0f5132;
+        }
+
+        [data-theme="dark"] .alert-success {
+            background-color: #0f5132;
+            border-color: #198754;
+            color: #d1e7dd;
+        }
+
+        .alert-danger {
+            background-color: #f8d7da;
+            border-color: #f5c2c7;
+            color: #842029;
+        }
+
+        [data-theme="dark"] .alert-danger {
+            background-color: #842029;
+            border-color: #f5c2c7;
+            color: #f8d7da;
+        }
+
+        /* Button styles */
+        .btn-warning {
+            background-color: var(--button-bg);
+            color: var(--button-text);
+        }
+
+        .btn-outline-warning {
+            color: var(--button-bg);
+            border-color: var(--button-bg);
+        }
+
+        [data-theme="dark"] .btn-outline-warning {
+            color: #ffc107;
+            border-color: #ffc107;
+        }
+
+        [data-theme="dark"] .btn-outline-warning:hover {
+            background-color: #ffc107;
+            color: #000000;
+        }
+
+        /* Text-muted styles */
+        .text-muted {
+            color: #6c757d !important;
+        }
+
+        [data-theme="dark"] .text-muted {
+            color: #adb5bd !important;
+        }
+
+        /* Theme Toggle Button */
+        .theme-toggle {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+        }
+
+        .theme-toggle:hover {
+            background: var(--bg-tertiary);
         }
     </style>
 </head>
@@ -263,23 +404,26 @@ $avatarSrc = $hasLogo ? ('company_logos/' . e($company['logo'])) : svg_avatar_da
                     <li class="nav-item"><a class="nav-link" href="c_dashboard.php">Dashboard</a></li>
                     <li class="nav-item"><a class="nav-link active" href="company_profile.php">Profile</a></li>
                     <li class="nav-item"><a class="nav-link" href="post_job.php">Post Job</a></li>
+                    <!-- Theme Toggle Button -->
+                    <li class="nav-item">
+                        <button class="theme-toggle ms-3" id="themeToggle" aria-label="Toggle theme">
+                            <i class="bi bi-sun-fill" id="themeIcon"></i>
+                        </button>
+                    </li>
                     <li class="nav-item"><a class="btn btn-outline-warning ms-2" href="logout.php">Logout</a></li>
                 </ul>
             </div>
         </div>
     </nav>
-
     <div class="container">
         <div class="profile-card">
             <h3 class="fw-bold mb-3 text-center">Company Profile</h3>
-
             <?php if (!empty($success_message)): ?>
                 <div class="alert alert-success text-center"><?= e($success_message) ?></div>
             <?php endif; ?>
             <?php if (!empty($error_message)): ?>
                 <div class="alert alert-danger text-center"><?= e($error_message) ?></div>
             <?php endif; ?>
-
             <form class="profile-form" method="POST" enctype="multipart/form-data" action="company_profile.php">
                 <!-- Logo (photo or initials) -->
                 <div class="text-center mb-3">
@@ -289,7 +433,6 @@ $avatarSrc = $hasLogo ? ('company_logos/' . e($company['logo'])) : svg_avatar_da
                             onchange="previewLogo(this)">
                     </div>
                 </div>
-
                 <!-- Company Name -->
                 <div class="form-edit-row">
                     <div style="flex:1">
@@ -299,7 +442,6 @@ $avatarSrc = $hasLogo ? ('company_logos/' . e($company['logo'])) : svg_avatar_da
                     </div>
                     <?php if (!empty($company['company_name'])): ?><button type="button" class="edit-btn" onclick="toggleEdit(this)">✎ Edit</button><?php endif; ?>
                 </div>
-
                 <!-- Email -->
                 <div class="form-edit-row">
                     <div style="flex:1">
@@ -309,7 +451,6 @@ $avatarSrc = $hasLogo ? ('company_logos/' . e($company['logo'])) : svg_avatar_da
                     </div>
                     <?php if (!empty($company['email'])): ?><button type="button" class="edit-btn" onclick="toggleEdit(this)">✎ Edit</button><?php endif; ?>
                 </div>
-
                 <!-- Phone -->
                 <div class="form-edit-row">
                     <div style="flex:1">
@@ -319,7 +460,6 @@ $avatarSrc = $hasLogo ? ('company_logos/' . e($company['logo'])) : svg_avatar_da
                     </div>
                     <?php if (!empty($company['phone'])): ?><button type="button" class="edit-btn" onclick="toggleEdit(this)">✎ Edit</button><?php endif; ?>
                 </div>
-
                 <!-- Address -->
                 <div class="form-edit-row">
                     <div style="flex:1">
@@ -329,7 +469,6 @@ $avatarSrc = $hasLogo ? ('company_logos/' . e($company['logo'])) : svg_avatar_da
                     </div>
                     <?php if (!empty($company['address'])): ?><button type="button" class="edit-btn" onclick="toggleEdit(this)">✎ Edit</button><?php endif; ?>
                 </div>
-
                 <!-- Detail Company (c_detail) -->
                 <div class="form-edit-row" style="align-items:flex-start">
                     <div style="flex:1">
@@ -339,15 +478,39 @@ $avatarSrc = $hasLogo ? ('company_logos/' . e($company['logo'])) : svg_avatar_da
                     </div>
                     <?php if (!empty($company['c_detail'])): ?><button type="button" class="edit-btn" onclick="toggleEdit(this)">✎ Edit</button><?php endif; ?>
                 </div>
-
                 <div class="mt-4 text-center">
                     <button type="submit" class="btn btn-warning px-4">Save Changes</button>
                 </div>
             </form>
         </div>
     </div>
-
     <script>
+        // Theme toggle functionality - matching about.php
+        const themeToggle = document.getElementById('themeToggle');
+        const themeIcon = document.getElementById('themeIcon');
+        const html = document.documentElement;
+        // Check for saved theme preference or default to light
+        const currentTheme = localStorage.getItem('theme') || 'light';
+        html.setAttribute('data-theme', currentTheme);
+        updateThemeIcon(currentTheme);
+        themeToggle.addEventListener('click', () => {
+            const theme = html.getAttribute('data-theme');
+            const newTheme = theme === 'dark' ? 'light' : 'dark';
+            html.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            updateThemeIcon(newTheme);
+        });
+
+        function updateThemeIcon(theme) {
+            if (theme === 'dark') {
+                themeIcon.classList.remove('bi-sun-fill');
+                themeIcon.classList.add('bi-moon-fill');
+            } else {
+                themeIcon.classList.remove('bi-moon-fill');
+                themeIcon.classList.add('bi-sun-fill');
+            }
+        }
+
         function toggleEdit(btn) {
             const input = btn.parentNode.querySelector("input, select, textarea");
             if (!input) return;

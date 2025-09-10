@@ -1,20 +1,16 @@
 <?php
 require_once "connect.php";
 if (session_status() === PHP_SESSION_NONE) session_start();
-
 function e($v)
 {
     return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
 }
-
 /* ========= 3-way return flow ========= */
 $company_id = $_SESSION['company_id'] ?? null;
 $user_id    = $_SESSION['user_id'] ?? null;
 $return     = $_GET['return'] ?? null;
-
 $homeUrl     = 'index.php';
 $returnParam = 'index';
-
 if ($return === 'company_home' && $company_id) {
     $homeUrl = 'company_home.php';
     $returnParam = 'company_home';
@@ -33,7 +29,6 @@ if ($return === 'company_home' && $company_id) {
         $returnParam = 'user_home';
     }
 }
-
 $aboutUrl   = 'about.php?'   . http_build_query(['return' => $returnParam]);
 $faqUrl     = 'faq.php?'     . http_build_query(['return' => $returnParam]);
 $termsUrl   = 'terms.php?'   . http_build_query(['return' => $returnParam]);
@@ -48,18 +43,81 @@ $privacyUrl = 'privacy.php?' . http_build_query(['return' => $returnParam]);
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-
     <style>
         :root {
+            --bg-primary: #f8fafc;
+            --bg-secondary: #ffffff;
+            --bg-tertiary: #f3f4f6;
+            --bg-footer: #121821;
+            --bg-card: #ffffff;
+            --bg-accordion: #ffffff;
+            --bg-hero: #0f172a;
+            --bg-input: #ffffff;
+            --text-primary: #22223b;
+            --text-secondary: #495057;
+            --text-muted: #6c757d;
+            --text-white: #ffffff;
+            --text-footer: #e0e6ed;
+            --text-footer-muted: #9fb0c3;
+            --text-footer-link: #eaf0f6;
+            --text-footer-heading: #8ea0b5;
+            --border-color: #dee2e6;
+            --navbar-bg: #ffffff;
+            --navbar-text: #22223b;
+            --navbar-border: #dee2e6;
+            --card-shadow: 0 8px 30px rgba(2, 8, 20, .06);
+            --btn-primary-bg: #ffaa2b;
+            --btn-primary-text: #22223b;
+            --btn-primary-hover: #ffc107;
             --jh-gold: #ffaa2b;
             --jh-gold-2: #ffc107;
             --jh-dark: #151b24;
+            --footer-social-bg: #1e2631;
+            --footer-social-hover: #273140;
+            --footer-hr: rgba(255, 255, 255, .08);
+            --heart-color: #e25555;
+        }
+
+        [data-theme="dark"] {
+            --bg-primary: #121212;
+            --bg-secondary: #1e1e1e;
+            --bg-tertiary: #2d2d2d;
+            --bg-footer: #0d1117;
+            --bg-card: #1e1e1e;
+            --bg-accordion: #2d2d2d;
+            --bg-hero: #0d1117;
+            --bg-input: #2d2d2d;
+            --text-primary: #ffffff;
+            --text-secondary: #ffffff;
+            --text-muted: #ffffff;
+            --text-white: #ffffff;
+            --text-footer: #e0e6ed;
+            --text-footer-muted: #9fb0c3;
+            --text-footer-link: #eaf0f6;
+            --text-footer-heading: #8ea0b5;
+            --border-color: #343a40;
+            --navbar-bg: #1e1e1e;
+            --navbar-text: #ffffff;
+            --navbar-border: #343a40;
+            --card-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+            --btn-primary-bg: #ffaa2b;
+            --btn-primary-text: #22223b;
+            --btn-primary-hover: #ffc107;
+            --jh-gold: #ffaa2b;
+            --jh-gold-2: #ffc107;
+            --jh-dark: #151b24;
+            --footer-social-bg: #21262d;
+            --footer-social-hover: #30363d;
+            --footer-hr: rgba(255, 255, 255, .08);
+            --heart-color: #e25555;
         }
 
         html,
         body {
-            height: 100%
+            height: 100%;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            transition: background-color 0.3s, color 0.3s;
         }
 
         html {
@@ -70,7 +128,6 @@ $privacyUrl = 'privacy.php?' . http_build_query(['return' => $returnParam]);
             min-height: 100vh;
             display: flex;
             flex-direction: column;
-            background: #f8fafc
         }
 
         main {
@@ -78,10 +135,22 @@ $privacyUrl = 'privacy.php?' . http_build_query(['return' => $returnParam]);
         }
 
         /* navbar hover underline */
+        .navbar {
+            background-color: var(--navbar-bg) !important;
+            border-bottom: 1px solid var(--navbar-border);
+            transition: background-color 0.3s, border-color 0.3s;
+        }
+
+        .navbar-brand {
+            color: var(--btn-primary-bg) !important;
+            transition: color 0.3s;
+        }
+
         .navbar-nav .nav-link {
             position: relative;
             padding-bottom: 4px;
-            transition: color .2s ease-in-out
+            transition: color .2s ease-in-out;
+            color: var(--navbar-text) !important;
         }
 
         .navbar-nav .nav-link::after {
@@ -99,12 +168,25 @@ $privacyUrl = 'privacy.php?' . http_build_query(['return' => $returnParam]);
             width: 100%
         }
 
+        .navbar-toggler {
+            border-color: var(--text-primary);
+        }
+
+        .navbar-toggler-icon {
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba%2834, 34, 59, 0.75%29' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e");
+        }
+
+        [data-theme="dark"] .navbar-toggler-icon {
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba%28255, 255, 255, 0.75%29' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e");
+        }
+
         /* hero */
         .page-hero {
-            background: #0f172a;
-            color: #fff;
+            background: var(--bg-hero);
+            color: var(--text-white);
             padding: 24px 0;
-            text-align: center
+            text-align: center;
+            transition: background-color 0.3s, color 0.3s;
         }
 
         .page-hero h1 {
@@ -125,20 +207,88 @@ $privacyUrl = 'privacy.php?' . http_build_query(['return' => $returnParam]);
         }
 
         .section-card {
-            background: #fff;
+            background: var(--bg-card);
             border-radius: 1rem;
-            box-shadow: 0 8px 30px rgba(2, 8, 20, .06);
+            box-shadow: var(--card-shadow);
             padding: 1.5rem;
             margin-bottom: 1.25rem;
-            border: 1px solid rgba(15, 23, 42, .06)
+            border: 1px solid var(--border-color);
+            transition: background-color 0.3s, border-color 0.3s, box-shadow 0.3s;
+        }
+
+        .input-group {
+            background-color: var(--bg-card);
+            transition: background-color 0.3s;
+        }
+
+        .input-group-text {
+            background-color: var(--bg-input);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            transition: background-color 0.3s, border-color 0.3s, color 0.3s;
+        }
+
+        .form-control {
+            background-color: var(--bg-input);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            transition: background-color 0.3s, border-color 0.3s, color 0.3s;
+        }
+
+        .form-control:focus {
+            background-color: var(--bg-input);
+            border-color: var(--btn-primary-bg);
+            color: var(--text-primary);
+        }
+
+        .accordion {
+            --bs-accordion-bg: var(--bg-accordion);
+            --bs-accordion-color: var(--text-primary);
+            --bs-accordion-border-color: var(--border-color);
+            --bs-accordion-btn-bg: var(--bg-accordion);
+            --bs-accordion-btn-color: var(--text-primary);
+            --bs-accordion-btn-icon: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%2322223b'%3e%3cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3e%3c/svg%3e");
+            --bs-accordion-btn-active-icon: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%2322223b'%3e%3cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3e%3c/svg%3e");
+            --bs-accordion-btn-focus-border-color: var(--btn-primary-bg);
+            --bs-accordion-btn-focus-box-shadow: 0 0 0 0.25rem rgba(255, 170, 43, 0.25);
+            --bs-accordion-body-padding-x: 1rem;
+            --bs-accordion-body-padding-y: 1rem;
+            --bs-accordion-active-color: var(--text-primary);
+            --bs-accordion-active-bg: var(--bg-accordion);
+        }
+
+        [data-theme="dark"] .accordion {
+            --bs-accordion-btn-icon: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23ffffff'%3e%3cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3e%3c/svg%3e");
+            --bs-accordion-btn-active-icon: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23ffffff'%3e%3cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3e%3c/svg%3e");
+        }
+
+        .accordion-button:not(.collapsed) {
+            color: var(--btn-primary-bg);
+            background-color: var(--bg-accordion);
+            box-shadow: inset 0 -1px 0 var(--border-color);
+        }
+
+        .accordion-button:focus {
+            box-shadow: 0 0 0 0.25rem rgba(255, 170, 43, 0.25);
+        }
+
+        .accordion-body a {
+            color: var(--btn-primary-bg);
+            text-decoration: none;
+            transition: color 0.3s;
+        }
+
+        .accordion-body a:hover {
+            color: var(--btn-primary-hover);
         }
 
         /* ===== footer (matches your screenshot) ===== */
         .footer {
-            background: #121821;
-            color: #e0e6ed;
+            background: var(--bg-footer);
+            color: var(--text-footer);
             padding: 56px 0 12px;
-            flex-shrink: 0
+            flex-shrink: 0;
+            transition: background-color 0.3s, color 0.3s;
         }
 
         .footer .brand {
@@ -148,14 +298,15 @@ $privacyUrl = 'privacy.php?' . http_build_query(['return' => $returnParam]);
         }
 
         .footer .tagline {
-            color: #cbd5e1;
+            color: var(--text-footer-muted);
             font-size: 1.05rem;
             margin-top: .25rem
         }
 
         .footer a {
-            color: #eaf0f6;
-            text-decoration: none
+            color: var(--text-footer-link);
+            text-decoration: none;
+            transition: color 0.3s;
         }
 
         .footer a:hover {
@@ -163,7 +314,7 @@ $privacyUrl = 'privacy.php?' . http_build_query(['return' => $returnParam]);
         }
 
         .footer h6 {
-            color: #8ea0b5;
+            color: var(--text-footer-heading);
             letter-spacing: .02em
         }
 
@@ -174,38 +325,58 @@ $privacyUrl = 'privacy.php?' . http_build_query(['return' => $returnParam]);
             width: 42px;
             height: 42px;
             border-radius: 50%;
-            background: #1e2631;
-            margin-right: 10px
+            background: var(--footer-social-bg);
+            margin-right: 10px;
+            transition: background-color 0.3s;
         }
 
         .footer .social a:hover {
-            background: #273140
+            background: var(--footer-social-hover)
         }
 
         .footer .muted {
-            color: #9fb0c3
+            color: var(--text-footer-muted)
         }
 
         .footer hr {
-            border-top: 1px solid rgba(255, 255, 255, .08);
-            margin: 28px 0 12px
+            border-top: 1px solid var(--footer-hr);
+            margin: 28px 0 12px;
+            transition: border-color 0.3s;
         }
 
         .footer-bottom {
-            color: #9fb0c3
+            color: var(--text-footer-muted)
         }
 
         .footer-bottom .heart {
-            color: #e25555
+            color: var(--heart-color)
+        }
+
+        /* Theme toggle button */
+        .theme-toggle {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+        }
+
+        .theme-toggle:hover {
+            background: var(--bg-tertiary);
         }
     </style>
 </head>
 
 <body>
     <!-- Navbar -->
-    <nav class="navbar navbar-expand-lg bg-white shadow-sm">
+    <nav class="navbar navbar-expand-lg shadow-sm">
         <div class="container">
-            <a class="navbar-brand fw-bold text-warning" href="<?= e($homeUrl) ?>">JobHive</a>
+            <a class="navbar-brand fw-bold" href="<?= e($homeUrl) ?>">JobHive</a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navStatic">
                 <span class="navbar-toggler-icon"></span>
             </button>
@@ -216,11 +387,16 @@ $privacyUrl = 'privacy.php?' . http_build_query(['return' => $returnParam]);
                     <li class="nav-item"><a class="nav-link" href="<?= e($faqUrl) ?>">FAQ</a></li>
                     <li class="nav-item"><a class="nav-link" href="<?= e($termsUrl) ?>">Terms &amp; Conditions</a></li>
                     <li class="nav-item"><a class="nav-link" href="<?= e($privacyUrl) ?>">Privacy Policy</a></li>
+                    <!-- Theme Toggle Button -->
+                    <li class="nav-item">
+                        <button class="theme-toggle ms-3" id="themeToggle" aria-label="Toggle theme">
+                            <i class="bi bi-sun-fill" id="themeIcon"></i>
+                        </button>
+                    </li>
                 </ul>
             </div>
         </div>
     </nav>
-
     <main>
         <section class="page-hero">
             <div class="container">
@@ -228,16 +404,14 @@ $privacyUrl = 'privacy.php?' . http_build_query(['return' => $returnParam]);
                 <p class="lead mb-0">Quick answers to common questions.</p>
             </div>
         </section>
-
         <section class="py-4">
             <div class="container content-wrap">
                 <div class="section-card">
                     <div class="input-group">
-                        <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
                         <input id="faqSearch" type="search" class="form-control" placeholder="Search FAQs (e.g., resume, premium, apply)">
                     </div>
                 </div>
-
                 <div class="section-card">
                     <div class="accordion" id="faqAccordion">
                         <!-- Q1 -->
@@ -251,7 +425,6 @@ $privacyUrl = 'privacy.php?' . http_build_query(['return' => $returnParam]);
                                 </div>
                             </div>
                         </div>
-
                         <!-- Q2 -->
                         <div class="accordion-item" data-tags="resume premium pdf png">
                             <h2 class="accordion-header" id="q2h">
@@ -263,7 +436,6 @@ $privacyUrl = 'privacy.php?' . http_build_query(['return' => $returnParam]);
                                 </div>
                             </div>
                         </div>
-
                         <!-- Q3 -->
                         <div class="accordion-item" data-tags="company posting payment status">
                             <h2 class="accordion-header" id="q3h">
@@ -275,7 +447,6 @@ $privacyUrl = 'privacy.php?' . http_build_query(['return' => $returnParam]);
                                 </div>
                             </div>
                         </div>
-
                         <!-- Q4 -->
                         <div class="accordion-item" data-tags="profile completion percentage">
                             <h2 class="accordion-header" id="q4h">
@@ -287,7 +458,6 @@ $privacyUrl = 'privacy.php?' . http_build_query(['return' => $returnParam]);
                                 </div>
                             </div>
                         </div>
-
                         <!-- Q5 -->
                         <div class="accordion-item" data-tags="privacy terms security policy">
                             <h2 class="accordion-header" id="q5h">
@@ -299,7 +469,6 @@ $privacyUrl = 'privacy.php?' . http_build_query(['return' => $returnParam]);
                                 </div>
                             </div>
                         </div>
-
                         <!-- Q6 -->
                         <div class="accordion-item" data-tags="premium upgrade payment">
                             <h2 class="accordion-header" id="q6h">
@@ -311,7 +480,6 @@ $privacyUrl = 'privacy.php?' . http_build_query(['return' => $returnParam]);
                                 </div>
                             </div>
                         </div>
-
                         <!-- Q7 -->
                         <div class="accordion-item" data-tags="company logo profile update">
                             <h2 class="accordion-header" id="q7h">
@@ -323,7 +491,6 @@ $privacyUrl = 'privacy.php?' . http_build_query(['return' => $returnParam]);
                                 </div>
                             </div>
                         </div>
-
                         <!-- Q8 -->
                         <div class="accordion-item" data-tags="jobs inactive closed deadline">
                             <h2 class="accordion-header" id="q8h">
@@ -337,15 +504,13 @@ $privacyUrl = 'privacy.php?' . http_build_query(['return' => $returnParam]);
                         </div>
                     </div>
                 </div>
-
                 <div class="section-card">
-                    Can’t find your answer? <strong><br>
+                    Can't find your answer? <strong><br>
                         Contact Admin Email: <a href="mailto:phonethawnaing11305@gmail.com">phonethawnaing11305@gmail.com</a></strong>.
                 </div>
             </div>
         </section>
     </main>
-
     <!-- ================= Footer (like your screenshot) ================= -->
     <footer class="footer mt-auto">
         <div class="container">
@@ -360,7 +525,6 @@ $privacyUrl = 'privacy.php?' . http_build_query(['return' => $returnParam]);
                         <a href="#" aria-label="LinkedIn"><i class="bi bi-linkedin"></i></a>
                     </div>
                 </div>
-
                 <!-- Quick Links -->
                 <div class="col-md-3">
                     <h6 class="text-uppercase muted mb-3">Quick Links</h6>
@@ -372,7 +536,6 @@ $privacyUrl = 'privacy.php?' . http_build_query(['return' => $returnParam]);
                         <li class="mb-2"><a href="index_all_companies.php">All Companies</a></li>
                     </ul>
                 </div>
-
                 <!-- Contact Links -->
                 <div class="col-md-3">
                     <h6 class="text-uppercase muted mb-3">Contact</h6>
@@ -383,7 +546,6 @@ $privacyUrl = 'privacy.php?' . http_build_query(['return' => $returnParam]);
                         <li class="mb-2"><a href="<?= e($termsUrl) ?>">Terms &amp; Conditions</a></li>
                     </ul>
                 </div>
-
                 <!-- Contact Info -->
                 <div class="col-md-2">
                     <h6 class="text-uppercase muted mb-3">Contact</h6>
@@ -398,17 +560,43 @@ $privacyUrl = 'privacy.php?' . http_build_query(['return' => $returnParam]);
                     </ul>
                 </div>
             </div>
-
             <hr>
-
             <div class="d-flex flex-column flex-md-row justify-content-between align-items-center footer-bottom">
                 <small>© <?= date('Y') ?> JobHive. All rights reserved.</small>
                 <small>Made with <span class="heart">♥</span> in Myanmar</small>
             </div>
         </div>
     </footer>
-
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        // Theme toggle functionality
+        const themeToggle = document.getElementById('themeToggle');
+        const themeIcon = document.getElementById('themeIcon');
+        const html = document.documentElement;
+
+        // Check for saved theme preference or default to light
+        const currentTheme = localStorage.getItem('theme') || 'light';
+        html.setAttribute('data-theme', currentTheme);
+        updateThemeIcon(currentTheme);
+
+        themeToggle.addEventListener('click', () => {
+            const theme = html.getAttribute('data-theme');
+            const newTheme = theme === 'dark' ? 'light' : 'dark';
+            html.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            updateThemeIcon(newTheme);
+        });
+
+        function updateThemeIcon(theme) {
+            if (theme === 'dark') {
+                themeIcon.classList.remove('bi-sun-fill');
+                themeIcon.classList.add('bi-moon-fill');
+            } else {
+                themeIcon.classList.remove('bi-moon-fill');
+                themeIcon.classList.add('bi-sun-fill');
+            }
+        }
+
         // Simple client-side FAQ search
         const q = document.getElementById('faqSearch');
         const items = Array.from(document.querySelectorAll('#faqAccordion .accordion-item'));
@@ -424,4 +612,4 @@ $privacyUrl = 'privacy.php?' . http_build_query(['return' => $returnParam]);
     </script>
 </body>
 
-</html>
+</html>DF

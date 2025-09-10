@@ -192,6 +192,17 @@ elseif (strpos($lowerMessage, 'company') !== false || strpos($lowerMessage, 'emp
         ['text' => 'Browse Companies', 'href' => 'all_companies.php']
     ];
 }
+
+// Feedback Keywords - NEW SECTION
+elseif (strpos($lowerMessage, 'feedback') !== false) {
+    $response = "We value your feedback! You can view existing feedback or share your own thoughts with us. Your input helps us improve JobHive for everyone.";
+    $buttons = [
+        ['text' => 'Send Feedback', 'href' => 'user_home.php#feedbackModal'],
+        ['text' => 'View Feedback', 'href' => 'user_home.php#feedback']
+    ];
+}
+
+
 // Help/Support Keywords
 elseif (strpos($lowerMessage, 'help') !== false || strpos($lowerMessage, 'support') !== false || strpos($lowerMessage, 'assistance') !== false) {
     $response = "I'm here to help! You can ask me about jobs, applications, your profile, premium features, or account settings. For more detailed assistance, please contact our support team at support@jobhive.mm.";

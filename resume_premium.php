@@ -1,9 +1,7 @@
 <?php
 require_once "connect.php";
 session_start();
-
 $PROFILE_DIR = "profile_pics/";
-
 /* ----------------- HELPERS ----------------- */
 function e($v)
 {
@@ -33,14 +31,12 @@ function data_uri_for_file($fs_path)
     if ($data === false) return '';
     return "data:$mime;base64," . base64_encode($data);
 }
-
 /* ----------------- AUTH ----------------- */
 $user_id = $_SESSION['user_id'] ?? null;
 if (!$user_id) {
     header("Location: login.php?next=" . urlencode($_SERVER['REQUEST_URI']));
     exit;
 }
-
 /* ----------------- LOAD USER + PREMIUM CHECK ----------------- */
 try {
     $stmt = $pdo->prepare("
@@ -55,7 +51,6 @@ try {
 } catch (PDOException $e) {
     $user = null;
 }
-
 if (!$user) {
     http_response_code(404);
     $fatal_error = "User not found.";
@@ -66,7 +61,6 @@ if (!$user) {
         $fatal_error = "Premium feature only. Please upgrade to access Premium Resume.";
     }
 }
-
 /* ----------------- LOAD JOB + COMPANY (from ?job_id=) ----------------- */
 $job_id = isset($_GET['job_id']) ? (int)$_GET['job_id'] : 0;
 $jobTitle = '';
@@ -89,7 +83,6 @@ if (empty($fatal_error) && $job_id > 0) {
     } catch (PDOException $e) { /* ignore */
     }
 }
-
 /* ----------------- PREP DATA ----------------- */
 $name  = $user['full_name'] ?? '';
 $email = $user['email'] ?? '';
@@ -102,26 +95,21 @@ $birth = $user['b_date'] ?? '';
 $gender = $user['gender'] ?? '';
 $edu   = $user['education'] ?? '';
 $ini   = initials($name);
-
 /* Normalize */
 $gender = $gender ? ucwords(strtolower($gender)) : '';
 $edu    = $edu ? ucwords($edu) : '';
-
 $photo_src = '';
 if ($photo) {
     $fs_path = __DIR__ . '/' . $PROFILE_DIR . $photo;
     $photo_src = data_uri_for_file($fs_path);
 }
-
 /* ----------------- Summary (first-person; no premium/parentheses) ----------------- */
 $companyLabel      = $companyName ?: 'the company';
-$companyPossessive = $companyName ? ($companyName . "’s") : "the company’s";
-
+$companyPossessive = $companyName ? ($companyName . "’s") : "the company's";
 if ($jobTitle && $companyName)      $opening = "I am applying for the {$jobTitle} position at {$companyName}.";
 elseif ($jobTitle)                   $opening = "I am applying for the {$jobTitle} position.";
 elseif ($companyName)                $opening = "I am applying to {$companyName} for a suitable role.";
 else                                 $opening = "I am seeking a role that matches my skills and goals.";
-
 $bg = [];
 if ($pos && $cat) $bg[] = "I have experience as {$pos} in the {$cat} field";
 elseif ($pos)     $bg[] = "I have experience as {$pos}";
@@ -130,16 +118,12 @@ if ($edu)         $bg[] = "I hold a {$edu}";
 if ($addr)        $bg[] = "I am based in {$addr}";
 if ($birth)       $bg[] = "I was born on {$birth}";
 $background = $bg ? implode('. ', $bg) . '.' : '';
-
 $commitment = "I learn quickly, follow company policies, and collaborate well with teams. My goal is to deliver reliable, high-quality work that contributes to {$companyPossessive} objectives.";
-
 $contactPieces = [];
 if ($phone) $contactPieces[] = $phone;
 if ($email) $contactPieces[] = $email;
 $contact = $contactPieces ? "You can reach me at " . implode(' or ', $contactPieces) . "." : "";
-
 $premiumSummary = trim(preg_replace('/\s+/', ' ', $opening . ' ' . $background . ' ' . $commitment . ' ' . $contact));
-
 /* Build Apply link (include job_id if present). Adjust path if resume.php lives elsewhere. */
 $applyHref = 'resume.php';
 if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
@@ -151,16 +135,22 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Premium Resume | JobHive</title>
-
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dom-to-image-more@3.3.0/dist/dom-to-image-more.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
-
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap" rel="stylesheet">
-
+    <!-- Apply theme immediately to prevent flash -->
+    <script>
+        (function() {
+            // Check for saved theme preference - using the same key as job_detail.php
+            const savedTheme = localStorage.getItem('theme') || 'light';
+            // Apply the theme immediately
+            document.documentElement.setAttribute('data-theme', savedTheme);
+        })();
+    </script>
     <style>
         :root {
             --accent: #0ea5e9;
@@ -177,6 +167,107 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
             --radius-lg: 16px;
             --shadow: 0 10px 30px rgba(0, 0, 0, .08);
             --line: 1.65;
+            /* Light mode colors */
+            --bg-primary: #f8fafc;
+            --bg-secondary: #ffffff;
+            --bg-tertiary: #f3f4f6;
+            --bg-footer: #212529;
+            --text-primary: #22223b;
+            --text-secondary: #495057;
+            --text-muted: #6c757d;
+            --text-white: #ffffff;
+            --border-color: #dee2e6;
+            --navbar-bg: #ffffff;
+            --navbar-text: #22223b;
+            --navbar-border: #dee2e6;
+            --card-bg: #ffffff;
+            --card-shadow: 0 6px 24px rgba(0, 0, 0, 0.06);
+            --btn-primary-bg: #ffaa2b;
+            --btn-primary-text: #22223b;
+            --btn-primary-hover: #e6991f;
+            --page-header-bg: #ffffff;
+            --page-header-border: rgba(0, 0, 0, .06);
+            --apply-box-bg: #ffffff;
+            --apply-box-text: #0f172a;
+            --apply-box-border: #e5e7eb;
+            --apply-box-steps: #475569;
+            --btn-outline-bg: transparent;
+            --btn-outline-text: #0f172a;
+            --btn-outline-border: #6c757d;
+            --btn-outline-hover-bg: rgba(0, 0, 0, 0.05);
+            --btn-warning-bg: #ffc107;
+            --btn-warning-text: #212529;
+            --form-check-bg: #ffffff;
+            --form-check-text: #0f172a;
+        }
+
+        [data-theme="dark"] {
+            /* Dark mode colors */
+            --bg-primary: #000000;
+            --bg-secondary: #0d0d0d;
+            --bg-tertiary: #1a1a1a;
+            --bg-footer: #000000;
+            --text-primary: #ffffff;
+            --text-secondary: #ffffff;
+            --text-muted: #ffffff;
+            --text-white: #ffffff;
+            --border-color: #333333;
+            --navbar-bg: #0d0d0d;
+            --navbar-text: #ffffff;
+            --navbar-border: #333333;
+            --card-bg: #0d0d0d;
+            --card-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+            --btn-primary-bg: #ffaa2b;
+            --btn-primary-text: #000000;
+            --btn-primary-hover: #e6991f;
+            --page-header-bg: #000000;
+            --page-header-border: #333333;
+            --apply-box-bg: #0d0d0d;
+            --apply-box-text: #e2e8f0;
+            --apply-box-border: #4a5568;
+            --apply-box-steps: #cbd5e0;
+            --btn-outline-bg: transparent;
+            --btn-outline-text: #e2e8f0;
+            --btn-outline-border: #4a5568;
+            --btn-outline-hover-bg: rgba(255, 255, 255, 0.1);
+            --btn-warning-bg: #d69e2e;
+            --btn-warning-text: #1a202c;
+            --form-check-bg: #0d0d0d;
+            --form-check-text: #e2e8f0;
+        }
+
+        /* Force light theme for resume content */
+        .resume-content {
+            background-color: #ffffff !important;
+            color: #0f172a !important;
+        }
+
+        .resume-content .muted {
+            color: #6b7280 !important;
+        }
+
+        .resume-content .section-title {
+            color: var(--accent) !important;
+        }
+
+        .resume-content .t1 .side {
+            background: color-mix(in srgb, var(--accent) 9%, white) !important;
+            border-right-color: var(--accent) !important;
+        }
+
+        .resume-content .t2 .head {
+            background: var(--accent) !important;
+            color: #ffffff !important;
+        }
+
+        .resume-content .t3 .left {
+            background: #0b1220 !important;
+            color: #e5e7eb !important;
+        }
+
+        .resume-content .t3 .chip {
+            background: rgba(255, 255, 255, .05) !important;
+            border-color: #e5e7eb !important;
         }
 
         html,
@@ -186,26 +277,40 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
             text-rendering: optimizeLegibility;
             font-feature-settings: "liga", "kern";
             font-family: 'Inter', sans-serif;
-        }
-
-        body {
-            background: #f8fafc;
-            color: var(--ink);
-            line-height: var(--line);
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            transition: background-color 0.3s ease, color 0.3s ease;
         }
 
         header {
             position: relative;
             z-index: 20;
+            background-color: var(--page-header-bg);
+            color: var(--text-primary);
+            border-bottom: 1px solid var(--page-header-border);
+            transition: background-color 0.3s ease, color 0.3s ease;
         }
 
-        /* ensure header (and Apply button) sits above everything */
         .apply-box {
             position: relative;
             z-index: 21;
+            background-color: var(--apply-box-bg);
+            color: var(--apply-box-text);
+            border: 1px solid var(--apply-box-border);
+            transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
         }
 
-        /* belt & suspenders */
+        .apply-box h6 {
+            color: var(--apply-box-text);
+        }
+
+        .apply-box p {
+            color: var(--apply-box-steps);
+        }
+
+        .apply-box .steps {
+            color: var(--apply-box-steps);
+        }
 
         .resume,
         .resume * {
@@ -229,7 +334,6 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
             margin-top: 0;
         }
 
-        /* Editable hint */
         .editable [contenteditable="true"] {
             border-bottom: 1px dashed transparent;
             cursor: text;
@@ -244,12 +348,10 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
             cursor: default;
         }
 
-        /* Toolbar */
         .toolbar {
             gap: .5rem;
         }
 
-        /* Picker & Apply box */
         .template-picker .swatch {
             width: 28px;
             height: 28px;
@@ -272,32 +374,6 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
             border-color: var(--accent);
         }
 
-        .apply-box {
-            background: #fff;
-            border: 1px solid #e5e7eb;
-            border-left: 4px solid var(--accent);
-            border-radius: 12px;
-            padding: 16px;
-            box-shadow: 0 4px 14px rgba(0, 0, 0, .04);
-        }
-
-        .apply-box h6 {
-            margin: 0 0 6px;
-            font-weight: 800;
-            color: var(--ink);
-        }
-
-        .apply-box p {
-            margin: 0 0 10px;
-            color: #475569;
-        }
-
-        .apply-box .steps {
-            font-size: .925rem;
-            color: #475569;
-            margin-bottom: 12px;
-        }
-
         .apply-box .btn-apply {
             background: var(--accent);
             border: 1px solid var(--accent);
@@ -311,7 +387,6 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
             filter: brightness(.95);
         }
 
-        /* Stage */
         .resume-stage {
             background: #fff;
             width: 794px;
@@ -347,7 +422,6 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
             margin-top: var(--sp-3);
         }
 
-        /* Avatar */
         .avatar {
             width: 120px;
             height: 120px;
@@ -379,7 +453,6 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
             background: #fff;
         }
 
-        /* T1 */
         .t1 {
             display: grid;
             grid-template-columns: 280px 1fr;
@@ -413,7 +486,6 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
             padding-bottom: .25rem;
         }
 
-        /* T2 */
         .t2 {
             min-height: 1123px;
             display: flex;
@@ -448,7 +520,6 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
             --bs-gutter-x: 3rem;
         }
 
-        /* T3 */
         .t3 {
             display: grid;
             grid-template-columns: 300px 1fr;
@@ -484,10 +555,9 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
             line-height: 1;
         }
 
-        /* Print */
         @media print {
             body {
-                background: #fff;
+                background: #fff !important;
             }
 
             .resume-stage {
@@ -510,7 +580,6 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
             }
         }
 
-        /* Mobile */
         @media (max-width:992px) {
             .apply-box {
                 margin-top: 10px;
@@ -533,40 +602,286 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
                 border-bottom: 3px solid var(--accent);
             }
         }
+
+        .navbar {
+            background-color: var(--navbar-bg) !important;
+            color: var(--navbar-text) !important;
+            border-bottom: 1px solid var(--navbar-border) !important;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        .navbar .navbar-brand {
+            color: var(--btn-primary-bg) !important;
+            font-weight: 700;
+        }
+
+        .navbar .btn-outline-secondary {
+            background-color: var(--btn-outline-bg) !important;
+            color: var(--btn-outline-text) !important;
+            border-color: var(--btn-outline-border) !important;
+            transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+        }
+
+        .navbar .btn-outline-secondary:hover {
+            background-color: var(--btn-outline-hover-bg) !important;
+            color: var(--btn-outline-text) !important;
+        }
+
+        .navbar .btn-outline-danger {
+            background-color: var(--btn-outline-bg) !important;
+            color: var(--btn-outline-text) !important;
+            border-color: #dc3545 !important;
+        }
+
+        .navbar .btn-outline-danger:hover {
+            background-color: rgba(220, 53, 69, 0.2) !important;
+            color: var(--btn-outline-text) !important;
+        }
+
+        .navbar .btn-warning {
+            background-color: var(--btn-warning-bg) !important;
+            border-color: var(--btn-warning-bg) !important;
+            color: var(--btn-warning-text) !important;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        .navbar .btn-warning:hover {
+            filter: brightness(0.9) !important;
+        }
+
+        .navbar .form-check-input:checked {
+            background-color: var(--accent) !important;
+            border-color: var(--accent) !important;
+        }
+
+        .navbar .form-check-label {
+            color: var(--navbar-text) !important;
+        }
+
+        footer {
+            background-color: var(--bg-footer) !important;
+            color: var(--text-white) !important;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        footer a {
+            color: var(--text-white);
+            transition: color 0.3s;
+        }
+
+        footer a:hover {
+            color: var(--btn-primary-bg);
+        }
+
+        .theme-toggle {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+        }
+
+        .theme-toggle:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .alert-warning {
+            background-color: var(--bg-tertiary);
+            border-color: var(--btn-primary-bg);
+            color: var(--text-primary);
+            transition: background-color 0.3s, border-color 0.3s, color 0.3s;
+        }
+
+        .alert-danger {
+            background-color: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+
+        [data-theme="dark"] .alert-danger {
+            background-color: #721c24;
+            border-color: #a71e2a;
+            color: #ffffff;
+        }
+
+        .alert-success {
+            background-color: #d4edda;
+            border-color: #c3e6cb;
+            color: #155724;
+        }
+
+        [data-theme="dark"] .alert-success {
+            background-color: #155724;
+            border-color: #0f5132;
+            color: #ffffff;
+        }
+
+        .form-control {
+            background-color: var(--bg-secondary);
+            color: var(--text-primary);
+            border-color: var(--border-color);
+        }
+
+        .form-control:focus {
+            background-color: var(--bg-secondary);
+            color: var(--text-primary);
+            border-color: var(--btn-primary-bg);
+        }
+
+        .form-label {
+            color: var(--text-primary);
+        }
+
+        .form-text {
+            color: var(--text-muted);
+        }
+
+        /* Ensure all text is white in dark mode */
+        [data-theme="dark"] .text-muted {
+            color: #ffffff !important;
+        }
+
+        [data-theme="dark"] .fw-semibold {
+            color: #ffffff !important;
+        }
+
+        [data-theme="dark"] small {
+            color: #ffffff !important;
+        }
+
+        [data-theme="dark"] p {
+            color: #ffffff !important;
+        }
+
+        [data-theme="dark"] h1,
+        [data-theme="dark"] h2,
+        [data-theme="dark"] h3,
+        [data-theme="dark"] h4,
+        [data-theme="dark"] h5,
+        [data-theme="dark"] h6 {
+            color: #ffffff !important;
+        }
+
+        [data-theme="dark"] ol {
+            color: #ffffff !important;
+        }
+
+        [data-theme="dark"] ol li {
+            color: #ffffff !important;
+        }
+
+        [data-theme="dark"] .form-text {
+            color: #e9ecef !important;
+        }
+
+        .border-bottom {
+            border-bottom: 1px solid var(--page-header-border) !important;
+        }
+
+        /* Apply job section specific styling for dark mode */
+        [data-theme="dark"] main {
+            background-color: var(--bg-primary) !important;
+        }
+
+        [data-theme="dark"] .container {
+            background-color: transparent;
+        }
+
+        [data-theme="dark"] .card {
+            background-color: var(--card-bg) !important;
+            border: 1px solid var(--border-color) !important;
+        }
+
+        [data-theme="dark"] .form-control {
+            background-color: var(--bg-tertiary) !important;
+            border-color: var(--border-color) !important;
+            color: var(--text-primary) !important;
+        }
+
+        [data-theme="dark"] .form-control:focus {
+            background-color: var(--bg-tertiary) !important;
+            border-color: var(--btn-primary-bg) !important;
+            color: var(--text-primary) !important;
+        }
+
+        [data-theme="dark"] .btn-outline-secondary {
+            background-color: transparent !important;
+            border-color: var(--border-color) !important;
+            color: var(--text-primary) !important;
+        }
+
+        [data-theme="dark"] .btn-outline-secondary:hover {
+            background-color: var(--bg-tertiary) !important;
+            border-color: var(--border-color) !important;
+            color: var(--text-primary) !important;
+        }
+
+        /* Apply to Job header styling */
+        [data-theme="dark"] header.py-4 {
+            background-color: var(--page-header-bg) !important;
+            border-bottom: 1px solid var(--page-header-border) !important;
+        }
+
+        [data-theme="dark"] header.py-4 h1 {
+            color: var(--text-primary) !important;
+        }
+
+        /* Job details styling */
+        [data-theme="dark"] .card .row>div>div {
+            color: var(--text-primary) !important;
+        }
+
+        [data-theme="dark"] .card .row>div>div>div {
+            color: var(--text-primary) !important;
+        }
+
+        [data-theme="dark"] .card .row>div>div>span {
+            color: var(--text-primary) !important;
+        }
+
+        [data-theme="dark"] .card h2 {
+            color: var(--text-primary) !important;
+        }
+
+        [data-theme="dark"] .card .text-muted {
+            color: var(--text-muted) !important;
+        }
     </style>
 </head>
 
 <body>
-    <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
+    <nav class="navbar navbar-expand-lg navbar-light shadow-sm">
         <div class="container">
-            <a class="navbar-brand fw-bold text-warning" href="user_home.php">JobHive</a>
-            <div class="ms-auto d-flex align-items-center toolbar">
-                <div class="form-check form-switch me-2">
-                    <input class="form-check-input" type="checkbox" id="toggleEdit" checked>
-                    <label class="form-check-label" for="toggleEdit">Edit Mode</label>
-                </div>
-
-                <!-- Photo controls -->
-                <input id="photoInput" type="file" accept="image/*" class="d-none">
-                <button id="btnPhoto" class="btn btn-outline-secondary btn-sm">Change Photo</button>
-                <button id="btnPhotoRemove" class="btn btn-outline-danger btn-sm">Remove Photo</button>
-
-                <button id="btnReset" class="btn btn-outline-secondary btn-sm ms-2">Reset Edits</button>
-                <a href="user_home.php" class="btn btn-outline-secondary btn-sm">Back</a>
-                <button id="btnPNG" class="btn btn-outline-secondary btn-sm">Download PNG</button>
-                <button id="btnPDF" class="btn btn-warning btn-sm">Download PDF</button>
+            <a class="navbar-brand fw-bold" href="user_home.php">JobHive</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#nav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse justify-content-end" id="nav">
+                <ul class="navbar-nav">
+                    <li class="nav-item"><a class="nav-link" href="user_home.php">Home</a></li>
+                    <li class="nav-item"><a class="nav-link" href="user_dashboard.php">Dashboard</a></li>
+                    <!-- Theme Toggle Button -->
+                    <li class="nav-item">
+                        <button class="theme-toggle ms-3" id="themeToggle" aria-label="Toggle theme">
+                            <i class="bi bi-sun-fill" id="themeIcon"></i>
+                        </button>
+                    </li>
+                </ul>
             </div>
         </div>
     </nav>
-
-    <header class="py-4 bg-white border-bottom">
+    <header class="py-4 border-bottom">
         <div class="container">
             <div class="row align-items-center">
                 <div class="col-md-3">
                     <h1 class="h4 fw-bold mb-2">Select your template</h1>
                     <div class="text-muted">Customize your resume below.</div>
                 </div>
-
                 <div class="col-md-9">
                     <div class="apply-box h-100 d-flex flex-column justify-content-between">
                         <div>
@@ -583,13 +898,26 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
             </div>
         </div>
     </header>
-
     <main class="py-4">
         <div class="container">
             <?php if (!empty($fatal_error)): ?>
                 <div class="alert alert-warning"><?= e($fatal_error) ?></div>
             <?php else: ?>
-
+                <!-- Toolbar with all original buttons -->
+                <div class="d-flex justify-content-end mb-3 toolbar">
+                    <div class="form-check form-switch me-2">
+                        <input class="form-check-input" type="checkbox" id="toggleEdit" checked>
+                        <label class="form-check-label" for="toggleEdit">Edit Mode</label>
+                    </div>
+                    <!-- Photo controls -->
+                    <input id="photoInput" type="file" accept="image/*" class="d-none">
+                    <button id="btnPhoto" class="btn btn-outline-secondary btn-sm">Change Photo</button>
+                    <button id="btnPhotoRemove" class="btn btn-outline-danger btn-sm">Remove Photo</button>
+                    <button id="btnReset" class="btn btn-outline-secondary btn-sm ms-2">Reset Edits</button>
+                    <a href="user_home.php" class="btn btn-outline-secondary btn-sm">Back</a>
+                    <button id="btnPNG" class="btn btn-outline-secondary btn-sm">Download PNG</button>
+                    <button id="btnPDF" class="btn btn-warning btn-sm">Download PDF</button>
+                </div>
                 <!-- Template & color -->
                 <div class="row g-3 align-items-stretch mb-3 template-picker">
                     <div class="col-12 col-lg-7">
@@ -602,7 +930,6 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
                             <span class="mx-2">or</span>
                             <input id="hexColor" type="text" class="form-control form-control-sm" value="#0EA5E9" style="max-width:120px;" />
                         </div>
-
                         <div id="templatePills" class="template-pills d-flex flex-wrap gap-2 mt-3" role="tablist">
                             <button type="button" class="btn btn-outline-secondary btn-sm btn-templ active" data-template="t1" aria-selected="true">Template 1</button>
                             <button type="button" class="btn btn-outline-secondary btn-sm btn-templ" data-template="t2" aria-selected="false">Template 2</button>
@@ -610,12 +937,10 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
                         </div>
                     </div>
                 </div>
-
                 <!-- Live A4 Preview -->
                 <div id="resumeStage" class="resume-stage editable" style="--accent:#0ea5e9;">
-                    <div id="resumeHost"></div>
+                    <div id="resumeHost" class="resume-content"></div>
                 </div>
-
                 <!-- T1 -->
                 <template id="tpl-t1">
                     <div class="resume t1">
@@ -626,7 +951,6 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
                                     <img class="avatar js-photo d-none" alt="Profile">
                                     <div class="avatar-fallback js-fallback"><?= e($ini) ?></div>
                                 </div>
-
                                 <div class="section">
                                     <div class="fw-semibold" contenteditable="true"><?= e($email) ?></div>
                                     <div class="muted" contenteditable="true"><?= e($phone) ?></div>
@@ -635,7 +959,6 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
                                     <?php if ($gender): ?><div class="muted" contenteditable="true">Gender: <?= e($gender) ?></div><?php endif; ?>
                                     <?php if ($edu): ?><div class="muted" contenteditable="true">Education: <?= e($edu) ?></div><?php endif; ?>
                                 </div>
-
                                 <div class="section">
                                     <div class="section-title">Key Info</div>
                                     <div><small>Category</small><br><strong contenteditable="true"><?= e($cat) ?></strong></div>
@@ -644,13 +967,11 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
                             </div>
                             <div class="spacer"></div>
                         </aside>
-
                         <section class="main">
                             <div class="section">
                                 <div class="display-6 h-name mb-1" contenteditable="true"><?= e($name) ?></div>
                                 <div class="fs-5 muted" contenteditable="true"><?= e($pos) ?></div>
                             </div>
-
                             <?php if ($jobTitle || $companyName): ?>
                                 <div class="section">
                                     <div class="section-title">Applied Job</div>
@@ -666,17 +987,14 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
                                     </div>
                                 </div>
                             <?php endif; ?>
-
                             <div class="section">
                                 <div class="section-title">Summary</div>
                                 <p class="mb-0 muted" contenteditable="true"><?= e($premiumSummary) ?></p>
                             </div>
-
                             <div class="spacer"></div>
                         </section>
                     </div>
                 </template>
-
                 <!-- T2 -->
                 <template id="tpl-t2">
                     <div class="resume t2">
@@ -691,7 +1009,6 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
                                 <span class="badge-role" contenteditable="true"><?= e($pos ?: $cat) ?></span>
                             </div>
                         </div>
-
                         <div class="body">
                             <div class="section">
                                 <div class="row gx-6 gy-4">
@@ -735,23 +1052,19 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
                                     <?php endif; ?>
                                 </div>
                             </div>
-
                             <div class="section">
                                 <div class="fw-semibold">Summary</div>
                                 <p class="muted mb-0" contenteditable="true"><?= e($premiumSummary) ?></p>
                             </div>
-
                             <div class="divider"></div>
                             <div class="section">
                                 <div class="fw-semibold mb-1">Current Position</div>
                                 <div contenteditable="true"><?= e($pos) ?></div>
                             </div>
-
                             <div class="spacer"></div>
                         </div>
                     </div>
                 </template>
-
                 <!-- T3 -->
                 <template id="tpl-t3">
                     <div class="resume t3">
@@ -761,7 +1074,6 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
                                 <img class="circle js-photo d-none" alt="Profile">
                                 <div class="avatar-fallback js-fallback" style="border-radius:50%;width:120px;height:120px;"><?= e($ini) ?></div>
                             </div>
-
                             <div class="section">
                                 <div contenteditable="true"><?= e($email) ?></div>
                                 <div contenteditable="true"><?= e($phone) ?></div>
@@ -772,27 +1084,22 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
                                 <?php if ($companyName): ?><div contenteditable="true"><?= e('Company: ' . $companyName) ?></div><?php endif; ?>
                                 <?php if ($jobTitle): ?><div contenteditable="true"><?= e('Job Title: ' . $jobTitle) ?></div><?php endif; ?>
                             </div>
-
                             <div class="section">
                                 <?php if ($cat): ?><span class="chip" contenteditable="true"><?= e($cat) ?></span><?php endif; ?>
                                 <?php if ($pos): ?><span class="chip" contenteditable="true"><?= e($pos) ?></span><?php endif; ?>
                                 <?php if ($edu): ?><span class="chip" contenteditable="true"><?= e($edu) ?></span><?php endif; ?>
                             </div>
-
                             <div class="spacer"></div>
                         </div>
-
                         <div class="right">
                             <div class="section">
                                 <div class="display-6 fw-bold mb-1" style="color:var(--accent)" contenteditable="true"><?= e($name) ?></div>
                                 <div class="fs-5 muted mb-4" contenteditable="true"><?= e($pos ?: $cat) ?></div>
                             </div>
-
                             <div class="section">
                                 <div class="fw-semibold">Summary</div>
                                 <p class="muted" contenteditable="true"><?= e($premiumSummary) ?></p>
                             </div>
-
                             <div class="section">
                                 <div class="fw-semibold">Contact</div>
                                 <ul class="mb-0">
@@ -801,22 +1108,23 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
                                     <li contenteditable="true"><?= e($addr) ?></li>
                                 </ul>
                             </div>
-
                             <div class="spacer"></div>
                         </div>
                     </div>
                 </template>
-
             <?php endif; ?>
         </div>
     </main>
-
-    <footer class="mt-5 py-4 bg-dark text-white">
+    <footer class="mt-5 py-4">
         <div class="container d-flex flex-column align-items-center">
+            <div class="mb-2">
+                <a href="#" class="text-white text-decoration-none me-3">About</a>
+                <a href="#" class="text-white text-decoration-none me-3">Contact</a>
+                <a href="#" class="text-white text-decoration-none">Privacy Policy</a>
+            </div>
             <small>&copy; 2025 JobHive. All rights reserved.</small>
         </div>
     </footer>
-
     <script>
         (function() {
             const A4_W = 794,
@@ -831,17 +1139,74 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
             const btnReset = document.getElementById('btnReset');
             const toggleEdit = document.getElementById('toggleEdit');
             const btnApply = document.getElementById('btnApply');
-
             const btnPhoto = document.getElementById('btnPhoto');
             const btnPhotoRemove = document.getElementById('btnPhotoRemove');
             const photoInput = document.getElementById('photoInput');
-
+            const themeToggle = document.getElementById('themeToggle');
+            const themeIcon = document.getElementById('themeIcon');
             const tpl1 = document.getElementById('tpl-t1');
             const tpl2 = document.getElementById('tpl-t2');
             const tpl3 = document.getElementById('tpl-t3');
-
             let originalHTML = '';
             let currentTplKey = 't1';
+
+            /* ---- Theme Management ---- */
+            const THEME_KEY = 'theme'; // Use the same key as job_detail.php
+            const THEME_PARAM = 'theme';
+
+            // Set theme icon based on current theme
+            function updateThemeIcon(theme) {
+                if (theme === 'dark') {
+                    themeIcon.classList.remove('bi-sun-fill');
+                    themeIcon.classList.add('bi-moon-fill');
+                } else {
+                    themeIcon.classList.remove('bi-moon-fill');
+                    themeIcon.classList.add('bi-sun-fill');
+                }
+            }
+
+            // Get theme from URL parameter
+            function getThemeFromURL() {
+                const urlParams = new URLSearchParams(window.location.search);
+                return urlParams.get(THEME_PARAM);
+            }
+
+            // Initialize theme on page load
+            function initTheme() {
+                // Check for theme parameter in URL
+                const urlTheme = getThemeFromURL();
+                const savedTheme = localStorage.getItem(THEME_KEY);
+
+                // Determine which theme to use (URL parameter takes precedence)
+                let currentTheme;
+                if (urlTheme && (urlTheme === 'dark' || urlTheme === 'light')) {
+                    currentTheme = urlTheme;
+                    // Save the theme from URL to localStorage for future use
+                    localStorage.setItem(THEME_KEY, currentTheme);
+                } else if (savedTheme) {
+                    currentTheme = savedTheme;
+                } else {
+                    currentTheme = 'light'; // Default theme
+                }
+
+                document.documentElement.setAttribute('data-theme', currentTheme);
+                updateThemeIcon(currentTheme);
+            }
+
+            // Toggle theme function
+            function toggleTheme() {
+                const currentTheme = document.documentElement.getAttribute('data-theme');
+                const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+                document.documentElement.setAttribute('data-theme', newTheme);
+                localStorage.setItem(THEME_KEY, newTheme);
+                updateThemeIcon(newTheme);
+            }
+
+            // Initialize theme on page load
+            initTheme();
+
+            // Add event listener to theme toggle
+            themeToggle.addEventListener('click', toggleTheme);
 
             /* ---- Session model: only for photo + accent (no DB writes) ---- */
             const STORAGE_KEY = 'resumePremiumModel';
@@ -974,10 +1339,8 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
             swatches.forEach(s => s.addEventListener('click', () => setAccent(s.dataset.color)));
             hexInput.addEventListener('change', () => setAccent(hexInput.value));
             templBtns.forEach(b => b.addEventListener('click', () => setTemplate(b.dataset.template)));
-
             toggleEdit.addEventListener('change', applyEditMode);
             btnReset.addEventListener('click', resetEdits);
-
             btnPhoto.addEventListener('click', () => photoInput.click());
             photoInput.addEventListener('change', async (e) => {
                 const f = e.target.files && e.target.files[0];
@@ -1007,11 +1370,18 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
                 applyPhoto();
             });
 
-            /* If anything ever blocked default anchor navigation, this ensures a hard navigate. */
+            // Update the Apply Resume button to include the current theme
+            if (btnApply) {
+                const currentTheme = document.documentElement.getAttribute('data-theme');
+                let href = btnApply.getAttribute('href');
+                // Check if href already has query parameters
+                const separator = href.includes('?') ? '&' : '?';
+                href += separator + 'theme=' + encodeURIComponent(currentTheme);
+                btnApply.setAttribute('href', href);
+            }
+
             btnApply?.addEventListener('click', function(ev) {
-                // Let the normal <a href> work; as a safety net, also force navigation.
                 const url = this.getAttribute('href') || 'resume.php';
-                // Small timeout to avoid double-trigger; harmless if default already navigates.
                 setTimeout(() => {
                     try {
                         window.location.assign(url);
@@ -1027,6 +1397,7 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
             function isSafari() {
                 return /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
             }
+
             async function ensureImages(node) {
                 const imgs = Array.from(node.querySelectorAll('img'));
                 await Promise.all(imgs.map(img => img.complete ? Promise.resolve() : new Promise(r => (img.onload = img.onerror = r))));
@@ -1082,6 +1453,7 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
                 document.body.appendChild(cloneStage);
                 return cloneStage;
             }
+
             async function renderWithHtml2Canvas(node) {
                 if (typeof html2canvas !== 'function') throw new Error('html2canvas not loaded');
                 await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
@@ -1093,6 +1465,7 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
                     imageTimeout: 15000
                 });
             }
+
             async function renderBlobWithDomToImage(node) {
                 if (!window.domtoimage) throw new Error('dom-to-image-more not loaded');
                 return window.domtoimage.toBlob(node, {
@@ -1102,6 +1475,7 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
                     height: A4_H
                 });
             }
+
             async function captureA4() {
                 const snap = buildSnapshotNode();
                 try {
@@ -1191,7 +1565,6 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
                     console.error(err);
                 }
             });
-
         })();
     </script>
 </body>

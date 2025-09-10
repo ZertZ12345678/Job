@@ -1,7 +1,6 @@
 <?php
 require_once "connect.php";
 if (session_status() === PHP_SESSION_NONE) session_start();
-
 /* ---------- Helpers ---------- */
 function e($v)
 {
@@ -12,14 +11,11 @@ function safe_truncate($t, $n = 140, $el = '…')
   $t = (string)($t ?? '');
   return function_exists('mb_strimwidth') ? mb_strimwidth($t, 0, $n, $el) : ((strlen($t) > $n) ? substr($t, 0, $n - strlen($el)) . $el : $t);
 }
-
 /* ---------- Inputs (GET) ---------- */
 $keyword  = trim($_GET['keyword'] ?? '');
 $location = trim($_GET['location'] ?? 'All Locations');
 $job_type = trim($_GET['job_type'] ?? '');   // Software | Network | ''
-
 if ($job_type === 'All') $job_type = '';     // treat All as no filter
-
 /* ---------- Build query ---------- */
 $sql = "SELECT j.job_id, j.job_title, j.job_description, j.location, j.status, j.job_type,
                j.posted_at, c.company_name, c.logo
@@ -27,39 +23,33 @@ $sql = "SELECT j.job_id, j.job_title, j.job_description, j.location, j.status, j
         JOIN companies c ON c.company_id = j.company_id
         WHERE j.status = 'Active'";
 $params = [];
-
 /* Keyword search */
 if ($keyword !== '') {
   $sql .= " AND (j.job_title LIKE ? OR c.company_name LIKE ?)";
   $params[] = "%$keyword%";
   $params[] = "%$keyword%";
 }
-
 /* Location filter */
 if ($location !== '' && $location !== 'All Locations') {
   $sql .= " AND j.location LIKE ?";
   $params[] = "%$location%";
 }
-
 /* job_type filter */
 if ($job_type !== '') {
   $sql .= " AND j.job_type = ?";
   $params[] = $job_type;
 }
-
 /* newest first; limit 6 */
 $sql .= " ORDER BY j.posted_at DESC, j.job_id DESC LIMIT 6";
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $jobs = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
 /* Preserve keyword/location when clicking Popular */
 $baseQuery = ['keyword' => $keyword, 'location' => $location];
 function url_with($base, $extra)
 {
   return '?' . http_build_query(array_merge($base, $extra));
 }
-
 $LOGO_DIR = "company_logos/";
 ?>
 <!DOCTYPE html>
@@ -78,11 +68,57 @@ $LOGO_DIR = "company_logos/";
       --jh-gold: #ffaa2b;
       --jh-gold-2: #ffc107;
       --jh-dark: #1a202c;
+      /* Light mode variables */
+      --bg-color: #f8fafc;
+      --text-color: #334155;
+      --card-bg: #ffffff;
+      --border-color: rgba(15, 23, 42, 0.06);
+      --header-bg: #ffffff;
+      --footer-bg: var(--jh-dark);
+      --input-bg: #ffffff;
+      --button-bg: var(--jh-gold-2);
+      --button-text: #ffffff;
+      --link-color: var(--jh-gold);
+      --section-bg: #f8fafc;
+      --card-shadow: 0 8px 30px rgba(2, 8, 20, .06);
+      --transition-speed: 0.3s;
+      --bg-tertiary: #f3f4f6;
+    }
+
+    /* Dark mode variables */
+    [data-theme="dark"] {
+      --bg-color: #121212;
+      --text-color: #e0e0e0;
+      --card-bg: #1e1e1e;
+      --border-color: rgba(255, 255, 255, 0.1);
+      --header-bg: #1a1a1a;
+      --footer-bg: #0d0d0d;
+      --input-bg: #2d2d2d;
+      --button-bg: var(--jh-gold-2);
+      --button-text: #000000;
+      --link-color: var(--jh-gold);
+      --section-bg: #1a1a1a;
+      --card-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+      --bg-tertiary: #2d2d2d;
     }
 
     /* Smooth anchor scrolling everywhere */
     html {
       scroll-behavior: smooth;
+    }
+
+    /* Global transitions */
+    body,
+    .navbar,
+    .card,
+    .footer,
+    .form-control,
+    .form-select,
+    .btn {
+      transition: background-color var(--transition-speed) ease,
+        color var(--transition-speed) ease,
+        border-color var(--transition-speed) ease,
+        box-shadow var(--transition-speed) ease;
     }
 
     /* Readable long-form content */
@@ -126,14 +162,14 @@ $LOGO_DIR = "company_logos/";
       margin-bottom: .25rem;
     }
 
-    /* Pretty “section cards” */
+    /* Pretty "section cards" */
     .section-card {
-      background: #fff;
+      background: var(--card-bg);
       border-radius: 1rem;
-      box-shadow: 0 8px 30px rgba(2, 8, 20, .06);
+      box-shadow: var(--card-shadow);
       padding: 1.5rem;
       margin-bottom: 1.25rem;
-      border: 1px solid rgba(15, 23, 42, .06);
+      border: 1px solid var(--border-color);
     }
 
     /* Callouts */
@@ -148,6 +184,8 @@ $LOGO_DIR = "company_logos/";
     html,
     body {
       height: 100%;
+      background-color: var(--bg-color);
+      color: var(--text-color);
     }
 
     body {
@@ -160,7 +198,6 @@ $LOGO_DIR = "company_logos/";
       flex: 1 0 auto;
     }
 
-
     /* Sticky footer layout */
     html,
     body {
@@ -168,7 +205,7 @@ $LOGO_DIR = "company_logos/";
     }
 
     body {
-      background: #f8fafc;
+      background: var(--bg-color);
       min-height: 100vh;
       display: flex;
       flex-direction: column;
@@ -183,10 +220,15 @@ $LOGO_DIR = "company_logos/";
     }
 
     /* ===== Navbar link underline on hover ===== */
+    .navbar {
+      background-color: var(--header-bg) !important;
+    }
+
     .navbar-nav .nav-link {
       position: relative;
       padding-bottom: 4px;
       transition: color 0.2s ease-in-out;
+      color: var(--text-color) !important;
     }
 
     .navbar-nav .nav-link::after {
@@ -205,7 +247,7 @@ $LOGO_DIR = "company_logos/";
     }
 
     .hero-section {
-      background: #f8fafc;
+      background: var(--section-bg);
       padding: 70px 0 30px;
       text-align: center;
     }
@@ -214,8 +256,8 @@ $LOGO_DIR = "company_logos/";
       max-width: 900px;
       margin: 0 auto;
       border-radius: 1.5rem;
-      background: #fff;
-      box-shadow: 0 20px 60px rgba(2, 8, 20, 0.08);
+      background: var(--card-bg);
+      box-shadow: var(--card-shadow);
       padding: 1.25rem 1.5rem;
     }
 
@@ -224,6 +266,9 @@ $LOGO_DIR = "company_logos/";
       border-radius: .8rem;
       font-size: 1rem;
       padding: .65rem .9rem;
+      background-color: var(--input-bg);
+      color: var(--text-color);
+      border-color: var(--border-color);
     }
 
     .search-row {
@@ -239,15 +284,18 @@ $LOGO_DIR = "company_logos/";
       max-width: 260px;
       min-height: 48px;
       border-radius: .8rem;
-      font-size: .98rem
+      font-size: .98rem;
+      background-color: var(--input-bg);
+      color: var(--text-color);
+      border-color: var(--border-color);
     }
 
     .btn-search {
       min-width: 140px;
       min-height: 48px;
       border-radius: .8rem;
-      background: var(--jh-gold-2);
-      color: #fff;
+      background: var(--button-bg);
+      color: var(--button-text);
       border: none;
       font-weight: 600;
       font-size: 1rem;
@@ -256,7 +304,7 @@ $LOGO_DIR = "company_logos/";
 
     .btn-search:hover {
       background: #ff9800;
-      color: #fff
+      color: var(--button-text)
     }
 
     .popular-wrap {
@@ -265,7 +313,7 @@ $LOGO_DIR = "company_logos/";
 
     .popular-label {
       font-size: 1.05rem;
-      color: #22223b;
+      color: var(--text-color);
       font-weight: 600;
       margin-right: 16px
     }
@@ -273,7 +321,7 @@ $LOGO_DIR = "company_logos/";
     .popular-btn {
       border: 1.6px solid var(--jh-gold-2);
       color: var(--jh-gold-2);
-      background: #fff;
+      background: var(--card-bg);
       font-size: .98rem;
       border-radius: .55rem;
       padding: .3rem 1.15rem;
@@ -294,8 +342,9 @@ $LOGO_DIR = "company_logos/";
 
     .job-card {
       border-radius: 1.25rem;
-      box-shadow: 0 2px 16px rgba(0, 0, 0, .06);
+      box-shadow: var(--card-shadow);
       border: 0;
+      background-color: var(--card-bg);
     }
 
     .company-logo {
@@ -303,17 +352,20 @@ $LOGO_DIR = "company_logos/";
       height: 56px;
       object-fit: cover;
       border-radius: .75rem;
-      background: #fff;
-      border: 1px solid rgba(0, 0, 0, .05)
+      background: var(--card-bg);
+      border: 1px solid var(--border-color)
     }
 
     .job-badge {
-      font-size: .82rem
+      font-size: .82rem;
+      background-color: var(--card-bg);
+      color: var(--text-color);
+      border: 1px solid var(--border-color);
     }
 
     /* ===== Footer ===== */
     .footer {
-      background: var(--jh-dark);
+      background: var(--footer-bg);
       color: #e9ecef;
       padding: 40px 0 16px;
       flex-shrink: 0;
@@ -356,11 +408,185 @@ $LOGO_DIR = "company_logos/";
     .footer small {
       color: #cbd5e1;
     }
+
+    /* Theme Toggle Button - matching about.php */
+    .theme-toggle {
+      background: transparent;
+      border: 1px solid var(--border-color);
+      color: var(--text-color);
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.3s;
+    }
+
+    .theme-toggle:hover {
+      background: var(--bg-tertiary);
+    }
+
+    /* Dark mode adjustments for specific elements */
+    [data-theme="dark"] .prose p {
+      color: #e0e0e0;
+    }
+
+    [data-theme="dark"] .prose h2,
+    [data-theme="dark"] .prose h3 {
+      color: #f0f0f0;
+    }
+
+    [data-theme="dark"] .callout {
+      background: #2d2d2d;
+      border-left-color: var(--jh-gold);
+    }
+
+    [data-theme="dark"] .alert-danger {
+      background-color: #2d0b0b;
+      border-color: #4a1010;
+      color: #f8d7da;
+    }
+
+    [data-theme="dark"] .bg-light {
+      background-color: #1a1a1a !important;
+    }
+
+    [data-theme="dark"] .text-muted {
+      color: #a0a0a0 !important;
+    }
+
+    [data-theme="dark"] .text-dark {
+      color: #e0e0e0 !important;
+    }
+
+    [data-theme="dark"] .border {
+      border-color: rgba(255, 255, 255, 0.1) !important;
+    }
+
+    /* Add these styles to your CSS section */
+    /* Placeholder text styling */
+    .form-control::placeholder {
+      color: #6c757d !important;
+      opacity: 0.7;
+    }
+
+    [data-theme="dark"] .form-control::placeholder {
+      color: #adb5bd !important;
+      opacity: 0.8;
+    }
+
+    /* Job post text styling */
+    .job-card h5 {
+      color: var(--text-color) !important;
+    }
+
+    .job-card small {
+      color: var(--text-color) !important;
+      opacity: 0.8;
+    }
+
+    .job-card .text-muted {
+      color: var(--text-color) !important;
+      opacity: 0.7;
+    }
+
+    /* Badge styling for better visibility */
+    .job-badge {
+      background-color: var(--card-bg) !important;
+      color: var(--text-color) !important;
+      border: 1px solid var(--border-color) !important;
+    }
+
+    [data-theme="dark"] .job-badge.bg-success {
+      background-color: #198754 !important;
+      color: white !important;
+    }
+
+    /* Apply button styling */
+    .job-card .btn-outline-warning {
+      color: var(--jh-gold-2) !important;
+      border-color: var(--jh-gold-2) !important;
+    }
+
+    [data-theme="dark"] .job-card .btn-outline-warning {
+      color: #ffc107 !important;
+      border-color: #ffc107 !important;
+    }
+
+    .job-card .btn-outline-warning:hover {
+      background-color: var(--jh-gold-2) !important;
+      color: white !important;
+    }
+
+    [data-theme="dark"] .job-card .btn-outline-warning:hover {
+      background-color: #ffc107 !important;
+      color: black !important;
+    }
+
+    /* Popular buttons styling */
+    .popular-btn {
+      border-color: var(--jh-gold-2) !important;
+      color: var(--jh-gold-2) !important;
+      background-color: var(--card-bg) !important;
+    }
+
+    .popular-btn:hover {
+      background-color: rgba(255, 193, 7, 0.1) !important;
+      color: var(--jh-gold-2) !important;
+    }
+
+    .popular-btn.active {
+      background-color: rgba(255, 193, 7, 0.2) !important;
+      color: var(--jh-gold-2) !important;
+    }
+
+    [data-theme="dark"] .popular-btn {
+      border-color: #ffc107 !important;
+      color: #ffc107 !important;
+    }
+
+    [data-theme="dark"] .popular-btn:hover {
+      background-color: rgba(255, 193, 7, 0.2) !important;
+      color: #ffc107 !important;
+    }
+
+    [data-theme="dark"] .popular-btn.active {
+      background-color: rgba(255, 193, 7, 0.3) !important;
+      color: #ffc107 !important;
+    }
+
+    /* Job description text */
+    .job-card p {
+      color: var(--text-color) !important;
+      opacity: 0.85;
+    }
+
+    /* Company name in job card */
+    .job-card small.text-muted {
+      color: var(--text-color) !important;
+      opacity: 0.75;
+    }
+
+    /* Location and job type badges */
+    .job-badge {
+      opacity: 0.9;
+    }
+
+    /* Active badge styling */
+    .job-badge.bg-success {
+      background-color: #198754 !important;
+      color: white !important;
+    }
+
+    [data-theme="dark"] .job-badge.bg-success {
+      background-color: #2e7d32 !important;
+      color: white !important;
+    }
   </style>
 </head>
 
 <body>
-
   <!-- Navbar -->
   <nav class="navbar navbar-expand-lg bg-white shadow-sm">
     <div class="container">
@@ -372,11 +598,16 @@ $LOGO_DIR = "company_logos/";
           <li class="nav-item"><a class="nav-link" href="login.php">Login</a></li>
           <li class="nav-item"><a class="btn btn-warning ms-2 text-white" href="sign_up.php">Register</a></li>
           <li class="nav-item"><a class="btn btn-outline-warning ms-2" href="c_sign_up.php">Company Register</a></li>
+          <!-- Theme Toggle Button -->
+          <li class="nav-item">
+            <button class="theme-toggle ms-3" id="themeToggle" aria-label="Toggle theme">
+              <i class="bi bi-sun-fill" id="themeIcon"></i>
+            </button>
+          </li>
         </ul>
       </div>
     </div>
   </nav>
-
   <!-- MAIN wrapper for sticky footer -->
   <main>
     <!-- Hero + Search -->
@@ -384,7 +615,6 @@ $LOGO_DIR = "company_logos/";
       <div class="container">
         <h1 class="display-5 fw-bold">Find Your Dream Job on JobHive</h1>
         <p class="lead mb-4">Connecting you to thousands of opportunities across Myanmar.</p>
-
         <div class="search-card">
           <form method="get" class="w-100">
             <div class="row g-2">
@@ -405,7 +635,6 @@ $LOGO_DIR = "company_logos/";
             </div>
           </form>
         </div>
-
         <!-- Popular chips: Software, Network, All Jobs -->
         <div class="popular-wrap">
           <span class="popular-label">Popular:</span>
@@ -418,7 +647,6 @@ $LOGO_DIR = "company_logos/";
         </div>
       </div>
     </section>
-
     <!-- Featured Jobs -->
     <section class="container py-4">
       <h2 class="mb-4 fw-semibold text-center">Featured Jobs</h2>
@@ -459,7 +687,6 @@ $LOGO_DIR = "company_logos/";
         </div>
       <?php endif; ?>
     </section>
-
     <!-- How it Works -->
     <section class="bg-light py-5">
       <div class="container">
@@ -483,7 +710,6 @@ $LOGO_DIR = "company_logos/";
         </div>
       </div>
     </section>
-
     <!-- Featured Companies -->
     <section class="container py-5">
       <h2 class="mb-4 fw-semibold text-center">Featured Companies</h2>
@@ -495,7 +721,6 @@ $LOGO_DIR = "company_logos/";
       </div>
     </section>
   </main>
-
   <!-- Footer -->
   <footer class="footer mt-auto">
     <div class="container">
@@ -519,8 +744,6 @@ $LOGO_DIR = "company_logos/";
             <li class="mb-2"><a href="index_all_companies.php">All Companies</a></li>
           </ul>
         </div>
-
-
         <div class="col-md-3">
           <h6 class="text-uppercase text-white-50 mb-3">Contact</h6>
           <ul class="list-unstyled">
@@ -528,12 +751,8 @@ $LOGO_DIR = "company_logos/";
             <li class="mb-2"><a href="about.php?return=index">About</a></li>
             <li class="mb-2"><a href="privacy.php?return=index">Privacy Policy</a></li>
             <li class="mb-2"><a href="terms.php?return=index">Terms &amp; Conditions</a></li>
-
           </ul>
         </div>
-
-
-
         <div class="col-md-3">
           <h6 class="text-uppercase text-white-50 mb-3">Contact</h6>
           <ul class="list-unstyled">
@@ -543,7 +762,6 @@ $LOGO_DIR = "company_logos/";
           </ul>
         </div>
       </div>
-
       <hr>
       <div class="d-flex flex-column flex-md-row justify-content-between align-items-center">
         <small>&copy; <?= date('Y') ?> JobHive. All rights reserved.</small>
@@ -551,7 +769,33 @@ $LOGO_DIR = "company_logos/";
       </div>
     </div>
   </footer>
+  <script>
+    // Theme toggle functionality - matching about.php
+    const themeToggle = document.getElementById('themeToggle');
+    const themeIcon = document.getElementById('themeIcon');
+    const html = document.documentElement;
+    // Check for saved theme preference or default to light
+    const currentTheme = localStorage.getItem('theme') || 'light';
+    html.setAttribute('data-theme', currentTheme);
+    updateThemeIcon(currentTheme);
+    themeToggle.addEventListener('click', () => {
+      const theme = html.getAttribute('data-theme');
+      const newTheme = theme === 'dark' ? 'light' : 'dark';
+      html.setAttribute('data-theme', newTheme);
+      localStorage.setItem('theme', newTheme);
+      updateThemeIcon(newTheme);
+    });
 
+    function updateThemeIcon(theme) {
+      if (theme === 'dark') {
+        themeIcon.classList.remove('bi-sun-fill');
+        themeIcon.classList.add('bi-moon-fill');
+      } else {
+        themeIcon.classList.remove('bi-moon-fill');
+        themeIcon.classList.add('bi-sun-fill');
+      }
+    }
+  </script>
 </body>
 
 </html>

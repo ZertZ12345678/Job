@@ -2,23 +2,19 @@
 // Enhanced rule-based chatbot for JobHive Companies with button support
 header('Content-Type: application/json');
 if (session_status() === PHP_SESSION_NONE) session_start();
-
 // Check if company is logged in
 $company_id = $_SESSION['company_id'] ?? null;
 if (!$company_id) {
     echo json_encode(['response' => 'Please log in to use the chatbot.', 'buttons' => [['text' => 'Go to Login', 'href' => 'login.php']]]);
     exit;
 }
-
 // Get the user message
 $message = isset($_POST['message']) ? trim($_POST['message']) : '';
 // Default response
 $response = "I'm here to help with your company account. You can ask me about posting jobs, managing applications, membership benefits, or company settings.";
 $buttons = []; // For button responses
-
 // Convert to lowercase for easier matching
 $lowerMessage = strtolower($message);
-
 // Enhanced keyword matching with more specific responses
 if (strpos($lowerMessage, 'hello') !== false || strpos($lowerMessage, 'hi') !== false || strpos($lowerMessage, 'hey') !== false || strpos($lowerMessage, 'greetings') !== false) {
     $response = "Hello! I'm your JobHive company assistant. How can I help you with your recruitment needs today?";
@@ -37,7 +33,6 @@ elseif (strpos($lowerMessage, 'dashboard') !== false) {
         ['text' => 'Go to Dashboard', 'href' => 'c_dashboard.php']
     ];
 }
-
 // FAQ
 elseif (strpos($lowerMessage, 'faq') !== false || strpos($lowerMessage, 'frequently asked questions') !== false) {
     $response = "Check our Frequently Asked Questions section for answers to common questions about using JobHive, finding jobs, and managing your account.";
@@ -167,7 +162,15 @@ elseif (strpos($lowerMessage, 'job') !== false) {
         ];
     }
 }
-// Pricing
+// Feedback Keywords - MOVED BEFORE PRICING TO AVOID CONFLICT
+elseif (strpos($lowerMessage, 'feedback') !== false) {
+    $response = "We value your feedback! As a company partner, your input helps us improve JobHive for both employers and job seekers. You can share your thoughts or view feedback from others.";
+    $buttons = [
+        ['text' => 'Send Feedback', 'href' => 'company_home.php#feedbackModal'],
+        ['text' => 'View Feedback', 'href' => 'company_home.php#feedback']
+    ];
+}
+// Pricing - MOVED AFTER FEEDBACK
 elseif (strpos($lowerMessage, 'pricing') !== false || strpos($lowerMessage, 'fee') !== false || strpos($lowerMessage, 'cost') !== false || strpos($lowerMessage, 'price') !== false) {
     $response = "Job posting fees start at a base rate and decrease as you post more jobs. You get 10% off after 5 posts, 15% off after 15 posts, and 20% off after 25 posts.";
     $buttons = [
@@ -193,6 +196,5 @@ elseif (strpos($lowerMessage, 'thank') !== false || strpos($lowerMessage, 'thank
 elseif (strpos($lowerMessage, 'bye') !== false || strpos($lowerMessage, 'goodbye') !== false || strpos($lowerMessage, 'farewell') !== false) {
     $response = "Goodbye! Feel free to come back if you have more questions. Happy hiring!";
 }
-
 // Return the response as JSON
 echo json_encode(['response' => $response, 'buttons' => $buttons]);

@@ -101,7 +101,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($type === 'A') {
       $aid    = (int)($_POST['mark_one'] ?? 0);
       $status = trim($_POST['status_now'] ?? '');
-      if ($aid > 0 && ($status === 'Accepted' || $status === 'Rejected')) $seenApp[$aid] = $status;
+      if ($aid > 0 && ($status === 'Accepted' || $status === 'Rejected' || $status === 'Pending')) $seenApp[$aid] = $status;
     } elseif ($type === 'S') {
       $nid = trim($_POST['mark_one'] ?? '');
       if ($nid !== '') $seenSess[$nid] = 1;
@@ -158,6 +158,8 @@ if ($jt  !== '') {
 }
 $whereSql = $conds ? ("WHERE " . implode(" AND ", $conds)) : "";
 /* ===== Jobs ===== */
+$show_all = (isset($_GET['all']) && $_GET['all'] === '1');
+$limit = $show_all ? 300 : 10;   // fetch one extra page-sized set when collapsed (10 => we will show 9 and detect "more")
 try {
   $sql = "SELECT j.job_id,j.job_title,j.job_description,j.location,j.status,j.posted_at,
                  c.company_name,c.logo
@@ -165,12 +167,29 @@ try {
           $whereSql
           ORDER BY CASE j.status WHEN 'Active' THEN 1 WHEN 'Inactive' THEN 2 WHEN 'Closed' THEN 3 ELSE 4 END,
                    j.posted_at DESC
-          LIMIT 60";
+          LIMIT $limit";
   $st = $pdo->prepare($sql);
   $st->execute($params);
   $jobs = $st->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
   $jobs = [];
+}
+/* derive what to show + whether to render the "More Posts" button */
+$jobsToDisplay = $show_all ? $jobs : array_slice($jobs, 0, 9);
+$hasMore = !$show_all && count($jobs) > 9;
+/* helper to build URLs that preserve current filters */
+function build_url_with($overrides = [])
+{
+  $qs = $_GET;
+  foreach ($overrides as $k => $v) {
+    if ($v === null) {
+      unset($qs[$k]);
+    } else {
+      $qs[$k] = $v;
+    }
+  }
+  $qstr = http_build_query($qs);
+  return 'user_home.php' . ($qstr ? ('?' . $qstr) : '');
 }
 /* ===== Applications for this user (for notifications) ===== */
 try {
@@ -196,10 +215,20 @@ $alreadyNotified = &$_SESSION['already_notified'];
 foreach ($apps as $a) {
   $aid = (int)$a['application_id'];
   $stt = (string)$a['status'];
-  if ($stt === 'Accepted' || $stt === 'Rejected') {
+  if ($stt === 'Accepted' || $stt === 'Rejected' || $stt === 'Pending') {
     $isFirstThisSession = !(isset($alreadyNotified[$aid]) && $alreadyNotified[$aid] === $stt);
     if ($isFirstThisSession) $alreadyNotified[$aid] = $stt;
     $unread = $isFirstThisSession && (!isset($seenApp[$aid]) || $seenApp[$aid] !== $stt);
+    // Determine status class and color
+    $statusClass = strtolower($stt);
+    $statusBadgeClass = '';
+    if ($stt === 'Accepted') {
+      $statusBadgeClass = $unread ? 'text-bg-success' : 'bg-success';
+    } elseif ($stt === 'Rejected') {
+      $statusBadgeClass = $unread ? 'text-bg-danger' : 'bg-danger';
+    } elseif ($stt === 'Pending') {
+      $statusBadgeClass = $unread ? 'text-bg-primary' : 'bg-primary';
+    }
     $items[] = [
       '_type' => 'A',
       '_id' => (string)$aid,
@@ -207,14 +236,30 @@ foreach ($apps as $a) {
       'title' => $stt . " — " . $a['job_title'],
       'body' => ($stt === 'Accepted'
         ? "Great news! Your application to {$a['company_name']} for \"{$a['job_title']}\" was accepted."
-        : "Update: Your application to {$a['company_name']} for \"{$a['job_title']}\" was rejected."),
+        : ($stt === 'Rejected'
+          ? "Update: Your application to {$a['company_name']} for \"{$a['job_title']}\" was rejected."
+          : "Your application to {$a['company_name']} for \"{$a['job_title']}\" is pending review.")),
       'when' => 'Applied: ' . date('M d, Y H:i', strtotime($a['applied_at'])),
       'link' => '',
       'pill' => $unread ? 'New' : 'Read',
-      'pillClass' => $unread ? 'text-bg-warning' : 'text-bg-secondary',
+      'pillClass' => $statusBadgeClass,
       'status_now' => $stt,
+      'status_class' => $statusClass,
     ];
   }
+}
+/* ===== Fetch feedback (last 5 or all on demand) ===== */
+$show_all_feedback = (isset($_GET['allfb']) && $_GET['allfb'] === '1');
+$feedbacks = [];
+try {
+  $sql = "SELECT name, message, submitted_at FROM feedback ORDER BY submitted_at DESC";
+  if (!$show_all_feedback) {
+    $sql .= " LIMIT 5";
+  }
+  $fbst = $pdo->query($sql);
+  $feedbacks = $fbst->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+  $feedbacks = [];
 }
 /* Session custom notifications */
 $sessList = $_SESSION['notifications'] ?? [];
@@ -234,6 +279,7 @@ if (is_array($sessList) && $sessList) {
       'pill' => $unread ? 'New' : 'Read',
       'pillClass' => $unread ? 'text-bg-primary' : 'text-bg-secondary',
       'status_now' => null,
+      'status_class' => '',
     ];
   }
 }
@@ -253,18 +299,13 @@ $should_shake = $badge_count > $prev_badge;
 $_SESSION['prev_badge_count'] = $badge_count;
 /* Auto-open inbox param */
 $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
-
-
-
 /* ===== Feedback: CSRF + POST handler ===== */
 if (empty($_SESSION['csrf'])) {
   $_SESSION['csrf'] = bin2hex(random_bytes(16));
 }
 $csrf = $_SESSION['csrf'];
-
 $fb_success = "";
 $fb_error   = "";
-
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'feedback') {
   $token = $_POST['csrf'] ?? '';
   if (!hash_equals($_SESSION['csrf'], $token)) {
@@ -274,7 +315,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'feedb
     $fb_email   = trim($_POST['fb_email'] ?? $email);
     $fb_message = trim($_POST['fb_message'] ?? '');
     $hp         = trim($_POST['fb_hp'] ?? ''); // honeypot (should stay empty)
-
     if ($hp !== '') {
       $fb_error = "Spam detected.";
     } elseif ($fb_message === '') {
@@ -296,9 +336,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'feedb
     }
   }
 }
-
-
-
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -310,9 +347,315 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'feedb
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-
-
   <link rel="stylesheet" href="css/user_home.css">
+  <style>
+    :root {
+      /* Light mode variables */
+      --jh-gold: #ffaa2b;
+      --jh-gold-2: #ffc107;
+      --jh-dark: #1a202c;
+      --bg-color: #f8fafc;
+      --text-color: #334155;
+      --card-bg: #ffffff;
+      --border-color: rgba(15, 23, 42, 0.06);
+      --header-bg: #ffffff;
+      --footer-bg: var(--jh-dark);
+      --input-bg: #ffffff;
+      --button-bg: var(--jh-gold-2);
+      --button-text: #ffffff;
+      --link-color: var(--jh-gold);
+      --section-bg: #f8fafc;
+      --card-shadow: 0 8px 32px rgba(0, 0, 0, .06);
+      --transition-speed: 0.3s;
+      --bg-tertiary: #f3f4f6;
+    }
+
+    /* Dark mode variables */
+    [data-theme="dark"] {
+      --bg-color: #121212;
+      --text-color: #e0e0e0;
+      --card-bg: #1e1e1e;
+      --border-color: rgba(255, 255, 255, 0.1);
+      --header-bg: #1a1a1a;
+      --footer-bg: #0d0d0d;
+      --input-bg: #2d2d2d;
+      --button-bg: var(--jh-gold-2);
+      --button-text: #000000;
+      --link-color: var(--jh-gold);
+      --section-bg: #1a1a1a;
+      --card-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+      --bg-tertiary: #2d2d2d;
+    }
+
+    /* Global transitions */
+    body,
+    .navbar,
+    .card,
+    .footer,
+    .form-control,
+    .form-select,
+    .btn {
+      transition: background-color var(--transition-speed) ease,
+        color var(--transition-speed) ease,
+        border-color var(--transition-speed) ease,
+        box-shadow var(--transition-speed) ease;
+    }
+
+    /* Base styles */
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-color);
+    }
+
+    /* Placeholder text styling */
+    .form-control::placeholder {
+      color: #6c757d !important;
+      opacity: 0.7;
+    }
+
+    [data-theme="dark"] .form-control::placeholder {
+      color: #adb5bd !important;
+      opacity: 0.8;
+    }
+
+    /* Navbar */
+    .navbar {
+      background-color: var(--header-bg) !important;
+    }
+
+    .navbar .nav-link {
+      color: var(--text-color) !important;
+    }
+
+    /* Theme Toggle Button - matching about.php */
+    .theme-toggle {
+      background: transparent;
+      border: 1px solid var(--border-color);
+      color: var(--text-color);
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.3s;
+    }
+
+    .theme-toggle:hover {
+      background: var(--bg-tertiary);
+    }
+
+    /* Hero section */
+    .hero-section {
+      background-color: var(--section-bg);
+    }
+
+    /* Search card */
+    .search-card {
+      background-color: var(--card-bg);
+      box-shadow: var(--card-shadow);
+    }
+
+    .form-control,
+    .form-select {
+      background-color: var(--input-bg);
+      color: var(--text-color);
+      border-color: var(--border-color);
+    }
+
+    /* Job cards */
+    .job-card {
+      background-color: var(--card-bg);
+      box-shadow: var(--card-shadow);
+    }
+
+    .job-card h5 {
+      color: var(--text-color) !important;
+    }
+
+    .job-card small {
+      color: var(--text-color) !important;
+      opacity: 0.8;
+    }
+
+    .job-card .text-muted {
+      color: var(--text-color) !important;
+      opacity: 0.7;
+    }
+
+    /* Badges */
+    .job-badge {
+      background-color: var(--card-bg) !important;
+      color: var(--text-color) !important;
+      border: 1px solid var(--border-color) !important;
+    }
+
+    [data-theme="dark"] .job-badge.bg-success {
+      background-color: #198754 !important;
+      color: white !important;
+    }
+
+    /* Buttons */
+    .btn-warning {
+      background-color: var(--button-bg);
+      color: var(--button-text);
+    }
+
+    /* Footer */
+    .footer {
+      background-color: var(--footer-bg);
+    }
+
+    /* Dark mode adjustments */
+    [data-theme="dark"] .text-muted {
+      color: #adb5bd !important;
+    }
+
+    [data-theme="dark"] .alert-danger {
+      background-color: #2d0b0b;
+      border-color: #4a1010;
+      color: #f8d7da;
+    }
+
+    [data-theme="dark"] .bg-light {
+      background-color: #1a1a1a !important;
+    }
+
+    [data-theme="dark"] .text-dark {
+      color: #e0e0e0 !important;
+    }
+
+    [data-theme="dark"] .border {
+      border-color: rgba(255, 255, 255, 0.1) !important;
+    }
+
+    [data-theme="dark"] .list-group-item {
+      background-color: var(--card-bg);
+      color: var(--text-color);
+      border-color: var(--border-color);
+    }
+
+    [data-theme="dark"] .modal-content {
+      background-color: var(--card-bg);
+      color: var(--text-color);
+      border: 1px solid var(--border-color);
+    }
+
+    [data-theme="dark"] .inbox-panel {
+      background-color: var(--card-bg);
+      color: var(--text-color);
+    }
+
+    [data-theme="dark"] .chatbot-message {
+      background-color: var(--card-bg);
+      color: var(--text-color);
+    }
+
+    [data-theme="dark"] .card {
+      background-color: var(--card-bg);
+      border-color: var(--border-color);
+    }
+
+    [data-theme="dark"] .btn-outline-warning {
+      color: #ffc107 !important;
+      border-color: #ffc107 !important;
+    }
+
+    [data-theme="dark"] .btn-outline-warning:hover {
+      background-color: #ffc107 !important;
+      color: #000000 !important;
+    }
+
+    /* Notification status colors */
+    .notif-card.unread.rejected {
+      background: #ffebee;
+      border-left: 4px solid #f44336;
+    }
+
+    [data-theme="dark"] .notif-card.unread.rejected {
+      background: rgba(244, 67, 54, 0.1);
+      border-left: 4px solid #f44336;
+    }
+
+    .notif-card.read.rejected {
+      background: #f8f9fa;
+      border-left: 4px solid #f44336;
+    }
+
+    [data-theme="dark"] .notif-card.read.rejected {
+      background: var(--card-bg);
+      border-left: 4px solid #f44336;
+    }
+
+    .notif-card.unread.accepted {
+      background: #e8f5e9;
+      border-left: 4px solid #4caf50;
+    }
+
+    [data-theme="dark"] .notif-card.unread.accepted {
+      background: rgba(76, 175, 80, 0.1);
+      border-left: 4px solid #4caf50;
+    }
+
+    .notif-card.read.accepted {
+      background: #f8f9fa;
+      border-left: 4px solid #4caf50;
+    }
+
+    [data-theme="dark"] .notif-card.read.accepted {
+      background: var(--card-bg);
+      border-left: 4px solid #4caf50;
+    }
+
+    .notif-card.unread.pending {
+      background: #e3f2fd;
+      border-left: 4px solid #2196f3;
+    }
+
+    [data-theme="dark"] .notif-card.unread.pending {
+      background: rgba(33, 150, 243, 0.1);
+      border-left: 4px solid #2196f3;
+    }
+
+    .notif-card.read.pending {
+      background: #f8f9fa;
+      border-left: 4px solid #2196f3;
+    }
+
+    [data-theme="dark"] .notif-card.read.pending {
+      background: var(--card-bg);
+      border-left: 4px solid #2196f3;
+    }
+
+    /* Status badges */
+    .notif-card.rejected .notif-chip {
+      background-color: #f44336 !important;
+      color: white !important;
+    }
+
+    .notif-card.accepted .notif-chip {
+      background-color: #4caf50 !important;
+      color: white !important;
+    }
+
+    .notif-card.pending .notif-chip {
+      background-color: #2196f3 !important;
+      color: white !important;
+    }
+
+    /* Status text colors */
+    .notif-card.rejected .fw-semibold {
+      color: #d32f2f !important;
+    }
+
+    .notif-card.accepted .fw-semibold {
+      color: #2e7d32 !important;
+    }
+
+    .notif-card.pending .fw-semibold {
+      color: #1565c0 !important;
+    }
+  </style>
 </head>
 
 <body>
@@ -326,6 +669,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'feedb
           <li class="nav-item"><a class="nav-link active" aria-current="page" href="user_home.php">Home</a></li>
           <li class="nav-item"><a class="nav-link" href="user_dashboard.php">Dashboard</a></li>
           <li class="nav-item"><a class="nav-link" href="all_companies.php">All Companies</a></li>
+          <!-- Theme Toggle Button -->
+          <li class="nav-item">
+            <button class="theme-toggle ms-3" id="themeToggle" aria-label="Toggle theme">
+              <i class="bi bi-sun-fill" id="themeIcon"></i>
+            </button>
+          </li>
           <!-- Envelope -->
           <li class="nav-item ms-lg-2">
             <button id="btnInbox" class="btn btn-outline-secondary position-relative <?= $should_shake ? 'btn-bell-shake' : '' ?>" type="button" title="Notifications">
@@ -435,8 +784,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'feedb
         foreach ($items as $n):
           $isUnread = !empty($n['_unread']);
           $cardCls  = $isUnread ? 'unread' : 'read';
+          $statusCls = $n['status_class'] ?? '';
         ?>
-          <div class="card notif-card <?= $cardCls ?> shadow-sm mb-2"
+          <div class="card notif-card <?= $cardCls ?> <?= $statusCls ?> shadow-sm mb-2"
             data-ntype="<?= e($n['_type']) ?>"
             data-id="<?= e($n['_id']) ?>"
             data-status="<?= e($n['status_now'] ?? '') ?>"
@@ -514,68 +864,59 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'feedb
       </div>
     </div>
   <?php endif; ?>
-
   <!-- Feedback Modal -->
-<div class="modal fade" id="feedbackModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog">
-    <form method="post" class="modal-content">
-      <input type="hidden" name="action" value="feedback">
-      <input type="hidden" name="csrf" value="<?= e($csrf) ?>">
-      <!-- Honeypot -->
-      <input type="text" name="fb_hp" value="" style="display:none !important" tabindex="-1" autocomplete="off">
-
-      <div class="modal-header">
-        <h5 class="modal-title"><i class="bi bi-chat-left-quote me-2 text-warning"></i>Send Feedback</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-
-      <div class="modal-body">
-        <?php if (!empty($fb_success)): ?>
-          <div class="alert alert-success py-2 mb-3"><?= e($fb_success) ?></div>
-        <?php elseif (!empty($fb_error)): ?>
-          <div class="alert alert-danger py-2 mb-3"><?= e($fb_error) ?></div>
-        <?php else: ?>
-          <p class="text-muted small">Tell us what you like or what we should improve. We read every message.</p>
-        <?php endif; ?>
-
-        <div class="mb-3">
-          <label class="form-label">Name</label>
-          <input type="text" class="form-control" name="fb_name" value="<?= e($full_name) ?>" required>
+  <div class="modal fade" id="feedbackModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <form method="post" class="modal-content">
+        <input type="hidden" name="action" value="feedback">
+        <input type="hidden" name="csrf" value="<?= e($csrf) ?>">
+        <!-- Honeypot -->
+        <input type="text" name="fb_hp" value="" style="display:none !important" tabindex="-1" autocomplete="off">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-chat-left-quote me-2 text-warning"></i>Send Feedback</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
-
-        <div class="mb-3">
-          <label class="form-label">Email</label>
-          <input type="email" class="form-control" name="fb_email" value="<?= e($email) ?>" required>
+        <div class="modal-body">
+          <?php if (!empty($fb_success)): ?>
+            <div class="alert alert-success py-2 mb-3"><?= e($fb_success) ?></div>
+          <?php elseif (!empty($fb_error)): ?>
+            <div class="alert alert-danger py-2 mb-3"><?= e($fb_error) ?></div>
+          <?php else: ?>
+            <p class="text-muted small">Tell us what you like or what we should improve. We read every message.</p>
+          <?php endif; ?>
+          <div class="mb-3">
+            <label class="form-label">Name</label>
+            <input type="text" class="form-control" name="fb_name" value="<?= e($full_name) ?>" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Email</label>
+            <input type="email" class="form-control" name="fb_email" value="<?= e($email) ?>" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Message</label>
+            <textarea class="form-control" name="fb_message" rows="5" placeholder="Your feedback..." required></textarea>
+          </div>
         </div>
-
-        <div class="mb-3">
-          <label class="form-label">Message</label>
-          <textarea class="form-control" name="fb_message" rows="5" placeholder="Your feedback..." required></textarea>
+        <div class="modal-footer">
+          <button type="submit" class="btn btn-warning">
+            <i class="bi bi-send me-1"></i> Submit
+          </button>
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
         </div>
-      </div>
-
-      <div class="modal-footer">
-        <button type="submit" class="btn btn-warning">
-          <i class="bi bi-send me-1"></i> Submit
-        </button>
-        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
-      </div>
-    </form>
+      </form>
+    </div>
   </div>
-</div>
-
-
   <!-- Featured Jobs -->
   <section class="py-5">
     <div class="container">
       <h2 class="text-center fw-bold mb-4">Featured Jobs</h2>
-      <?php if (empty($jobs)): ?>
+      <?php if (empty($jobsToDisplay)): ?>
         <?= $isSearch
           ? '<div class="alert alert-danger text-center" role="alert">No jobs to show for your selection.</div>'
           : '<div class="alert alert-light border text-center" role="alert">No jobs to show yet.</div>' ?>
       <?php else: ?>
         <div class="row g-4">
-          <?php foreach ($jobs as $job): ?>
+          <?php foreach ($jobsToDisplay as $job): ?>
             <div class="col-12 col-md-6 col-lg-4">
               <div class="card job-card h-100 shadow-sm">
                 <div class="card-body">
@@ -600,6 +941,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'feedb
               </div>
             </div>
           <?php endforeach; ?>
+        </div>
+        <?php if ($hasMore): ?>
+          <div class="text-center mt-4">
+            <a class="btn btn-warning" href="<?= e(build_url_with(['all' => '1'])) ?>">
+              More Posts
+            </a>
+          </div>
+        <?php elseif ($show_all): ?>
+          <div class="text-center mt-4">
+            <a class="btn btn-outline-secondary" href="<?= e(build_url_with(['all' => null])) ?>">
+              Show Less
+            </a>
+          </div>
+        <?php endif; ?>
+      <?php endif; ?>
+    </div>
+  </section>
+  <!-- Recent Feedback Section -->
+  <section id="feedback" class="py-5 bg-light">
+    <div class="container">
+      <h2 class="text-center fw-bold mb-4">Latest Feedback</h2>
+      <?php if (empty($feedbacks)): ?>
+        <div class="alert alert-secondary text-center">No feedback yet.</div>
+      <?php else: ?>
+        <div class="list-group shadow-sm mb-3">
+          <?php foreach ($feedbacks as $fb): ?>
+            <div class="list-group-item">
+              <div class="d-flex w-100 justify-content-between">
+                <h6 class="mb-1 text-warning"><?= e($fb['name']) ?></h6>
+                <small class="text-muted"><?= date('M d, Y H:i', strtotime($fb['submitted_at'])) ?></small>
+              </div>
+              <p class="mb-1"><?= e($fb['message']) ?></p>
+            </div>
+          <?php endforeach; ?>
+        </div>
+        <div class="d-flex justify-content-center gap-2">
+          <?php if ($show_all_feedback): ?>
+            <a href="user_home.php#feedback" class="btn btn-outline-warning px-4">Show Less</a>
+          <?php else: ?>
+            <a href="user_home.php?allfb=1#feedback" class="btn btn-outline-warning px-4">More Feedback</a>
+          <?php endif; ?>
+          <!-- Send Feedback button -->
+          <button type="button" class="btn btn-warning px-4" data-bs-toggle="modal" data-bs-target="#feedbackModal">
+            <i class="bi bi-chat-text me-1"></i> Send Feedback
+          </button>
         </div>
       <?php endif; ?>
     </div>
@@ -642,10 +1028,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'feedb
             <li class="mb-2"><i class="bi bi-geo-alt me-2"></i>Yangon, Myanmar</li>
             <li class="mb-2"><i class="bi bi-envelope me-2"></i><a href="mailto:support@jobhive.mm">support@jobhive.mm</a></li>
             <li class="mb-2"><i class="bi bi-telephone me-2"></i><a href="tel:+95957433847">+95 957 433 847</a></li>
-            <button type="button" class="btn btn-warning btn-sm mt-2" data-bs-toggle="modal" data-bs-target="#feedbackModal">
-              <i class="bi bi-chat-text me-1"></i> Send Feedback
-            </button>
-
           </ul>
         </div>
       </div>
@@ -656,14 +1038,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'feedb
       </div>
     </div>
   </footer>
-
   <!-- Chatbot UI -->
   <div id="chatbot-container" class="position-fixed bottom-0 end-0 p-3" style="z-index: 1050; width: 350px; max-width: 90vw;">
     <!-- Chat Button -->
     <button id="chatbot-toggle" class="btn btn-warning rounded-circle shadow" style="width: 60px; height: 60px; position: fixed; bottom: 20px; right: 20px;">
       <i class="bi bi-chat-dots-fill fs-4"></i>
     </button>
-
     <!-- Chat Window -->
     <div id="chatbot-window" class="card shadow-lg border-0 d-none" style="position: fixed; bottom: 90px; right: 20px; width: 350px; max-width: 90vw;">
       <div class="card-header bg-warning text-white d-flex justify-content-between align-items-center">
@@ -688,10 +1068,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'feedb
       </div>
     </div>
   </div>
-
   <!--------- Panel + Notification Persistence JS !------>
-
   <script>
+    // Theme toggle functionality - matching about.php
+    const themeToggle = document.getElementById('themeToggle');
+    const themeIcon = document.getElementById('themeIcon');
+    const html = document.documentElement;
+    // Check for saved theme preference or default to light
+    const currentTheme = localStorage.getItem('theme') || 'light';
+    html.setAttribute('data-theme', currentTheme);
+    updateThemeIcon(currentTheme);
+    themeToggle.addEventListener('click', () => {
+      const theme = html.getAttribute('data-theme');
+      const newTheme = theme === 'dark' ? 'light' : 'dark';
+      html.setAttribute('data-theme', newTheme);
+      localStorage.setItem('theme', newTheme);
+      updateThemeIcon(newTheme);
+    });
+
+    function updateThemeIcon(theme) {
+      if (theme === 'dark') {
+        themeIcon.classList.remove('bi-sun-fill');
+        themeIcon.classList.add('bi-moon-fill');
+      } else {
+        themeIcon.classList.remove('bi-moon-fill');
+        themeIcon.classList.add('bi-sun-fill');
+      }
+    }
     // Inbox Panel
     const panel = document.getElementById('inboxPanel');
     const backdrop = document.getElementById('backdrop');
@@ -713,14 +1116,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'feedb
       document.body.classList.remove('inbox-open');
       document.body.style.overflow = '';
     }
-
     btnInbox.addEventListener('click', openInbox);
     btnClose.addEventListener('click', closeInbox);
     backdrop.addEventListener('click', closeInbox);
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') closeInbox();
     });
-
     <?php if ($open_inbox): ?>openInbox();
     (function() {
       const url = new URL(window.location.href);
@@ -729,7 +1130,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'feedb
       history.replaceState(null, "", url.pathname + (qs ? ('?' + qs) : ''));
     })();
     <?php endif; ?>
-
     <?php if (!$is_premium): ?>
         // Premium modal logic
         (function() {
@@ -768,7 +1168,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'feedb
           });
         })();
     <?php endif; ?>
-
       // Notification read persistence (localStorage)
       (function() {
         const USER_ID = <?= (int)$user_id ?>;
@@ -876,7 +1275,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'feedb
         }, false);
         document.addEventListener('DOMContentLoaded', apply);
       })();
-
     // Chatbot functionality
     document.addEventListener('DOMContentLoaded', function() {
       const chatbotToggle = document.getElementById('chatbot-toggle');
@@ -885,7 +1283,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'feedb
       const chatbotForm = document.getElementById('chatbot-form');
       const chatbotInput = document.getElementById('chatbot-input');
       const chatbotMessages = document.getElementById('chatbot-messages');
-
       // Toggle chat window and control animation
       chatbotToggle.addEventListener('click', function() {
         const isOpen = !chatbotWindow.classList.contains('d-none');
@@ -908,19 +1305,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'feedb
           chatbotInput.focus();
         }
       });
-
       // Close chat window and resume animation
       chatbotClose.addEventListener('click', function() {
         chatbotWindow.classList.add('d-none');
         chatbotToggle.classList.remove('paused');
       });
-
       // Function to show typing indicator
       function showTypingIndicator() {
         const typingDiv = document.createElement('div');
         typingDiv.className = 'chatbot-message chatbot-bot';
         typingDiv.id = 'typing-indicator';
-
         const typingContent = document.createElement('div');
         typingContent.className = 'd-flex align-items-center';
         typingContent.innerHTML = `
@@ -929,36 +1323,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'feedb
           <span class="chatbot-typing"></span>
           <span class="chatbot-typing"></span>
         `;
-
         typingDiv.appendChild(typingContent);
         chatbotMessages.appendChild(typingDiv);
         chatbotMessages.scrollTop = chatbotMessages.scrollHeight;
-
         return typingDiv;
       }
-
       // Function to add message to chat
       function addMessage(message, sender, buttons, image) {
         const messageDiv = document.createElement('div');
         messageDiv.className = `chatbot-message chatbot-${sender}`;
-
         const now = new Date();
         const timeString = now.toLocaleTimeString([], {
           hour: '2-digit',
           minute: '2-digit'
         });
-
         // Create message content
         const messageContent = document.createElement('div');
         messageContent.innerHTML = message;
-
         messageDiv.appendChild(messageContent);
-
         // Add image if it exists
         if (image && sender === 'bot') {
           const imageContainer = document.createElement('div');
           imageContainer.className = 'mt-2 mb-2 text-center';
-
           const imageElement = document.createElement('img');
           imageElement.src = image;
           imageElement.className = 'img-fluid rounded';
@@ -966,16 +1352,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'feedb
           imageElement.style.height = 'auto';
           imageElement.style.maxHeight = '200px';
           imageElement.alt = 'Preview';
-
           imageContainer.appendChild(imageElement);
           messageDiv.appendChild(imageContainer);
         }
-
         // Add buttons if they exist
         if (buttons && Array.isArray(buttons) && buttons.length > 0) {
           const buttonsContainer = document.createElement('div');
           buttonsContainer.className = 'chatbot-buttons mt-2';
-
           buttons.forEach(button => {
             const buttonElement = document.createElement('button');
             buttonElement.className = 'btn btn-warning btn-sm';
@@ -985,42 +1368,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'feedb
             };
             buttonsContainer.appendChild(buttonElement);
           });
-
           messageDiv.appendChild(buttonsContainer);
         }
-
         // Add timestamp
         const timestamp = document.createElement('div');
         timestamp.className = 'chatbot-timestamp';
         timestamp.textContent = timeString;
         messageDiv.appendChild(timestamp);
-
         chatbotMessages.appendChild(messageDiv);
         chatbotMessages.scrollTop = chatbotMessages.scrollHeight;
-
         // Add animation for new messages
         messageDiv.style.animation = 'none';
         setTimeout(() => {
           messageDiv.style.animation = `${sender === 'user' ? 'bounce' : 'fadeIn'} 0.5s ease-out`;
         }, 10);
       }
-
       // Handle form submission
       chatbotForm.addEventListener('submit', function(e) {
         e.preventDefault();
-
         const message = chatbotInput.value.trim();
         if (message === '') return;
-
         // Add user message to chat
         addMessage(message, 'user');
-
         // Clear input
         chatbotInput.value = '';
-
         // Show typing indicator
         const typingIndicator = showTypingIndicator();
-
         // Send to server and get response
         fetch('user_chatbot.php', {
             method: 'POST',
@@ -1035,7 +1408,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'feedb
             if (typingIndicator) {
               typingIndicator.remove();
             }
-
             if (data.response) {
               addMessage(data.response, 'bot', data.buttons, data.image);
             }
@@ -1049,21 +1421,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'feedb
             addMessage("Sorry, I'm having trouble responding right now. Please try again later.", 'bot');
           });
       });
-
-
     });
-
     // Feedback modal auto-show if message exists
-  (function() {
-    const hasFbMsg = <?= (!empty($fb_success) || !empty($fb_error)) ? 'true' : 'false' ?>;
-    if (hasFbMsg) {
-      const el = document.getElementById('feedbackModal');
-      if (el) new bootstrap.Modal(el).show();
-    }
-  })();
-
-
-
+    (function() {
+      const hasFbMsg = <?= (!empty($fb_success) || !empty($fb_error)) ? 'true' : 'false' ?>;
+      if (hasFbMsg) {
+        const el = document.getElementById('feedbackModal');
+        if (el) new bootstrap.Modal(el).show();
+      }
+    })();
   </script>
 </body>
 

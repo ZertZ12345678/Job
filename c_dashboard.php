@@ -1,21 +1,17 @@
 <?php
-
 include("connect.php");
 session_start();
-
 /* ===== Auth guard ===== */
 $company_id = $_SESSION['company_id'] ?? null;
 if (!$company_id) {
     header("Location: login.php");
     exit;
 }
-
 /* ===== Helpers ===== */
 function h($s)
 {
     return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 }
-
 function buildImageUrl(string $dir, ?string $filename, ?string $fallbackName, string $fallbackInitial): string
 {
     $dir = rtrim($dir, '/');
@@ -30,7 +26,6 @@ function buildImageUrl(string $dir, ?string $filename, ?string $fallbackName, st
     if ($name === '') $name = $fallbackInitial;
     return "https://ui-avatars.com/api/?name=" . urlencode($name) . "&background=FFC107&color=22223b";
 }
-
 function job_badge($status)
 {
     $s = strtolower(trim((string)$status));
@@ -44,7 +39,6 @@ function job_badge($status)
     $cls = $map[$s] ?? 'bg-secondary';
     return '<span class="badge ' . $cls . '">' . h(ucfirst($s)) . '</span>';
 }
-
 /* ===== Load company + profile % ===== */
 try {
     $stmt = $pdo->prepare("
@@ -65,9 +59,7 @@ try {
 } catch (PDOException $e) {
     $company = [];
 }
-
 $logo_url = buildImageUrl('company_logos', $company['logo'] ?? '', $company['company_name'] ?? '', 'C');
-
 /* ===== KPIs ===== */
 $counts = ['active_jobs' => 0, 'total_applicants' => 0, 'employees' => 0];
 try {
@@ -75,7 +67,6 @@ try {
     $stmt = $pdo->prepare("SELECT COUNT(*) FROM jobs WHERE company_id=? AND LOWER(status) IN ('active','open')");
     $stmt->execute([$company_id]);
     $counts['active_jobs'] = (int)$stmt->fetchColumn();
-
     // Total applicants to this company's jobs
     $stmt = $pdo->prepare("
         SELECT COUNT(*)
@@ -85,7 +76,6 @@ try {
     ");
     $stmt->execute([$company_id]);
     $counts['total_applicants'] = (int)$stmt->fetchColumn();
-
     // Employees = accepted applications for this company's jobs
     $stmt = $pdo->prepare("
         SELECT COUNT(*)
@@ -98,7 +88,6 @@ try {
     $counts['employees'] = (int)$stmt->fetchColumn();
 } catch (PDOException $e) {
 }
-
 /* ===== Recent Jobs (any status) ===== */
 $recent_jobs = [];
 try {
@@ -114,7 +103,6 @@ try {
     $recent_jobs = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 } catch (PDOException $e) {
 }
-
 /* ===== Recent Applicants ===== */
 $recent_apps = [];
 try {
@@ -133,13 +121,11 @@ try {
     $recent_apps = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 } catch (PDOException $e) {
 }
-
 $pp = (int)($company['profile_pct'] ?? 0);
 $barClass = $pp > 85 ? 'bg-success' : ($pp > 60 ? 'bg-info' : ($pp > 30 ? 'bg-warning' : 'bg-danger'));
 ?>
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -148,108 +134,186 @@ $barClass = $pp > 85 ? 'bg-success' : ($pp > 60 ? 'bg-info' : ($pp > 30 ? 'bg-wa
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <style>
-        body {
-            background: #f8fafc
+        :root {
+            --bg-primary: #f8fafc;
+            --bg-secondary: #ffffff;
+            --bg-tertiary: #f3f4f6;
+            --text-primary: #212529;
+            --text-secondary: #6c757d;
+            --text-muted: #6c757d;
+            --text-white: #ffffff;
+            --border-color: #eaeaea;
+            --sidebar-bg: #22223b;
+            --sidebar-text: #ffffff;
+            --sidebar-hover: rgba(255, 255, 255, .08);
+            --sidebar-active: #ffc107;
+            --sidebar-active-text: #22223b;
+            --card-shadow: 0 4px 18px rgba(0, 0, 0, .05);
+            --avatar-border: #ffffff;
+            --avatar-shadow: 0 2px 6px rgba(0, 0, 0, .1);
+            --table-header-bg: #ffffffff;
+            --table-header-text: #000000ff;
         }
-
+        [data-theme="dark"] {
+            --bg-primary: #121212;
+            --bg-secondary: #1e1e1e;
+            --bg-tertiary: #2d2d2d;
+            --text-primary: #e9ecef;
+            --text-secondary: #adb5bd;
+            --text-muted: #ffffff;
+            --text-white: #ffffff;
+            --border-color: #343a40;
+            --sidebar-bg: #1a1a1a;
+            --sidebar-text: #e9ecef;
+            --sidebar-hover: rgba(255, 255, 255, .1);
+            --sidebar-active: #ffc107;
+            --sidebar-active-text: #22223b;
+            --card-shadow: 0 4px 18px rgba(0, 0, 0, .3);
+            --avatar-border: #343a40;
+            --avatar-shadow: 0 2px 6px rgba(0, 0, 0, .3);
+            --table-header-bg: #000000;
+            --table-header-text: #ffffff;
+        }
+        body {
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            transition: background-color 0.3s, color 0.3s;
+        }
         .sidebar {
             position: fixed;
             top: 0;
             left: 0;
             bottom: 0;
             width: 260px;
-            background: #22223b;
-            color: #fff;
+            background: var(--sidebar-bg);
+            color: var(--sidebar-text);
             padding: 20px 14px;
             z-index: 1020;
             display: flex;
-            flex-direction: column
+            flex-direction: column;
+            transition: background-color 0.3s;
         }
-
         .brand {
             font-weight: 700;
             color: #ffc107;
             letter-spacing: .3px;
             text-decoration: none;
             display: inline-block;
-            margin-bottom: 10px
+            margin-bottom: 10px;
         }
-
         .sidebar .nav-link {
-            color: #fff;
+            color: var(--sidebar-text);
             border-radius: .6rem;
             padding: .7rem .9rem;
-            font-weight: 500
+            font-weight: 500;
+            transition: background-color 0.3s;
         }
-
         .sidebar .nav-link:hover {
-            background: rgba(255, 255, 255, .08);
-            color: #fff
+            background: var(--sidebar-hover);
+            color: var(--sidebar-text);
         }
-
         .sidebar .nav-link.active {
-            background: #ffc107;
-            color: #22223b
+            background: var(--sidebar-active);
+            color: var(--sidebar-active-text);
         }
-
         .content-wrapper {
             margin-left: 260px;
-            min-height: 100vh
+            min-height: 100vh;
+            transition: margin-left 0.3s;
         }
-
         .topbar {
             position: sticky;
             top: 0;
             z-index: 1010;
-            background: #fff;
-            border-bottom: 1px solid #eaeaea
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            transition: background-color 0.3s, border-color 0.3s;
         }
-
         .kpi-card {
             border: none;
             border-radius: 1rem;
-            box-shadow: 0 4px 18px rgba(0, 0, 0, .05)
+            box-shadow: var(--card-shadow);
+            background: var(--bg-secondary);
+            transition: background-color 0.3s, box-shadow 0.3s;
         }
-
+        .kpi-card .text-muted.small {
+            color: var(--text-white) !important;
+        }
         .table thead th {
-            background: #f3f4f6
+            background: var(--table-header-bg);
+            color: var(--table-header-text);
+            transition: background-color 0.3s, color 0.3s;
         }
-
+        .table {
+            color: var(--text-primary);
+        }
         .avatar {
             width: 38px;
             height: 38px;
             border-radius: 50%;
             object-fit: cover;
-            border: 2px solid #fff;
-            box-shadow: 0 2px 6px rgba(0, 0, 0, .1)
+            border: 2px solid var(--avatar-border);
+            box-shadow: var(--avatar-shadow);
+            transition: border-color 0.3s, box-shadow 0.3s;
         }
-
+        .text-muted {
+            color: var(--text-muted) !important;
+        }
+        .card {
+            background: var(--bg-secondary);
+            border: none;
+            transition: background-color 0.3s;
+        }
+        .card-header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            transition: background-color 0.3s, border-color 0.3s;
+        }
+        .btn-outline-secondary {
+            color: var(--text-secondary);
+            border-color: var(--border-color);
+            transition: color 0.3s, border-color 0.3s;
+        }
+        .btn-outline-secondary:hover {
+            color: var(--text-primary);
+            background-color: var(--bg-tertiary);
+        }
+        .theme-toggle {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+        }
+        .theme-toggle:hover {
+            background: var(--bg-tertiary);
+        }
         @media (max-width:991.98px) {
             .sidebar {
                 transform: translateX(-100%);
-                transition: transform .2s ease
+                transition: transform .2s ease;
             }
-
             .sidebar.show {
-                transform: translateX(0)
+                transform: translateX(0);
             }
-
             .content-wrapper {
-                margin-left: 0
+                margin-left: 0;
             }
         }
     </style>
 </head>
-
 <body>
-
     <!-- Sidebar -->
     <aside id="sidebar" class="sidebar">
         <div class="d-flex align-items-center justify-content-between mb-3">
             <a class="brand" href="company_home.php">JobHive</a>
             <button class="btn btn-sm btn-light d-lg-none" id="closeSidebar"><i class="bi bi-x-lg"></i></button>
         </div>
-
         <div class="mb-3 d-flex align-items-center gap-2 px-2">
             <img src="<?= $logo_url ?>" class="avatar" alt="Logo">
             <div>
@@ -257,7 +321,6 @@ $barClass = $pp > 85 ? 'bg-success' : ($pp > 60 ? 'bg-info' : ($pp > 30 ? 'bg-wa
                 <small class="text-white-50"><?= h($company['email'] ?? '') ?></small>
             </div>
         </div>
-
         <div class="flex-grow-1">
             <div class="small text-white-50 mb-2 px-2">Company Menu</div>
             <nav class="nav flex-column">
@@ -268,13 +331,11 @@ $barClass = $pp > 85 ? 'bg-success' : ($pp > 60 ? 'bg-info' : ($pp > 30 ? 'bg-wa
                 <a class="nav-link" href="company_home.php"><i class="bi bi-house-door me-2"></i> Home Page</a>
             </nav>
         </div>
-
         <div class="mt-3">
             <hr class="border-secondary my-2" />
             <a class="nav-link text-danger" href="logout.php"><i class="bi bi-box-arrow-right me-2"></i> Logout</a>
         </div>
     </aside>
-
     <!-- Main content -->
     <div class="content-wrapper">
         <!-- Topbar -->
@@ -286,6 +347,9 @@ $barClass = $pp > 85 ? 'bg-success' : ($pp > 60 ? 'bg-info' : ($pp > 30 ? 'bg-wa
                         <h5 class="mb-0 fw-semibold">Company Dashboard</h5>
                     </div>
                     <div class="d-flex align-items-center gap-3">
+                        <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
+                            <i class="bi bi-sun-fill" id="themeIcon"></i>
+                        </button>
                         <a href="company_profile.php" class="text-muted small d-none d-sm-inline text-decoration-none">
                             <?= h($company['company_name'] ?? 'Company'); ?>
                         </a>
@@ -294,7 +358,6 @@ $barClass = $pp > 85 ? 'bg-success' : ($pp > 60 ? 'bg-info' : ($pp > 30 ? 'bg-wa
                 </div>
             </div>
         </div>
-
         <main class="container py-4">
             <!-- Overview with KPIs + Recent Jobs table -->
             <section id="overview" class="mb-4">
@@ -312,7 +375,6 @@ $barClass = $pp > 85 ? 'bg-success' : ($pp > 60 ? 'bg-info' : ($pp > 30 ? 'bg-wa
                             </div>
                         </div>
                     </div>
-
                     <div class="col-12 col-sm-6 col-xl-3">
                         <div class="card kpi-card">
                             <div class="card-body">
@@ -326,7 +388,6 @@ $barClass = $pp > 85 ? 'bg-success' : ($pp > 60 ? 'bg-info' : ($pp > 30 ? 'bg-wa
                             </div>
                         </div>
                     </div>
-
                     <!-- NEW KPI: Employees (Accepted) -->
                     <div class="col-12 col-sm-6 col-xl-3">
                         <div class="card kpi-card">
@@ -341,7 +402,6 @@ $barClass = $pp > 85 ? 'bg-success' : ($pp > 60 ? 'bg-info' : ($pp > 30 ? 'bg-wa
                             </div>
                         </div>
                     </div>
-
                     <div class="col-12 col-sm-6 col-xl-3">
                         <div class="card kpi-card">
                             <div class="card-body">
@@ -361,7 +421,6 @@ $barClass = $pp > 85 ? 'bg-success' : ($pp > 60 ? 'bg-info' : ($pp > 30 ? 'bg-wa
                         </div>
                     </div>
                 </div>
-
                 <!-- Recent Jobs (no action buttons) -->
                 <div class="card border-0 shadow-sm rounded-4 mt-3">
                     <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
@@ -402,7 +461,6 @@ $barClass = $pp > 85 ? 'bg-success' : ($pp > 60 ? 'bg-info' : ($pp > 30 ? 'bg-wa
                     </div>
                 </div>
             </section>
-
             <!-- Recent Applicants (no buttons) -->
             <section id="applicants" class="mb-4">
                 <div class="card border-0 shadow-sm rounded-4">
@@ -459,11 +517,36 @@ $barClass = $pp > 85 ? 'bg-success' : ($pp > 60 ? 'bg-info' : ($pp > 30 ? 'bg-wa
             </section>
         </main>
     </div>
-
     <script>
+        // Mobile sidebar toggle
         const sidebar = document.getElementById('sidebar');
         document.getElementById('openSidebar')?.addEventListener('click', () => sidebar.classList.add('show'));
         document.getElementById('closeSidebar')?.addEventListener('click', () => sidebar.classList.remove('show'));
+        // Theme toggle functionality
+        const themeToggle = document.getElementById('themeToggle');
+        const themeIcon = document.getElementById('themeIcon');
+        const html = document.documentElement;
+        // Check for saved theme preference or default to light
+        const currentTheme = localStorage.getItem('theme') || 'light';
+        html.setAttribute('data-theme', currentTheme);
+        updateThemeIcon(currentTheme);
+        themeToggle.addEventListener('click', () => {
+            const theme = html.getAttribute('data-theme');
+            const newTheme = theme === 'dark' ? 'light' : 'dark';
+            html.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            updateThemeIcon(newTheme);
+        });
+        function updateThemeIcon(theme) {
+            if (theme === 'dark') {
+                themeIcon.classList.remove('bi-sun-fill');
+                themeIcon.classList.add('bi-moon-fill');
+            } else {
+                themeIcon.classList.remove('bi-moon-fill');
+                themeIcon.classList.add('bi-sun-fill');
+            }
+        }
+        // Smooth scroll for in-page links
         document.querySelectorAll('.sidebar .nav-link[href^="#"]').forEach(a => {
             a.addEventListener('click', (e) => {
                 e.preventDefault();
@@ -482,5 +565,4 @@ $barClass = $pp > 85 ? 'bg-success' : ($pp > 60 ? 'bg-info' : ($pp > 30 ? 'bg-wa
         });
     </script>
 </body>
-
 </html>

@@ -1,14 +1,12 @@
 <?php
 include("connect.php");
 session_start();
-
 /* ===== Auth guard ===== */
 $user_id = $_SESSION['user_id'] ?? null;
 if (!$user_id) {
     header("Location: login.php");
     exit;
 }
-
 /* ===== Fetch current user with computed profile % =====
    Fields counted (8): full_name, email, phone, address, current_position, b_date, gender, education */
 try {
@@ -44,11 +42,9 @@ try {
 } catch (PDOException $e) {
     $user = [];
 }
-
 $avatar_url = !empty($user['photo'])
     ? "profile_pics/" . htmlspecialchars($user['photo'])
     : "https://ui-avatars.com/api/?name=" . urlencode($user['full_name'] ?? "U") . "&background=FFC107&color=22223b";
-
 /* ===== KPI: Accepted Job & All Applications (this user) ===== */
 $accepted_jobs = 0;
 $all_apps = 0;
@@ -57,7 +53,6 @@ try {
     $stmt = $pdo->prepare("SELECT COUNT(*) FROM application WHERE user_id = ? AND status = 'Accepted'");
     $stmt->execute([$user_id]);
     $accepted_jobs = (int)$stmt->fetchColumn();
-
     // All Applications
     $stmt = $pdo->prepare("SELECT COUNT(*) FROM application WHERE user_id = ?");
     $stmt->execute([$user_id]);
@@ -66,7 +61,6 @@ try {
     $accepted_jobs = 0;
     $all_apps = 0;
 }
-
 /* ===== Recent Applications (latest 5 for this user) ===== */
 $recent_apps = [];
 try {
@@ -86,7 +80,6 @@ try {
 } catch (PDOException $e) {
     $recent_apps = [];
 }
-
 /* ===== Progress bar color ===== */
 $pp = (int)($user['profile_pct'] ?? 0);
 $pp = max(0, min(100, $pp)); // clamp between 0–100
@@ -106,8 +99,46 @@ if ($pp > 85) $barClass = 'bg-success';
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <style>
+        :root {
+            --bg-primary: #f8fafc;
+            --bg-secondary: #ffffff;
+            --bg-tertiary: #f3f4f6;
+            --text-primary: #212529;
+            --text-secondary: #6c757d;
+            --text-muted: #6c757d;
+            --border-color: #eaeaea;
+            --sidebar-bg: #22223b;
+            --sidebar-text: #ffffff;
+            --sidebar-hover: rgba(255, 255, 255, .08);
+            --sidebar-active: #ffc107;
+            --sidebar-active-text: #22223b;
+            --card-shadow: 0 4px 18px rgba(0, 0, 0, .05);
+            --avatar-border: #ffffff;
+            --avatar-shadow: 0 2px 6px rgba(0, 0, 0, .1);
+        }
+
+        [data-theme="dark"] {
+            --bg-primary: #121212;
+            --bg-secondary: #1e1e1e;
+            --bg-tertiary: #2d2d2d;
+            --text-primary: #e9ecef;
+            --text-secondary: #adb5bd;
+            --text-muted: #6c757d;
+            --border-color: #343a40;
+            --sidebar-bg: #1a1a1a;
+            --sidebar-text: #e9ecef;
+            --sidebar-hover: rgba(255, 255, 255, .1);
+            --sidebar-active: #ffc107;
+            --sidebar-active-text: #22223b;
+            --card-shadow: 0 4px 18px rgba(0, 0, 0, .3);
+            --avatar-border: #343a40;
+            --avatar-shadow: 0 2px 6px rgba(0, 0, 0, .3);
+        }
+
         body {
-            background: #f8fafc;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            transition: background-color 0.3s, color 0.3s;
         }
 
         .sidebar {
@@ -116,12 +147,13 @@ if ($pp > 85) $barClass = 'bg-success';
             left: 0;
             bottom: 0;
             width: 260px;
-            background: #22223b;
-            color: #fff;
+            background: var(--sidebar-bg);
+            color: var(--sidebar-text);
             padding: 20px 14px;
             z-index: 1020;
             display: flex;
             flex-direction: column;
+            transition: background-color 0.3s;
         }
 
         .brand {
@@ -134,43 +166,53 @@ if ($pp > 85) $barClass = 'bg-success';
         }
 
         .sidebar .nav-link {
-            color: #fff;
+            color: var(--sidebar-text);
             border-radius: .6rem;
             padding: .7rem .9rem;
             font-weight: 500;
+            transition: background-color 0.3s;
         }
 
         .sidebar .nav-link:hover {
-            background: rgba(255, 255, 255, .08);
-            color: #fff;
+            background: var(--sidebar-hover);
+            color: var(--sidebar-text);
         }
 
         .sidebar .nav-link.active {
-            background: #ffc107;
-            color: #22223b;
+            background: var(--sidebar-active);
+            color: var(--sidebar-active-text);
         }
 
         .content-wrapper {
             margin-left: 260px;
             min-height: 100vh;
+            transition: margin-left 0.3s;
         }
 
         .topbar {
             position: sticky;
             top: 0;
             z-index: 1010;
-            background: #fff;
-            border-bottom: 1px solid #eaeaea;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            transition: background-color 0.3s, border-color 0.3s;
         }
 
         .kpi-card {
             border: none;
             border-radius: 1rem;
-            box-shadow: 0 4px 18px rgba(0, 0, 0, .05);
+            box-shadow: var(--card-shadow);
+            background: var(--bg-secondary);
+            transition: background-color 0.3s, box-shadow 0.3s;
         }
 
         .table thead th {
-            background: #f3f4f6;
+            background: var(--bg-tertiary);
+            transition: background-color 0.3s;
+        }
+
+        .table {
+            color: var(--text-primary);
         }
 
         .avatar {
@@ -178,8 +220,111 @@ if ($pp > 85) $barClass = 'bg-success';
             height: 38px;
             border-radius: 50%;
             object-fit: cover;
-            border: 2px solid #fff;
-            box-shadow: 0 2px 6px rgba(0, 0, 0, .1);
+            border: 2px solid var(--avatar-border);
+            box-shadow: var(--avatar-shadow);
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+
+        .text-muted {
+            color: var(--text-muted) !important;
+        }
+
+        .card {
+            background: var(--bg-secondary);
+            border: none;
+            transition: background-color 0.3s;
+        }
+
+        .card-header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            transition: background-color 0.3s, border-color 0.3s;
+        }
+
+        .btn-outline-secondary {
+            color: var(--text-secondary);
+            border-color: var(--border-color);
+            transition: color 0.3s, border-color 0.3s;
+        }
+
+        .btn-outline-secondary:hover {
+            color: var(--text-primary);
+            background-color: var(--bg-tertiary);
+        }
+
+        .theme-toggle {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+        }
+
+        .theme-toggle:hover {
+            background: var(--bg-tertiary);
+        }
+
+        /* Dark mode specific styles */
+        [data-theme="dark"] .kpi-card .text-muted {
+            color: white !important;
+        }
+
+        [data-theme="dark"] .kpi-card .h4 {
+            color: white !important;
+        }
+
+        [data-theme="dark"] .kpi-card .small.fw-semibold {
+            color: white !important;
+        }
+
+        [data-theme="dark"] #applications .table {
+            background-color:  black !important;
+            color: #ffffff !important;
+        }
+
+        [data-theme="dark"] #applications .table thead th {
+            background-color: black !important;
+            color: #ffffff !important;
+            border-color: #DAA520 !important;
+        }
+
+        [data-theme="dark"] #applications .table tbody tr {
+            background-color: black !important;
+            color: #ffffff !important;
+            border-color: #DAA520 !important;
+        }
+
+        [data-theme="dark"] #applications .table tbody tr:hover {
+            background-color: #DAA520 !important;
+            color: black !important;
+        }
+
+        [data-theme="dark"] #applications .table tbody td {
+            color: black !important;
+            border-color: #DAA520 !important;
+        }
+
+        [data-theme="dark"] #applications .table tbody tr td.text-center {
+            color: black !important;
+        }
+
+        [data-theme="dark"] #applications .badge {
+            color: black !important;
+        }
+
+        [data-theme="dark"] #applications .btn-outline-warning {
+            color: black !important;
+            border-color: black !important;
+        }
+
+        [data-theme="dark"] #applications .btn-outline-warning:hover {
+            background-color: black !important;
+            color: gold !important;
         }
 
         @media (max-width:991.98px) {
@@ -206,7 +351,6 @@ if ($pp > 85) $barClass = 'bg-success';
             <a class="brand" href="user_home.php">JobHive</a>
             <button class="btn btn-sm btn-light d-lg-none" id="closeSidebar"><i class="bi bi-x-lg"></i></button>
         </div>
-
         <div class="flex-grow-1">
             <div class="small text-white-50 mb-2 px-2">User Menu</div>
             <nav class="nav flex-column">
@@ -216,13 +360,11 @@ if ($pp > 85) $barClass = 'bg-success';
                 <a class="nav-link" href="user_home.php"><i class="bi bi-house-door me-2"></i> Home Page</a>
             </nav>
         </div>
-
         <div class="mt-3">
             <hr class="border-secondary my-2" />
             <a class="nav-link text-danger" href="index.php"><i class="bi bi-box-arrow-right me-2"></i> Logout</a>
         </div>
     </aside>
-
     <!-- Main content -->
     <div class="content-wrapper">
         <!-- Topbar -->
@@ -234,6 +376,9 @@ if ($pp > 85) $barClass = 'bg-success';
                         <h5 class="mb-0 fw-semibold">Dashboard</h5>
                     </div>
                     <div class="d-flex align-items-center gap-3">
+                        <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
+                            <i class="bi bi-sun-fill" id="themeIcon"></i>
+                        </button>
                         <a href="user_profile.php" class="text-muted small d-none d-sm-inline text-decoration-none">
                             <?php echo htmlspecialchars($user['full_name'] ?? 'User'); ?>
                         </a>
@@ -242,7 +387,6 @@ if ($pp > 85) $barClass = 'bg-success';
                 </div>
             </div>
         </div>
-
         <main class="container py-4">
             <!-- Overview: 3 KPIs -->
             <section id="overview" class="mb-4">
@@ -261,7 +405,6 @@ if ($pp > 85) $barClass = 'bg-success';
                             </div>
                         </div>
                     </div>
-
                     <!-- All Applications -->
                     <div class="col-12 col-sm-6 col-xl-4">
                         <div class="card kpi-card">
@@ -276,7 +419,6 @@ if ($pp > 85) $barClass = 'bg-success';
                             </div>
                         </div>
                     </div>
-
                     <!-- Profile Completion -->
                     <div class="col-12 col-sm-6 col-xl-4">
                         <div class="card kpi-card">
@@ -298,7 +440,6 @@ if ($pp > 85) $barClass = 'bg-success';
                     </div>
                 </div>
             </section>
-
             <!-- Recent Applications -->
             <section id="applications" class="mb-4">
                 <div class="card border-0 shadow-sm rounded-4">
@@ -359,12 +500,40 @@ if ($pp > 85) $barClass = 'bg-success';
             </section>
         </main>
     </div>
-
     <script>
         // Mobile sidebar toggle
         const sidebar = document.getElementById('sidebar');
         document.getElementById('openSidebar')?.addEventListener('click', () => sidebar.classList.add('show'));
         document.getElementById('closeSidebar')?.addEventListener('click', () => sidebar.classList.remove('show'));
+
+        // Theme toggle functionality
+        const themeToggle = document.getElementById('themeToggle');
+        const themeIcon = document.getElementById('themeIcon');
+        const html = document.documentElement;
+
+        // Check for saved theme preference or default to light
+        const currentTheme = localStorage.getItem('theme') || 'light';
+        html.setAttribute('data-theme', currentTheme);
+        updateThemeIcon(currentTheme);
+
+        themeToggle.addEventListener('click', () => {
+            const theme = html.getAttribute('data-theme');
+            const newTheme = theme === 'dark' ? 'light' : 'dark';
+
+            html.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            updateThemeIcon(newTheme);
+        });
+
+        function updateThemeIcon(theme) {
+            if (theme === 'dark') {
+                themeIcon.classList.remove('bi-sun-fill');
+                themeIcon.classList.add('bi-moon-fill');
+            } else {
+                themeIcon.classList.remove('bi-moon-fill');
+                themeIcon.classList.add('bi-sun-fill');
+            }
+        }
 
         // Smooth scroll for in-page links
         document.querySelectorAll('.sidebar .nav-link[href^="#"]').forEach(a => {

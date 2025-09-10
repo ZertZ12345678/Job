@@ -1,12 +1,15 @@
 <?php
 require_once "connect.php";
 if (session_status() === PHP_SESSION_NONE) session_start();
+/* ===== Auth guard ===== */
 $company_id = $_SESSION['company_id'] ?? null;
 if (!$company_id) {
   header("Location: login.php");
   exit;
 }
+/* ===== Options ===== */
 $LOGO_DIR = "company_logos/";
+/* ===== Helpers ===== */
 function e($v)
 {
   return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
@@ -17,7 +20,7 @@ function name_initials($name)
   if ($name === '') return 'U';
   $parts = explode(' ', $name);
   $first = mb_substr($parts[0], 0, 1, 'UTF-8');
-  $last = count($parts) > 1 ? mb_substr(end($parts), 0, 1, 'UTF-8') : '';
+  $last  = count($parts) > 1 ? mb_substr(end($parts), 0, 1, 'UTF-8') : '';
   return mb_strtoupper($first . $last, 'UTF-8');
 }
 if (!function_exists('safe_truncate')) {
@@ -28,13 +31,14 @@ if (!function_exists('safe_truncate')) {
     return (strlen($text) > $limit) ? substr($text, 0, $limit - strlen($ellipsis)) . $ellipsis : $text;
   }
 }
+/* ===== Company display info ===== */
 $company_name = $company_logo = $company_member = '';
 try {
   $st = $pdo->prepare("SELECT company_name, logo, member FROM companies WHERE company_id=? LIMIT 1");
   $st->execute([$company_id]);
   if ($row = $st->fetch(PDO::FETCH_ASSOC)) {
-    $company_name = (string)($row['company_name'] ?? '');
-    $company_logo = (string)($row['logo'] ?? '');
+    $company_name   = (string)($row['company_name'] ?? '');
+    $company_logo   = (string)($row['logo'] ?? '');
     $company_member = (string)($row['member'] ?? 'normal');
   }
 } catch (PDOException $e) {
@@ -43,6 +47,7 @@ $logo_src = '';
 if ($company_logo !== '') {
   $logo_src = preg_match('~^https?://~i', $company_logo) ? $company_logo : $LOGO_DIR . ltrim($company_logo, '/');
 }
+/* ===== Pricing / membership preview ===== */
 require_once "pricing.php";
 $totalPosts = 0;
 try {
@@ -55,14 +60,17 @@ try {
 list($rateNext, $tierNext) = jh_company_discount_for_posts($totalPosts + 1);
 $feeNext = jh_price_after_discount(JH_BASE_FEE, $rateNext);
 $badgeClass = match (strtolower($company_member)) {
-  'gold' => 'bg-warning text-dark',
+  'gold'     => 'bg-warning text-dark',
   'platinum' => 'bg-secondary',
-  'diamond' => 'bg-info text-dark',
-  default => 'bg-light text-dark'
+  'diamond'  => 'bg-info text-dark',
+  default    => 'bg-light text-dark'
 };
+/* ===== Applications (for inbox) ===== */
 $apps = [];
 try {
-  $q = "SELECT a.application_id, a.status, a.applied_at, a.resume, u.user_id, u.full_name, u.email, u.phone, u.address AS location, u.profile_picture, j.job_id, j.job_title
+  $q = "SELECT a.application_id, a.status, a.applied_at, a.resume,
+               u.user_id, u.full_name, u.email, u.phone, u.address AS location, u.profile_picture,
+               j.job_id, j.job_title
         FROM application a
         JOIN jobs j ON a.job_id=j.job_id
         JOIN users u ON a.user_id=u.user_id
@@ -74,6 +82,7 @@ try {
 } catch (PDOException $e) {
   $apps = [];
 }
+/* ===== Inbox read state (session) ===== */
 $_SESSION['company_app_read'] = $_SESSION['company_app_read'] ?? [];
 $readMap = &$_SESSION['company_app_read'];
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -99,39 +108,68 @@ unset($_SESSION['c_just_marked_all']);
 $badge_count = 0;
 foreach ($apps as $a) if (empty($readMap[(int)$a['application_id']])) $badge_count++;
 $open_inbox = (isset($_GET['inbox']) && $_GET['inbox'] == '1');
+/* ===== Search filters ===== */
 $qtxt = trim($_GET['q'] ?? '');
-$jt = trim($_GET['jt'] ?? '');
+$jt   = trim($_GET['jt'] ?? '');
 $isSearch = (isset($_GET['csearch']) || isset($_GET['q']) || isset($_GET['jt']));
 if ($jt !== '' && !in_array($jt, ['Software', 'Network'], true)) $jt = '';
-$conds = ["j.company_id = ?"];
+$conds  = ["j.company_id = ?"];
 $params = [$company_id];
 if ($qtxt !== '') {
   $conds[] = "j.job_title LIKE ?";
   $params[] = "%{$qtxt}%";
 }
-if ($jt !== '') {
+if ($jt   !== '') {
   $conds[] = "j.job_type = ?";
   $params[] = $jt;
 }
 $whereSql = "WHERE " . implode(" AND ", $conds);
+/* ============================================================
+   Featured Jobs (9-by-default + More Posts / Show Less)
+   ============================================================ */
 $jobs = [];
+/* Collapsed vs All view */
+$show_all = (isset($_GET['all']) && $_GET['all'] === '1');
+/* When collapsed, fetch 10 so we can show 9 and know if "more" exists */
+$limit = $show_all ? 300 : 10;
+/* Helper: build URL that preserves current filters */
+function build_url_with($overrides = [])
+{
+  $qs = $_GET;
+  foreach ($overrides as $k => $v) {
+    if ($v === null) {
+      unset($qs[$k]);
+    } else {
+      $qs[$k] = $v;
+    }
+  }
+  // keep search mode stable for consistency
+  if (!isset($qs['csearch'])) $qs['csearch'] = '1';
+  $qstr = http_build_query($qs);
+  return 'company_home.php' . ($qstr ? ('?' . $qstr) : '');
+}
 try {
-  $sql = "SELECT j.job_id,j.job_title,j.job_description,j.location,j.status,j.posted_at, c.company_name,c.logo
+  $sql = "SELECT j.job_id,j.job_title,j.job_description,j.location,j.status,j.posted_at,
+                 c.company_name,c.logo
           FROM jobs j
           JOIN companies c ON c.company_id=j.company_id
           $whereSql
-          ORDER BY CASE j.status WHEN 'Active' THEN 1 WHEN 'Inactive' THEN 2 WHEN 'Closed' THEN 3 ELSE 4 END, j.posted_at DESC
-          LIMIT 60";
+          ORDER BY CASE j.status WHEN 'Active' THEN 1 WHEN 'Inactive' THEN 2 WHEN 'Closed' THEN 3 ELSE 4 END,
+                   j.posted_at DESC
+          LIMIT $limit";
   $st = $pdo->prepare($sql);
   $st->execute($params);
   $jobs = $st->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
   $jobs = [];
 }
+/* Derived display list and "more" flag */
+$jobsToDisplay = $show_all ? $jobs : array_slice($jobs, 0, 9);
+$hasMore = !$show_all && count($jobs) > 9;
+/* ===== Membership preview modal trigger on login ===== */
 $show_member_after_login = (int)($_SESSION['show_member_after_login'] ?? 0);
 unset($_SESSION['show_member_after_login']);
-
-//feedback
+/* ===== Company Feedback (CSRF + POST) ===== */
 $company_name = $company_logo = $company_member = $company_email = '';
 try {
   $st = $pdo->prepare("SELECT company_name, email, logo, member FROM companies WHERE company_id=? LIMIT 1");
@@ -144,16 +182,12 @@ try {
   }
 } catch (PDOException $e) {
 }
-
-// ===== COMPANY FEEDBACK: CSRF + POST HANDLER (ADD THIS) =====
 if (empty($_SESSION['csrf'])) {
   $_SESSION['csrf'] = bin2hex(random_bytes(16));
 }
 $csrf = $_SESSION['csrf'];
-
 $fb_success = "";
 $fb_error   = "";
-
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'company_feedback') {
   $token = $_POST['csrf'] ?? '';
   if (!hash_equals($_SESSION['csrf'], $token)) {
@@ -163,7 +197,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compa
     $fb_email   = trim($_POST['fb_email'] ?? $company_email);
     $fb_message = trim($_POST['fb_message'] ?? '');
     $hp         = trim($_POST['fb_hp'] ?? ''); // honeypot
-
     if ($hp !== '') {
       $fb_error = "Spam detected.";
     } elseif ($fb_message === '') {
@@ -172,13 +205,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compa
       $fb_error = "Feedback is too long (max 4000 chars).";
     } else {
       try {
-        // NOTE: works with your existing feedback table (id, user_id, name, email, message, submitted_at)
         $stmt = $pdo->prepare("
-  INSERT INTO feedback (user_id, company_id, name, email, message)
-  VALUES (NULL, ?, ?, ?, ?)
-");
+          INSERT INTO feedback (user_id, company_id, name, email, message)
+          VALUES (NULL, ?, ?, ?, ?)
+        ");
         $ok = $stmt->execute([(int)$company_id, $fb_name, $fb_email, $fb_message]);
-
         $fb_success = $ok ? "Thanks! Your feedback was sent." : "Could not save feedback. Please try again.";
       } catch (PDOException $e) {
         $fb_error = "Database error. Please try again later.";
@@ -186,8 +217,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compa
     }
   }
 }
-
-
+/* ===== Company Feedback list (same behaviour as user home) ===== */
+$show_all_feedback = (isset($_GET['allfb']) && $_GET['allfb'] === '1');
+$feedbacks = [];
+try {
+  $sql = "SELECT name, message, submitted_at FROM feedback ORDER BY submitted_at DESC";
+  if (!$show_all_feedback) {
+    $sql .= " LIMIT 5";
+  }
+  $fbst = $pdo->query($sql);
+  $feedbacks = $fbst->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+  $feedbacks = [];
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -201,13 +243,109 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compa
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <style>
     :root {
+      /* Light mode variables */
       --jh-gold: #ffaa2b;
       --jh-gold-2: #ffc107;
-      --jh-dark: #1a202c
+      --jh-dark: #1a202c;
+      --bg-color: #f8fafc;
+      --text-color: #334155;
+      --card-bg: #ffffff;
+      --border-color: rgba(15, 23, 42, 0.06);
+      --header-bg: #ffffff;
+      --footer-bg: var(--jh-dark);
+      --input-bg: #ffffff;
+      --button-bg: var(--jh-gold-2);
+      --button-text: #ffffff;
+      --link-color: var(--jh-gold);
+      --section-bg: #f8fafc;
+      --card-shadow: 0 8px 32px rgba(0, 0, 0, .06);
+      --transition-speed: 0.3s;
+      --bg-tertiary: #f3f4f6;
     }
 
+    /* Dark mode variables */
+    [data-theme="dark"] {
+      --bg-color: #121212;
+      --text-color: #e0e0e0;
+      --card-bg: #1e1e1e;
+      --border-color: rgba(255, 255, 255, 0.1);
+      --header-bg: #1a1a1a;
+      --footer-bg: #0d0d0d;
+      --input-bg: #2d2d2d;
+      --button-bg: var(--jh-gold-2);
+      --button-text: #000000;
+      --link-color: var(--jh-gold);
+      --section-bg: #1a1a1a;
+      --card-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+      --bg-tertiary: #2d2d2d;
+    }
+
+    /* Global transitions */
+    body,
+    .navbar,
+    .card,
+    .footer,
+    .form-control,
+    .form-select,
+    .btn {
+      transition: background-color var(--transition-speed) ease,
+        color var(--transition-speed) ease,
+        border-color var(--transition-speed) ease,
+        box-shadow var(--transition-speed) ease;
+    }
+
+    /* Base styles */
     body {
-      background: #f8fafc
+      background: var(--bg-color);
+      color: var(--text-color);
+    }
+
+    /* Theme Toggle Button - matching about.php */
+    .theme-toggle {
+      background: transparent;
+      border: 1px solid var(--border-color);
+      color: var(--text-color);
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.3s;
+    }
+
+    .theme-toggle:hover {
+      background: var(--bg-tertiary);
+    }
+
+    /* Navbar styling for dark/light mode */
+    .navbar {
+      background-color: var(--header-bg) !important;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    [data-theme="dark"] .navbar {
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    }
+
+    .navbar-brand {
+      color: var(--text-color) !important;
+    }
+
+    .navbar-nav .nav-link {
+      color: var(--text-color) !important;
+    }
+
+    .navbar-toggler {
+      border-color: var(--border-color) !important;
+    }
+
+    .navbar-toggler-icon {
+      background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba%2333, 0.75)' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e") !important;
+    }
+
+    [data-theme="dark"] .navbar-toggler-icon {
+      background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba%23255, 255, 255, 0.75)' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e") !important;
     }
 
     .navbar .avatar {
@@ -235,7 +373,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compa
     .navbar-nav .nav-item:not(.dropdown) .nav-link {
       position: relative;
       padding-bottom: 4px;
-      transition: color .2s
+      transition: color .2s;
+      color: var(--text-color) !important;
     }
 
     .navbar-nav .nav-item:not(.dropdown) .nav-link::after {
@@ -245,7 +384,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compa
       bottom: 0;
       width: 0;
       height: 2px;
-      background-color: #ffaa2b;
+      background-color: var(--jh-gold);
       transition: width .25s
     }
 
@@ -255,16 +394,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compa
 
     .hero-section {
       padding: 56px 0 14px;
-      text-align: center
+      text-align: center;
+      background-color: var(--section-bg);
     }
 
     .search-bar {
       max-width: 920px;
       margin: 14px auto 0;
       padding: 1rem 1.25rem;
-      background: #fff;
+      background: var(--card-bg);
       border-radius: 2rem;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, .06);
+      box-shadow: var(--card-shadow);
       display: flex;
       flex-direction: column;
       gap: .9rem
@@ -282,15 +422,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compa
       min-height: 52px;
       border-radius: .8rem;
       font-size: 1rem;
-      padding: .65rem .9rem
+      padding: .65rem .9rem;
+      background-color: var(--input-bg);
+      color: var(--text-color);
+      border: 1px solid var(--border-color);
+    }
+
+    .search-bar .form-control::placeholder {
+      color: #6c757d !important;
+      opacity: 0.7;
+    }
+
+    [data-theme="dark"] .search-bar .form-control::placeholder {
+      color: #adb5bd !important;
+      opacity: 0.8;
     }
 
     .btn-search {
       min-width: 140px;
       min-height: 48px;
       border-radius: .8rem;
-      background: #ffc107;
-      color: #fff;
+      background: var(--button-bg);
+      color: var(--button-text);
       border: none;
       font-weight: 600;
       font-size: 1rem;
@@ -299,13 +452,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compa
 
     .btn-search:hover {
       background: #ff9800;
-      color: #fff
+      color: var(--button-text)
     }
 
     .popular-btn {
-      border: 1.6px solid #ffc107;
-      color: #ffc107;
-      background: #fff;
+      border: 1.6px solid var(--jh-gold-2);
+      color: var(--jh-gold-2);
+      background: var(--card-bg);
       font-size: .98rem;
       border-radius: .55rem;
       padding: .3rem 1.15rem;
@@ -314,9 +467,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compa
     }
 
     .popular-btn:hover {
-      background: #fff8ec;
-      color: #ff8800;
-      border-color: #ff8800;
+      background: rgba(255, 193, 7, 0.1);
+      color: var(--jh-gold-2);
+      border-color: var(--jh-gold-2);
       text-decoration: none;
     }
 
@@ -333,13 +486,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compa
       width: 50vw;
       max-width: 900px;
       min-width: 360px;
-      background: #fff;
+      background: var(--card-bg);
       box-shadow: -12px 0 28px rgba(0, 0, 0, .08);
       transform: translateX(100%);
       transition: transform .28s;
       display: flex;
       flex-direction: column;
-      z-index: 1080
+      z-index: 1080;
+      color: var(--text-color);
+    }
+
+    [data-theme="dark"] .inbox-panel {
+      box-shadow: -12px 0 28px rgba(0, 0, 0, .3);
     }
 
     .inbox-panel.open {
@@ -348,7 +506,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compa
 
     .inbox-header {
       padding: 14px 18px;
-      border-bottom: 1px solid #eef0f2;
+      border-bottom: 1px solid var(--border-color);
       display: flex;
       align-items: center;
       justify-content: space-between
@@ -381,8 +539,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compa
     }
 
     .app-card {
-      border: 1px solid #e9ecef;
-      border-radius: .75rem
+      border: 1px solid var(--border-color);
+      border-radius: .75rem;
+      background-color: var(--card-bg);
     }
 
     .app-card .card-body {
@@ -394,9 +553,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compa
       border-left: 4px solid #ffc107
     }
 
+    [data-theme="dark"] .app-card.unread {
+      background: rgba(255, 193, 7, 0.1);
+      border-left: 4px solid #ffc107;
+    }
+
     .app-card.read {
-      background: #f8f9fa;
-      border-left: 4px solid #e9ecef
+      background: var(--section-bg);
+      border-left: 4px solid var(--border-color);
     }
 
     .status-badge {
@@ -408,7 +572,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compa
       height: 50px;
       border-radius: 50%;
       object-fit: cover;
-      background: #eee
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
     }
 
     .avatar-initials {
@@ -427,9 +592,87 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compa
       flex: 0 0 50px
     }
 
+    /* Application notification text visibility */
+    .app-info .fw-semibold {
+      color: var(--text-color) !important;
+      font-weight: 600 !important;
+    }
+
+    .app-info .text-muted {
+      color: var(--text-color) !important;
+      opacity: 0.8 !important;
+    }
+
+    .app-info small.text-muted {
+      color: var(--text-color) !important;
+      opacity: 0.75 !important;
+    }
+
+    /* Notification card specific styling */
+    .app-card.unread .fw-semibold {
+      color: #333 !important;
+    }
+
+    [data-theme="dark"] .app-card.unread .fw-semibold {
+      color: #f0f0f0 !important;
+    }
+
+    .app-card.read .fw-semibold {
+      color: #333 !important;
+    }
+
+    [data-theme="dark"] .app-card.read .fw-semibold {
+      color: #e0e0e0 !important;
+    }
+
+    /* Status badge colors */
+    .app-card .status-badge.bg-warning {
+      background-color: #ffc107 !important;
+      color: #212529 !important;
+    }
+
+    .app-card .status-badge.bg-success {
+      background-color: #198754 !important;
+      color: #ffffff !important;
+    }
+
+    .app-card .status-badge.bg-secondary {
+      background-color: #6c757d !important;
+      color: #ffffff !important;
+    }
+
+    /* Application timestamp */
+    .app-card .small.text-muted {
+      color: #6c757d !important;
+    }
+
+    [data-theme="dark"] .app-card .small.text-muted {
+      color: #adb5bd !important;
+    }
+
+    /* Application details text */
+    .app-card .text-muted {
+      color: #6c757d !important;
+    }
+
+    [data-theme="dark"] .app-card .text-muted {
+      color: #adb5bd !important;
+    }
+
+    /* Email and phone links */
+    .app-card .text-muted small a {
+      color: #0d6efd !important;
+    }
+
+    [data-theme="dark"] .app-card .text-muted small a {
+      color: #6ea8fe !important;
+    }
+
     .job-card {
       border: 0;
-      border-radius: 1.25rem
+      border-radius: 1.25rem;
+      background-color: var(--card-bg);
+      box-shadow: var(--card-shadow);
     }
 
     .job-card .logo {
@@ -437,18 +680,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compa
       height: 56px;
       object-fit: cover;
       border-radius: .75rem;
-      background: #fff;
-      border: 1px solid rgba(0, 0, 0, .05)
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+    }
+
+    .job-card h5 {
+      color: var(--text-color) !important;
+    }
+
+    .job-card small {
+      color: var(--text-color) !important;
+      opacity: 0.8;
+    }
+
+    .job-card .text-muted {
+      color: var(--text-color) !important;
+      opacity: 0.7;
     }
 
     .job-badge {
-      font-size: .82rem
+      font-size: .82rem;
+      background-color: var(--card-bg) !important;
+      color: var(--text-color) !important;
+      border: 1px solid var(--border-color) !important;
+    }
+
+    [data-theme="dark"] .job-badge.bg-success {
+      background-color: #198754 !important;
+      color: white !important;
     }
 
     .member-highlight {
       background: linear-gradient(135deg, #e8f7ff, #fff);
       border: 1px solid #bfe7ff;
       border-radius: 1rem
+    }
+
+    [data-theme="dark"] .member-highlight {
+      background: linear-gradient(135deg, #1a1a1a, #2d2d2d);
+      border: 1px solid rgba(191, 231, 255, 0.3);
     }
 
     .modal.fade .modal-dialog {
@@ -458,6 +728,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compa
 
     .modal.show .modal-dialog {
       transform: none
+    }
+
+    [data-theme="dark"] .modal-content {
+      background-color: var(--card-bg);
+      color: var(--text-color);
+      border: 1px solid var(--border-color);
+    }
+
+    [data-theme="dark"] .modal-header,
+    [data-theme="dark"] .modal-footer {
+      border-color: var(--border-color);
+    }
+
+    [data-theme="dark"] .btn-close {
+      filter: invert(1) grayscale(100%) brightness(200%);
     }
 
     .app-actions {
@@ -485,7 +770,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compa
     }
 
     .footer {
-      background: var(--jh-dark);
+      background: var(--footer-bg);
       color: #e9ecef;
       padding: 40px 0 16px;
       flex-shrink: 0;
@@ -530,15 +815,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compa
       color: #cbd5e1
     }
 
-    @media (max-width:992px) {
-      .inbox-panel {
-        width: 100vw
-      }
+    /* Dark mode adjustments */
+    [data-theme="dark"] .text-muted {
+      color: #adb5bd !important;
+    }
+
+    [data-theme="dark"] .alert-danger {
+      background-color: #2d0b0b;
+      border-color: #4a1010;
+      color: #f8d7da;
+    }
+
+    [data-theme="dark"] .bg-light {
+      background-color: #1a1a1a !important;
+    }
+
+    [data-theme="dark"] .text-dark {
+      color: #e0e0e0 !important;
+    }
+
+    [data-theme="dark"] .border {
+      border-color: rgba(255, 255, 255, 0.1) !important;
+    }
+
+    [data-theme="dark"] .list-group-item {
+      background-color: var(--card-bg);
+      color: var(--text-color);
+      border-color: var(--border-color);
+    }
+
+    [data-theme="dark"] .btn-outline-warning {
+      color: #ffc107 !important;
+      border-color: #ffc107 !important;
+    }
+
+    [data-theme="dark"] .btn-outline-warning:hover {
+      background-color: #ffc107 !important;
+      color: #000000 !important;
     }
 
     /* Chatbot Styles */
     #chatbot-messages {
       font-size: 0.9rem;
+      background-color: var(--card-bg);
+      color: var(--text-color);
     }
 
     .chatbot-message {
@@ -550,26 +870,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compa
     }
 
     .chatbot-user {
-      background-color: #ffc107;
-      color: #000;
+      background-color: var(--jh-gold-2);
+      color: var(--button-text);
       margin-left: auto;
       text-align: right;
     }
 
     .chatbot-bot {
-      background-color: #e9ecef;
-      color: #000;
+      background-color: var(--section-bg);
+      color: var(--text-color);
     }
 
     .chatbot-timestamp {
       font-size: 0.7rem;
-      color: #6c757d;
+      color: var(--text-color);
+      opacity: 0.7;
       margin-top: 4px;
+    }
+
+    #chatbot-input {
+      background-color: var(--input-bg);
+      color: var(--text-color);
+      border: 1px solid var(--border-color);
     }
 
     #chatbot-input:focus {
       box-shadow: none;
-      border-color: #ffc107;
+      border-color: var(--jh-gold-2);
     }
 
     /* Chatbot Button Styles */
@@ -584,16 +911,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compa
       font-size: 0.8rem;
       padding: 6px 12px;
       border-radius: 4px;
-      background-color: #ffc107 !important;
-      color: #212529 !important;
-      border: 1px solid #ffc107;
+      background-color: var(--jh-gold-2) !important;
+      color: var(--button-text) !important;
+      border: 1px solid var(--jh-gold-2);
       font-weight: 500;
     }
 
     .chatbot-buttons .btn:hover {
       background-color: #ffca2c !important;
       border-color: #ffc720;
-      color: #000 !important;
+      color: var(--button-text) !important;
     }
 
     /* Chatbot Animations */
@@ -660,6 +987,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compa
 
     #chatbot-window {
       animation: slideIn 0.3s ease-out;
+      background-color: var(--card-bg);
+      border: 1px solid var(--border-color);
     }
 
     .chatbot-message {
@@ -679,7 +1008,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compa
       width: 8px;
       height: 8px;
       border-radius: 50%;
-      background-color: #333;
+      background-color: var(--text-color);
       margin: 0 2px;
       animation: typing 1.4s infinite;
     }
@@ -721,6 +1050,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compa
       z-index: 1000;
       box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
       transition: transform 0.3s ease, box-shadow 0.3s ease;
+      background-color: var(--jh-gold-2);
+      color: var(--button-text);
     }
 
     #chatbot-toggle:hover {
@@ -748,7 +1079,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compa
     #chatbot-toggle .badge {
       animation: badgeBounce 2s infinite;
     }
-
 
     /* Chatbot Continuous Bounce Animation */
     @keyframes continuousBounce {
@@ -847,6 +1177,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compa
       opacity: 0.7;
       z-index: -1;
     }
+
+    @media (max-width:992px) {
+      .inbox-panel {
+        width: 100vw
+      }
+    }
   </style>
 </head>
 
@@ -859,6 +1195,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compa
         <ul class="navbar-nav align-items-lg-center">
           <li class="nav-item"><a class="nav-link" href="company_home.php">Home</a></li>
           <li class="nav-item"><a class="nav-link" href="c_dashboard.php">Dashboard</a></li>
+          <!-- Theme Toggle Button -->
+          <li class="nav-item">
+            <button class="theme-toggle ms-3" id="themeToggle" aria-label="Toggle theme">
+              <i class="bi bi-sun-fill" id="themeIcon"></i>
+            </button>
+          </li>
           <li class="nav-item"><button id="btnMember" class="btn btn-outline-warning ms-2"><i class="bi bi-gem me-1"></i> Membership</button></li>
           <li class="nav-item"><a class="btn btn-warning ms-2 text-white fw-bold" href="post_job.php" style="border-radius:0.6rem;">Post Job</a></li>
           <li class="nav-item ms-2">
@@ -994,9 +1336,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compa
       <h2 class="text-center fw-bold mb-4">Featured Jobs</h2>
       <?php if (empty($jobs)): ?>
         <?= $isSearch ? '<div class="alert alert-danger text-center" role="alert">No jobs match your filters.</div>' : '<div class="alert alert-light border text-center" role="alert">No jobs posted yet.</div>' ?>
-      <?php else: ?>
+        <?php else:
+        if ($hasMore): ?>
+          <div class="text-center mt-4">
+            <a class="btn btn-warning" href="<?= e(build_url_with(['all' => '1'])) ?>">
+              More Posts
+            </a>
+          </div>
+        <?php elseif ($show_all): ?>
+          <div class="text-center mt-4">
+            <a class="btn btn-outline-secondary" href="<?= e(build_url_with(['all' => null])) ?>">
+              Show Less
+            </a>
+          </div>
+        <?php endif; ?>
         <div class="row g-4">
-          <?php foreach ($jobs as $job): ?>
+          <?php foreach ($jobsToDisplay as $job): ?>
             <div class="col-12 col-md-6 col-lg-4">
               <div class="card job-card h-100 shadow-sm">
                 <div class="card-body">
@@ -1021,6 +1376,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compa
               </div>
             </div>
           <?php endforeach; ?>
+        </div>
+      <?php endif; ?>
+    </div>
+  </section>
+  <!-- Recent Feedback Section (same as user home) -->
+  <section id="feedback" class="py-5 bg-light">
+    <div class="container">
+      <h2 class="text-center fw-bold mb-4">Latest Feedback</h2>
+      <?php if (empty($feedbacks)): ?>
+        <div class="alert alert-secondary text-center">No feedback yet.</div>
+      <?php else: ?>
+        <div class="list-group shadow-sm mb-3">
+          <?php foreach ($feedbacks as $fb): ?>
+            <div class="list-group-item">
+              <div class="d-flex w-100 justify-content-between">
+                <h6 class="mb-1 text-warning"><?= e($fb['name']) ?></h6>
+                <small class="text-muted"><?= date('M d, Y H:i', strtotime($fb['submitted_at'])) ?></small>
+              </div>
+              <p class="mb-1"><?= e($fb['message']) ?></p>
+            </div>
+          <?php endforeach; ?>
+        </div>
+        <!-- Buttons: same row, same size -->
+        <div class="d-flex justify-content-center gap-2">
+          <?php if ($show_all_feedback): ?>
+            <a href="company_home.php#feedback" class="btn btn-outline-secondary px-4">Show Less</a>
+          <?php else: ?>
+            <a href="company_home.php?allfb=1#feedback" class="btn btn-outline-warning px-4">More Feedback</a>
+          <?php endif; ?>
+          <!-- Open the existing Company Feedback modal -->
+          <button type="button" class="btn btn-warning px-4" data-bs-toggle="modal" data-bs-target="#companyFeedbackModal">
+            <i class="bi bi-chat-text me-1"></i> Send Feedback
+          </button>
         </div>
       <?php endif; ?>
     </div>
@@ -1054,9 +1442,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compa
             <li class="mb-2"><a href="about.php?return=company_home">About</a></li>
             <li class="mb-2"><a href="privacy.php?return=company_home">Privacy Policy</a></li>
             <li class="mb-2"><a href="terms.php?return=company_home">Terms &amp; Conditions</a></li>
-
-
-
           </ul>
         </div>
         <div class="col-md-3">
@@ -1065,10 +1450,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compa
             <li class="mb-2"><i class="bi bi-geo-alt me-2"></i>Yangon, Myanmar</li>
             <li class="mb-2"><i class="bi bi-envelope me-2"></i><a href="mailto:support@jobhive.mm">support@jobhive.mm</a></li>
             <li class="mb-2"><i class="bi bi-telephone me-2"></i><a href="tel:+95957433847">+95 957 433 847</a></li>
-            <button type="button" class="btn btn-warning btn-sm mt-2" data-bs-toggle="modal" data-bs-target="#companyFeedbackModal">
-              <i class="bi bi-chat-text me-1"></i> Send Feedback
             </button>
-
           </ul>
         </div>
       </div>
@@ -1120,14 +1502,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compa
       </div>
     </div>
   </div>
-
   <!-- Chatbot UI -->
   <div id="chatbot-container" class="position-fixed bottom-0 end-0 p-3" style="z-index: 1050; width: 350px; max-width: 90vw;">
     <!-- Chat Button -->
     <button id="chatbot-toggle" class="btn btn-warning rounded-circle shadow" style="width: 60px; height: 60px; position: fixed; bottom: 20px; right: 20px;">
       <i class="bi bi-chat-dots-fill fs-4"></i>
     </button>
-
     <!-- Chat Window -->
     <div id="chatbot-window" class="card shadow-lg border-0 d-none" style="position: fixed; bottom: 90px; right: 20px; width: 350px; max-width: 90vw;">
       <div class="card-header bg-warning text-white d-flex justify-content-between align-items-center">
@@ -1152,7 +1532,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compa
       </div>
     </div>
   </div>
-
   <!-- Company Feedback Modal -->
   <div class="modal fade" id="companyFeedbackModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog">
@@ -1161,7 +1540,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compa
         <input type="hidden" name="csrf" value="<?= e($csrf) ?>">
         <!-- Honeypot -->
         <input type="text" name="fb_hp" value="" style="display:none !important" tabindex="-1" autocomplete="off">
-
         <div class="modal-header">
           <h5 class="modal-title">
             <i class="bi bi-chat-left-quote me-2 text-warning"></i>
@@ -1169,7 +1547,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compa
           </h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
-
         <div class="modal-body">
           <?php if (!empty($fb_success)): ?>
             <div class="alert alert-success py-2 mb-3"><?= e($fb_success) ?></div>
@@ -1178,23 +1555,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compa
           <?php else: ?>
             <p class="text-muted small">Tell us what we can improve for employers. We read every message.</p>
           <?php endif; ?>
-
           <div class="mb-3">
             <label class="form-label">Company</label>
             <input type="text" class="form-control" name="fb_name" value="<?= e($company_name) ?>" required>
           </div>
-
           <div class="mb-3">
             <label class="form-label">Email</label>
             <input type="email" class="form-control" name="fb_email" value="<?= e($company_email) ?>" required>
           </div>
-
           <div class="mb-3">
             <label class="form-label">Message</label>
             <textarea class="form-control" name="fb_message" rows="5" placeholder="Your feedback..." required></textarea>
           </div>
         </div>
-
         <div class="modal-footer">
           <button type="submit" class="btn btn-warning">
             <i class="bi bi-send me-1"></i> Submit
@@ -1204,9 +1577,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compa
       </form>
     </div>
   </div>
+  <script>
+    // Theme toggle functionality - matching about.php
+    const themeToggle = document.getElementById('themeToggle');
+    const themeIcon = document.getElementById('themeIcon');
+    const html = document.documentElement;
+    // Check for saved theme preference or default to light
+    const currentTheme = localStorage.getItem('theme') || 'light';
+    html.setAttribute('data-theme', currentTheme);
+    updateThemeIcon(currentTheme);
+    themeToggle.addEventListener('click', () => {
+      const theme = html.getAttribute('data-theme');
+      const newTheme = theme === 'dark' ? 'light' : 'dark';
+      html.setAttribute('data-theme', newTheme);
+      localStorage.setItem('theme', newTheme);
+      updateThemeIcon(newTheme);
+    });
 
-
-
+    function updateThemeIcon(theme) {
+      if (theme === 'dark') {
+        themeIcon.classList.remove('bi-sun-fill');
+        themeIcon.classList.add('bi-moon-fill');
+      } else {
+        themeIcon.classList.remove('bi-moon-fill');
+        themeIcon.classList.add('bi-sun-fill');
+      }
+    }
+  </script>
   <script>
     const panel = document.getElementById('inboxPanel');
     const backdrop = document.getElementById('backdrop');
@@ -1352,8 +1749,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compa
       });
     })();
   </script>
-
-
   <script>
     // Chatbot functionality
     document.addEventListener('DOMContentLoaded', function() {
@@ -1363,7 +1758,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compa
       const chatbotForm = document.getElementById('chatbot-form');
       const chatbotInput = document.getElementById('chatbot-input');
       const chatbotMessages = document.getElementById('chatbot-messages');
-
       // Toggle chat window and control animation
       chatbotToggle.addEventListener('click', function() {
         const isOpen = !chatbotWindow.classList.contains('d-none');
@@ -1386,19 +1780,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compa
           chatbotInput.focus();
         }
       });
-
       // Close chat window and resume animation
       chatbotClose.addEventListener('click', function() {
         chatbotWindow.classList.add('d-none');
         chatbotToggle.classList.remove('paused');
       });
-
       // Function to show typing indicator
       function showTypingIndicator() {
         const typingDiv = document.createElement('div');
         typingDiv.className = 'chatbot-message chatbot-bot';
         typingDiv.id = 'typing-indicator';
-
         const typingContent = document.createElement('div');
         typingContent.className = 'd-flex align-items-center';
         typingContent.innerHTML = `
@@ -1407,36 +1798,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compa
           <span class="chatbot-typing"></span>
           <span class="chatbot-typing"></span>
         `;
-
         typingDiv.appendChild(typingContent);
         chatbotMessages.appendChild(typingDiv);
         chatbotMessages.scrollTop = chatbotMessages.scrollHeight;
-
         return typingDiv;
       }
-
       // Function to add message to chat
       function addMessage(message, sender, buttons, image) {
         const messageDiv = document.createElement('div');
         messageDiv.className = `chatbot-message chatbot-${sender}`;
-
         const now = new Date();
         const timeString = now.toLocaleTimeString([], {
           hour: '2-digit',
           minute: '2-digit'
         });
-
         // Create message content
         const messageContent = document.createElement('div');
         messageContent.innerHTML = message;
-
         messageDiv.appendChild(messageContent);
-
         // Add image if it exists
         if (image && sender === 'bot') {
           const imageContainer = document.createElement('div');
           imageContainer.className = 'mt-2 mb-2 text-center';
-
           const imageElement = document.createElement('img');
           imageElement.src = image;
           imageElement.className = 'img-fluid rounded';
@@ -1444,16 +1827,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compa
           imageElement.style.height = 'auto';
           imageElement.style.maxHeight = '200px';
           imageElement.alt = 'Preview';
-
           imageContainer.appendChild(imageElement);
           messageDiv.appendChild(imageContainer);
         }
-
         // Add buttons if they exist
         if (buttons && Array.isArray(buttons) && buttons.length > 0) {
           const buttonsContainer = document.createElement('div');
           buttonsContainer.className = 'chatbot-buttons mt-2';
-
           buttons.forEach(button => {
             const buttonElement = document.createElement('button');
             buttonElement.className = 'btn btn-warning btn-sm';
@@ -1463,42 +1843,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compa
             };
             buttonsContainer.appendChild(buttonElement);
           });
-
           messageDiv.appendChild(buttonsContainer);
         }
-
         // Add timestamp
         const timestamp = document.createElement('div');
         timestamp.className = 'chatbot-timestamp';
         timestamp.textContent = timeString;
         messageDiv.appendChild(timestamp);
-
         chatbotMessages.appendChild(messageDiv);
         chatbotMessages.scrollTop = chatbotMessages.scrollHeight;
-
         // Add animation for new messages
         messageDiv.style.animation = 'none';
         setTimeout(() => {
           messageDiv.style.animation = `${sender === 'user' ? 'bounce' : 'fadeIn'} 0.5s ease-out`;
         }, 10);
       }
-
       // Handle form submission
       chatbotForm.addEventListener('submit', function(e) {
         e.preventDefault();
-
         const message = chatbotInput.value.trim();
         if (message === '') return;
-
         // Add user message to chat
         addMessage(message, 'user');
-
         // Clear input
         chatbotInput.value = '';
-
         // Show typing indicator
         const typingIndicator = showTypingIndicator();
-
         // Send to server and get response
         fetch('company_chatbot.php', {
             method: 'POST',
@@ -1513,7 +1883,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compa
             if (typingIndicator) {
               typingIndicator.remove();
             }
-
             if (data.response) {
               addMessage(data.response, 'bot', data.buttons, data.image);
             }
@@ -1527,11 +1896,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'compa
             addMessage("Sorry, I'm having trouble responding right now. Please try again later.", 'bot');
           });
       });
-
-
     });
-
-
     // Show feedback modal if there's a message
     (function() {
       const hasFbMsg = <?= (!empty($fb_success) || !empty($fb_error)) ? 'true' : 'false' ?>;

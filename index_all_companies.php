@@ -2,16 +2,13 @@
 // index_all_companies.php
 require_once "connect.php";
 if (session_status() === PHP_SESSION_NONE) session_start();
-
 /* ===== Public page: ignore login state in navbar ===== */
 $user_name = trim($_SESSION['full_name'] ?? ''); // not used in navbar here
-
 /* ===== Helpers ===== */
 function e($v)
 {
     return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
 }
-
 function initials_from_name($name): string
 {
     $name = trim((string)$name);
@@ -24,8 +21,7 @@ function initials_from_name($name): string
     }
     return $ini ?: 'C';
 }
-
-function svg_initials_avatar(string $text, int $size = 40): string
+function svg_initials_avatar(string $text, int $size = 48): string
 {
     $ini = initials_from_name($text);
     $bg  = "#f4f4f5";
@@ -41,7 +37,6 @@ function svg_initials_avatar(string $text, int $size = 40): string
 SVG;
     return 'data:image/svg+xml;base64,' . base64_encode($svg);
 }
-
 function company_logo_src(?string $filename, string $company_name, string $dir = "company_logos"): string
 {
     $file = trim((string)$filename);
@@ -49,11 +44,13 @@ function company_logo_src(?string $filename, string $company_name, string $dir =
         $safe = basename($file);
         $web  = rtrim($dir, '/') . '/' . $safe;
         $fs   = __DIR__ . '/' . $web;
-        if (is_readable($fs)) return $web;
+        if (is_readable($fs)) {
+            $ver = @filemtime($fs) ?: time();
+            return $web . '?v=' . $ver;
+        }
     }
     return svg_initials_avatar($company_name, 48);
 }
-
 /* ===== Query companies ===== */
 $stmt = $pdo->query("
   SELECT company_id, company_name, email, phone, address, logo
@@ -70,59 +67,111 @@ $companies = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
     <title>All Companies | JobHive</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
     <style>
+        :root {
+            --bg-primary: #f8f9fa;
+            --bg-secondary: #ffffff;
+            --bg-tertiary: #f3f4f6;
+            --text-primary: #22223b;
+            --text-secondary: #495057;
+            --text-muted: #6c757d;
+            --text-white: #ffffff;
+            --border-color: #dee2e6;
+            --navbar-bg: #ffffff;
+            --navbar-text: #22223b;
+            --navbar-border: #dee2e6;
+            --table-header-bg: #22223b;
+            --table-header-text: #ffaa2b;
+            --table-row-bg: #ffffff;
+            --table-row-text: #22223b;
+            --table-row-hover: #f8f9fa;
+            --btn-primary-bg: #ffaa2b;
+            --btn-primary-text: #22223b;
+            --btn-primary-hover: #e6991f;
+            --card-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+        }
+
+        [data-theme="dark"] {
+            --bg-primary: #121212;
+            --bg-secondary: #1e1e1e;
+            --bg-tertiary: #2d2d2d;
+            --text-primary: #e9ecef;
+            --text-secondary: #adb5bd;
+            --text-muted: #6c757d;
+            --text-white: #ffffff;
+            --border-color: #343a40;
+            --navbar-bg: #1e1e1e;
+            --navbar-text: #e9ecef;
+            --navbar-border: #343a40;
+            --table-header-bg: #22223b;
+            --table-header-text: #ffaa2b;
+            --table-row-bg: #1e1e1e;
+            --table-row-text: #e9ecef;
+            --table-row-hover: #2d2d2d;
+            --btn-primary-bg: #ffaa2b;
+            --btn-primary-text: #22223b;
+            --btn-primary-hover: #e6991f;
+            --card-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.3);
+        }
+
         body {
-            background-color: #f8f9fa;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
             font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-            color: #22223b;
+            transition: background-color 0.3s, color 0.3s;
         }
 
         h1 {
-            color: #22223b;
+            color: var(--text-primary);
         }
 
-        .logo-cell img {
-            width: 48px;
-            height: 48px;
-            border-radius: 8px;
-            object-fit: cover;
+        .navbar {
+            background-color: var(--navbar-bg) !important;
+            border-bottom: 1px solid var(--navbar-border);
+            transition: background-color 0.3s, border-color 0.3s;
         }
 
         .navbar-brand {
-            font-weight: 700;
-            color: #ffaa2b !important;
+            font-weight: bold;
+            color: var(--btn-primary-bg) !important;
         }
 
-        .nav-link.active {
-            font-weight: 700;
-            color: #ffaa2b !important;
-        }
-
-        /* Navbar link underline on hover */
-        .navbar-nav .nav-link {
-            position: relative;
-            padding-bottom: 4px;
-            /* space for underline */
+        .nav-link {
+            color: var(--navbar-text) !important;
             transition: color 0.2s ease-in-out;
         }
 
-        .navbar-nav .nav-link::after {
+        .nav-link.active {
+            font-weight: bold;
+            color: var(--btn-primary-bg) !important;
+        }
+
+        .navbar-nav .nav-item .nav-link {
+            position: relative;
+            padding-bottom: 4px;
+        }
+
+        .navbar-nav .nav-item .nav-link::after {
             content: "";
             position: absolute;
             left: 0;
             bottom: 0;
             width: 0%;
             height: 2px;
-            background-color: #ffaa2b;
+            background-color: var(--btn-primary-bg);
             transition: width 0.25s ease-in-out;
         }
 
-        .navbar-nav .nav-link:hover::after {
+        .navbar-nav .nav-item .nav-link:hover::after {
             width: 100%;
         }
 
         .card {
-            background-color: #ffffff;
+            background-color: var(--bg-secondary);
+            border: none;
+            box-shadow: var(--card-shadow);
+            transition: background-color 0.3s, box-shadow 0.3s;
         }
 
         .company-table {
@@ -131,9 +180,9 @@ $companies = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
         }
 
         .company-table th {
-            background-color: #ffaa2b;
-            color: #22223b;
-            border: 1px solid #ffaa2b;
+            background-color: var(--table-header-bg);
+            color: var(--table-header-text);
+            border: 1px solid var(--table-header-bg);
             font-weight: 700;
             font-size: 15px;
             text-align: left;
@@ -141,18 +190,22 @@ $companies = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
         }
 
         .company-table td {
-            background-color: #ffffff;
-            color: #22223b;
-            border: 1px solid #ffaa2b;
-            font-weight: 600;
+            background-color: var(--table-row-bg);
+            color: var(--table-row-text);
+            border: 1px solid var(--border-color);
+            font-weight: 700;
             font-size: 14px;
             padding: 10px;
             vertical-align: middle;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        .company-table tbody tr:hover td {
+            background-color: var(--table-row-hover);
         }
 
         .company-table a {
-            color: #22223b;
-            font-weight: 700;
+            color: var(--text-primary);
             text-decoration: none;
         }
 
@@ -160,30 +213,71 @@ $companies = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
             text-decoration: underline;
         }
 
+        .logo-cell img {
+            width: 48px;
+            height: 48px;
+            border-radius: 8px;
+            object-fit: cover;
+            background: var(--bg-secondary);
+        }
+
         .btn-warning {
-            background-color: #ffaa2b;
+            background-color: var(--btn-primary-bg);
             border: none;
-            color: #22223b;
-            font-weight: 700;
+            color: var(--btn-primary-text);
+            font-weight: 600;
             font-size: 13px;
+            transition: background-color 0.3s, color 0.3s;
         }
 
         .btn-warning:hover {
-            background-color: #e6991f;
-            color: #fff;
+            background-color: var(--btn-primary-hover);
+            color: var(--text-white);
         }
 
-        .action-cell {
+        .company-table td.action-cell {
             text-align: center;
             vertical-align: middle;
+        }
+
+        .theme-toggle {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+        }
+
+        .theme-toggle:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .text-muted {
+            color: var(--text-muted) !important;
+        }
+
+        .navbar-toggler {
+            border-color: var(--text-primary);
+        }
+
+        .navbar-toggler-icon {
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba%2834, 34, 59, 0.75%29' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e");
+        }
+
+        [data-theme="dark"] .navbar-toggler-icon {
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba%28233, 236, 239, 0.75%29' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e");
         }
     </style>
 </head>
 
 <body>
-
     <!-- ===== NAVBAR (always public on this page) ===== -->
-    <nav class="navbar navbar-expand-lg bg-white shadow-sm sticky-top">
+    <nav class="navbar navbar-expand-lg navbar-white shadow-sm sticky-top">
         <div class="container">
             <a class="navbar-brand" href="index.php">JobHive</a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav">
@@ -196,11 +290,16 @@ $companies = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
                     <li class="nav-item"><a class="nav-link" href="login.php">Login</a></li>
                     <li class="nav-item"><a class="nav-link" href="sign_up.php">Register</a></li>
                     <li class="nav-item"><a class="nav-link" href="c_sign_up.php">Company Register</a></li>
+                    <!-- Theme Toggle Button -->
+                    <li class="nav-item">
+                        <button class="theme-toggle ms-3" id="themeToggle" aria-label="Toggle theme">
+                            <i class="bi bi-sun-fill" id="themeIcon"></i>
+                        </button>
+                    </li>
                 </ul>
             </div>
         </div>
     </nav>
-
     <!-- ===== PAGE CONTENT ===== -->
     <div class="container py-4">
         <h1 class="h4 mb-3">All Companies</h1>
@@ -247,8 +346,34 @@ $companies = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
             </div>
         </div>
     </div>
-
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Theme toggle functionality
+        const themeToggle = document.getElementById('themeToggle');
+        const themeIcon = document.getElementById('themeIcon');
+        const html = document.documentElement;
+        // Check for saved theme preference or default to light
+        const currentTheme = localStorage.getItem('theme') || 'light';
+        html.setAttribute('data-theme', currentTheme);
+        updateThemeIcon(currentTheme);
+        themeToggle.addEventListener('click', () => {
+            const theme = html.getAttribute('data-theme');
+            const newTheme = theme === 'dark' ? 'light' : 'dark';
+            html.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            updateThemeIcon(newTheme);
+        });
+
+        function updateThemeIcon(theme) {
+            if (theme === 'dark') {
+                themeIcon.classList.remove('bi-sun-fill');
+                themeIcon.classList.add('bi-moon-fill');
+            } else {
+                themeIcon.classList.remove('bi-moon-fill');
+                themeIcon.classList.add('bi-sun-fill');
+            }
+        }
+    </script>
 </body>
 
 </html>
