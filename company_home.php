@@ -329,7 +329,8 @@ try {
     }
 
     .navbar-brand {
-      color: var(--text-color) !important;
+      color: var(--jh-gold) !important;
+      font-weight: 700;
     }
 
     .navbar-nav .nav-link {
@@ -1196,10 +1197,7 @@ try {
           <li class="nav-item"><a class="nav-link" href="company_home.php">Home</a></li>
           <li class="nav-item"><a class="nav-link" href="c_dashboard.php">Dashboard</a></li>
           <!-- Theme Toggle Button -->
-          <li class="nav-item">
-            <button class="theme-toggle ms-3" id="themeToggle" aria-label="Toggle theme">
-              <i class="bi bi-sun-fill" id="themeIcon"></i>
-            </button>
+
           </li>
           <li class="nav-item"><button id="btnMember" class="btn btn-outline-warning ms-2"><i class="bi bi-gem me-1"></i> Membership</button></li>
           <li class="nav-item"><a class="btn btn-warning ms-2 text-white fw-bold" href="post_job.php" style="border-radius:0.6rem;">Post Job</a></li>
@@ -1236,6 +1234,11 @@ try {
               <li><a class="dropdown-item text-danger" href="logout.php">Logout</a></li>
             </ul>
           </li>
+
+          <li class="nav-item">
+            <button class="theme-toggle ms-3" id="themeToggle" aria-label="Toggle theme">
+              <i class="bi bi-sun-fill" id="themeIcon"></i>
+            </button>
         </ul>
       </div>
     </div>

@@ -669,12 +669,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'feedb
           <li class="nav-item"><a class="nav-link active" aria-current="page" href="user_home.php">Home</a></li>
           <li class="nav-item"><a class="nav-link" href="user_dashboard.php">Dashboard</a></li>
           <li class="nav-item"><a class="nav-link" href="all_companies.php">All Companies</a></li>
-          <!-- Theme Toggle Button -->
-          <li class="nav-item">
-            <button class="theme-toggle ms-3" id="themeToggle" aria-label="Toggle theme">
-              <i class="bi bi-sun-fill" id="themeIcon"></i>
-            </button>
-          </li>
+
           <!-- Envelope -->
           <li class="nav-item ms-lg-2">
             <button id="btnInbox" class="btn btn-outline-secondary position-relative <?= $should_shake ? 'btn-bell-shake' : '' ?>" type="button" title="Notifications">
@@ -715,6 +710,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'feedb
               </li>
               <li><a class="dropdown-item text-danger" href="logout.php">Logout</a></li>
             </ul>
+          </li>
+
+          <!-- Theme Toggle Button -->
+          <li class="nav-item">
+            <button class="theme-toggle ms-3" id="themeToggle" aria-label="Toggle theme">
+              <i class="bi bi-sun-fill" id="themeIcon"></i>
+            </button>
           </li>
         </ul>
       </div>

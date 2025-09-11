@@ -296,7 +296,7 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
             z-index: 21;
             background-color: var(--apply-box-bg);
             color: var(--apply-box-text);
-            border: 1px solid var(--apply-box-border);
+            border: none;
             transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
         }
 
@@ -850,6 +850,84 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
 
         [data-theme="dark"] .card .text-muted {
             color: var(--text-muted) !important;
+        }
+
+        /* Dark mode fixes for resume templates */
+        [data-theme="dark"] .resume-content .t1 .side .fw-semibold,
+        [data-theme="dark"] .resume-content .t1 .side .muted {
+            color: #000000 !important;
+        }
+
+        /* Dark mode fixes for resume templates */
+        [data-theme="dark"] .resume-content .t1 .side .fw-semibold,
+        [data-theme="dark"] .resume-content .t1 .side .muted {
+            color: #000000 !important;
+        }
+
+        /* Make Category and Position labels match section titles in Template 1 */
+        [data-theme="dark"] .resume-content .t1 .side .section:nth-child(3) small {
+            color: var(--accent) !important;
+            font-weight: 800 !important;
+            letter-spacing: .4px !important;
+        }
+
+        /* Specific fix for Template 1 Company and Position */
+        [data-theme="dark"] .resume-content .t1 .main .section:nth-child(2) .fw-semibold,
+        [data-theme="dark"] .resume-content .t1 .main .section:nth-child(2) .muted,
+        [data-theme="dark"] .resume-content .t1 .main .section:nth-child(2) div[contenteditable="true"] {
+            color: #000000 !important;
+        }
+
+        /* Template 2 fixes - make all titles consistent */
+        [data-theme="dark"] .resume-content .t2 .body .section .fw-semibold {
+            color: #000000 !important;
+        }
+
+        [data-theme="dark"] .resume-content .t2 .body .section:first-child .muted {
+            color: #000000 !important;
+        }
+
+        [data-theme="dark"] .resume-content .t2 .head .badge-role,
+        [data-theme="dark"] .resume-content .t2 .body .section:last-child div[contenteditable="true"] {
+            color: #000000 !important;
+        }
+
+        /* Template 3 fixes */
+        [data-theme="dark"] .resume-content .t3 .right .section:first-child .display-6,
+        [data-theme="dark"] .resume-content .t3 .right .section:nth-child(2) .fw-semibold,
+        [data-theme="dark"] .resume-content .t3 .right .section:nth-child(3) .fw-semibold {
+            color: var(--accent) !important;
+        }
+
+        /* Add gold underline hover effect for navigation links */
+        .navbar-nav .nav-link {
+            position: relative;
+            transition: color 0.3s ease;
+        }
+
+        .navbar-nav .nav-link::after {
+            content: '';
+            position: absolute;
+            width: 0;
+            height: 2px;
+            bottom: -2px;
+            left: 0;
+            background-color: var(--btn-primary-bg);
+            /* Gold color */
+            transition: width 0.3s ease;
+        }
+
+        .navbar-nav .nav-link:hover::after {
+            width: 100%;
+        }
+
+        /* Dark mode navigation link styles */
+        [data-theme="dark"] .navbar-nav .nav-link {
+            color: #ffffff !important;
+        }
+
+        [data-theme="dark"] .navbar-nav .nav-link:hover {
+            color: #ffffff !important;
         }
     </style>
 </head>
