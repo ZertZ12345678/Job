@@ -446,7 +446,6 @@ if ($pp > 85) $barClass = 'bg-success';
                     <div class="card-header bg-white py-3">
                         <div class="d-flex align-items-center justify-content-between">
                             <h6 class="mb-0">Recent Applications</h6>
-                            <a href="applications.php" class="btn btn-sm btn-outline-secondary">View all</a>
                         </div>
                     </div>
                     <div class="card-body p-0">

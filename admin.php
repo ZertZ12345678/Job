@@ -629,7 +629,7 @@ $fb_companies_count = isset($fb_companies) ? count($fb_companies) : 0;
     <nav class="nav flex-column">
       <a id="dashboardLink" class="nav-link" onclick="showSection('dashboardSection', this)">Dashboard</a>
       <a id="companiesLink" class="nav-link" onclick="showSection('companiesSection', this)">Companies</a>
-      <a id="seekersLink" class="nav-link" onclick="showSection('seekersSection', this)">Seekers</a>
+      <a id="seekersLink" class="nav-link" onclick="showSection('seekersSection', this)">Job Seekers</a>
       <a id="jobsLink" class="nav-link" onclick="showSection('jobsSection', this)">Jobs</a>
       <a id="appliedLink" class="nav-link" onclick="showSection('appliedSection', this)">Applied Jobs</a>
       <a id="adminsLink" class="nav-link" onclick="showSection('adminsSection', this)">Add Admin Role</a>
