@@ -126,6 +126,7 @@ $barClass = $pp > 85 ? 'bg-success' : ($pp > 60 ? 'bg-info' : ($pp > 30 ? 'bg-wa
 ?>
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -154,6 +155,7 @@ $barClass = $pp > 85 ? 'bg-success' : ($pp > 60 ? 'bg-info' : ($pp > 30 ? 'bg-wa
             --table-header-bg: #ffffffff;
             --table-header-text: #000000ff;
         }
+
         [data-theme="dark"] {
             --bg-primary: #121212;
             --bg-secondary: #1e1e1e;
@@ -173,12 +175,26 @@ $barClass = $pp > 85 ? 'bg-success' : ($pp > 60 ? 'bg-info' : ($pp > 30 ? 'bg-wa
             --avatar-shadow: 0 2px 6px rgba(0, 0, 0, .3);
             --table-header-bg: #000000;
             --table-header-text: #ffffff;
+
+            /* === FIX: KPI numbers & profile % white === */
+            .kpi-card .h1,
+            .kpi-card .h2,
+            .kpi-card .h3,
+            .kpi-card .h4 {
+                color: #ffffff !important;
+            }
+
+            .kpi-card .small.fw-semibold {
+                color: #ffffff !important;
+            }
         }
+
         body {
             background: var(--bg-primary);
             color: var(--text-primary);
             transition: background-color 0.3s, color 0.3s;
         }
+
         .sidebar {
             position: fixed;
             top: 0;
@@ -193,6 +209,7 @@ $barClass = $pp > 85 ? 'bg-success' : ($pp > 60 ? 'bg-info' : ($pp > 30 ? 'bg-wa
             flex-direction: column;
             transition: background-color 0.3s;
         }
+
         .brand {
             font-weight: 700;
             color: #ffc107;
@@ -201,6 +218,7 @@ $barClass = $pp > 85 ? 'bg-success' : ($pp > 60 ? 'bg-info' : ($pp > 30 ? 'bg-wa
             display: inline-block;
             margin-bottom: 10px;
         }
+
         .sidebar .nav-link {
             color: var(--sidebar-text);
             border-radius: .6rem;
@@ -208,19 +226,23 @@ $barClass = $pp > 85 ? 'bg-success' : ($pp > 60 ? 'bg-info' : ($pp > 30 ? 'bg-wa
             font-weight: 500;
             transition: background-color 0.3s;
         }
+
         .sidebar .nav-link:hover {
             background: var(--sidebar-hover);
             color: var(--sidebar-text);
         }
+
         .sidebar .nav-link.active {
             background: var(--sidebar-active);
             color: var(--sidebar-active-text);
         }
+
         .content-wrapper {
             margin-left: 260px;
             min-height: 100vh;
             transition: margin-left 0.3s;
         }
+
         .topbar {
             position: sticky;
             top: 0;
@@ -229,6 +251,7 @@ $barClass = $pp > 85 ? 'bg-success' : ($pp > 60 ? 'bg-info' : ($pp > 30 ? 'bg-wa
             border-bottom: 1px solid var(--border-color);
             transition: background-color 0.3s, border-color 0.3s;
         }
+
         .kpi-card {
             border: none;
             border-radius: 1rem;
@@ -236,17 +259,21 @@ $barClass = $pp > 85 ? 'bg-success' : ($pp > 60 ? 'bg-info' : ($pp > 30 ? 'bg-wa
             background: var(--bg-secondary);
             transition: background-color 0.3s, box-shadow 0.3s;
         }
+
         .kpi-card .text-muted.small {
             color: var(--text-white) !important;
         }
+
         .table thead th {
             background: var(--table-header-bg);
             color: var(--table-header-text);
             transition: background-color 0.3s, color 0.3s;
         }
+
         .table {
             color: var(--text-primary);
         }
+
         .avatar {
             width: 38px;
             height: 38px;
@@ -256,28 +283,34 @@ $barClass = $pp > 85 ? 'bg-success' : ($pp > 60 ? 'bg-info' : ($pp > 30 ? 'bg-wa
             box-shadow: var(--avatar-shadow);
             transition: border-color 0.3s, box-shadow 0.3s;
         }
+
         .text-muted {
             color: var(--text-muted) !important;
         }
+
         .card {
             background: var(--bg-secondary);
             border: none;
             transition: background-color 0.3s;
         }
+
         .card-header {
             background: var(--bg-secondary);
             border-bottom: 1px solid var(--border-color);
             transition: background-color 0.3s, border-color 0.3s;
         }
+
         .btn-outline-secondary {
             color: var(--text-secondary);
             border-color: var(--border-color);
             transition: color 0.3s, border-color 0.3s;
         }
+
         .btn-outline-secondary:hover {
             color: var(--text-primary);
             background-color: var(--bg-tertiary);
         }
+
         .theme-toggle {
             background: transparent;
             border: 1px solid var(--border-color);
@@ -290,23 +323,28 @@ $barClass = $pp > 85 ? 'bg-success' : ($pp > 60 ? 'bg-info' : ($pp > 30 ? 'bg-wa
             justify-content: center;
             transition: all 0.3s;
         }
+
         .theme-toggle:hover {
             background: var(--bg-tertiary);
         }
+
         @media (max-width:991.98px) {
             .sidebar {
                 transform: translateX(-100%);
                 transition: transform .2s ease;
             }
+
             .sidebar.show {
                 transform: translateX(0);
             }
+
             .content-wrapper {
                 margin-left: 0;
             }
         }
     </style>
 </head>
+
 <body>
     <!-- Sidebar -->
     <aside id="sidebar" class="sidebar">
@@ -537,6 +575,7 @@ $barClass = $pp > 85 ? 'bg-success' : ($pp > 60 ? 'bg-info' : ($pp > 30 ? 'bg-wa
             localStorage.setItem('theme', newTheme);
             updateThemeIcon(newTheme);
         });
+
         function updateThemeIcon(theme) {
             if (theme === 'dark') {
                 themeIcon.classList.remove('bi-sun-fill');
@@ -565,4 +604,5 @@ $barClass = $pp > 85 ? 'bg-success' : ($pp > 60 ? 'bg-info' : ($pp > 30 ? 'bg-wa
         });
     </script>
 </body>
+
 </html>
