@@ -252,7 +252,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
 <body>
   <div class="signup-container">
-    <h1 class="form-title">Create your JobHive account</h1>
+    <h1 class="form-title">Create Your JobHive Account</h1>
 
     <?php
     if ($message) {

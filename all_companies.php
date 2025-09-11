@@ -380,11 +380,7 @@ if ($isUser) {
                     <li class="nav-item"><a class="nav-link active" href="all_companies.php">All Companies</a></li>
 
                     <!-- Theme Toggle Button -->
-                    <li class="nav-item">
-                        <button class="theme-toggle me-3" id="themeToggle" aria-label="Toggle theme">
-                            <i class="bi bi-sun-fill" id="themeIcon"></i>
-                        </button>
-                    </li>
+
 
                     <!-- Right profile (user or company) -->
                     <li class="nav-item dropdown d-flex align-items-center nav-profile">
@@ -400,6 +396,12 @@ if ($isUser) {
                             <?php endif; ?>
                             <li><a class="dropdown-item" href="logout.php">Logout</a></li>
                         </ul>
+                    </li>
+
+                    <li class="nav-item">
+                        <button class="theme-toggle me-3" id="themeToggle" aria-label="Toggle theme">
+                            <i class="bi bi-sun-fill" id="themeIcon"></i>
+                        </button>
                     </li>
                 </ul>
             </div>

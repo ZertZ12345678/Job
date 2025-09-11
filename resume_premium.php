@@ -1195,11 +1195,6 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
     </main>
     <footer class="mt-5 py-4">
         <div class="container d-flex flex-column align-items-center">
-            <div class="mb-2">
-                <a href="#" class="text-white text-decoration-none me-3">About</a>
-                <a href="#" class="text-white text-decoration-none me-3">Contact</a>
-                <a href="#" class="text-white text-decoration-none">Privacy Policy</a>
-            </div>
             <small>&copy; 2025 JobHive. All rights reserved.</small>
         </div>
     </footer>

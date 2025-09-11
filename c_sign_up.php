@@ -311,7 +311,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
 <body>
   <div class="signup-container">
-    <h1 class="form-title">Create your Company account</h1>
+    <h1 class="form-title">Create Your Company Account</h1>
 
     <?php if (!empty($message)) echo $message; ?>
 
@@ -349,7 +349,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
               value="<?php echo htmlspecialchars($_POST['phone'] ?? ''); ?>"
               oninput="this.value=this.value.replace(/[^0-9]/g,'');"
               title="Digits only, 7–15 characters">
-            <div class="form-hint">Digits only, 7–15 characters (e.g., 0912345678)</div>
+            <div class="form-hint">Digits only, 7–15 (e.g., 0912345678)</div>
           </div>
         </div>
         <div class="col-md-6">

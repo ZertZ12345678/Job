@@ -343,7 +343,7 @@ $avatarSrc = $hasPhoto ? ('profile_pics/' . e($user['profile_picture'])) : svg_a
         }
 
         .navbar-brand {
-            color: var(--text-color) !important;
+            color: var(gold) !important;
         }
 
         .navbar-nav .nav-link {
@@ -440,13 +440,15 @@ $avatarSrc = $hasPhoto ? ('profile_pics/' . e($user['profile_picture'])) : svg_a
                     <li class="nav-item"><a class="nav-link" href="user_home.php">Home</a></li>
                     <li class="nav-item"><a class="nav-link active" href="user_profile.php">Profile</a></li>
                     <li class="nav-item"><a class="nav-link" href="all_companies.php">All Companies</a></li>
+                    
+                    <li class="nav-item"><a class="btn btn-outline-warning ms-2" href="index.php">Logout</a></li>
+
                     <!-- Theme Toggle Button -->
                     <li class="nav-item">
                         <button class="theme-toggle ms-3" id="themeToggle" aria-label="Toggle theme">
                             <i class="bi bi-sun-fill" id="themeIcon"></i>
                         </button>
                     </li>
-                    <li class="nav-item"><a class="btn btn-outline-warning ms-2" href="index.php">Logout</a></li>
                 </ul>
             </div>
         </div>

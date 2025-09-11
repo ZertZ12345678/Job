@@ -1336,7 +1336,7 @@ try {
   </aside>
   <section class="py-5">
     <div class="container">
-      <h2 class="text-center fw-bold mb-4">Featured Jobs</h2>
+      <h2 class="text-center fw-bold mb-4">Your Job Posts</h2>
       <?php if (empty($jobs)): ?>
         <?= $isSearch ? '<div class="alert alert-danger text-center" role="alert">No jobs match your filters.</div>' : '<div class="alert alert-light border text-center" role="alert">No jobs posted yet.</div>' ?>
         <?php else:

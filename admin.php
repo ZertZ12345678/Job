@@ -1,14 +1,12 @@
 <?php
 include("connect.php");
 session_start();
-
 /* ===== Auth: require logged-in admin ===== */
 if (!isset($_SESSION['user_id'])) {
   header("Location: login.php");
   exit;
 }
 $current_admin_id = (int) $_SESSION['user_id'];
-
 /* Load logged-in user and verify role=admin */
 try {
   $stmt = $pdo->prepare("SELECT * FROM users WHERE user_id = ?");
@@ -23,10 +21,104 @@ if (!$loggedAdmin || ($loggedAdmin['role'] ?? '') !== 'admin') {
   exit;
 }
 
+/* -------------------- Chart Data Queries -------------------- */
+
+// Job Seekers by Category
+$seekers_by_category = [];
+try {
+  $stmt = $pdo->query("
+    SELECT job_category, COUNT(*) as count 
+    FROM users 
+    WHERE role = 'user' AND job_category IS NOT NULL AND job_category != ''
+    GROUP BY job_category
+    ORDER BY count DESC
+  ");
+  $seekers_by_category = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+  $seekers_by_category = [];
+}
+
+// Jobs by Employment Type
+$jobs_by_type = [];
+try {
+  $stmt = $pdo->query("
+    SELECT employment_type, COUNT(*) as count 
+    FROM jobs 
+    WHERE employment_type IS NOT NULL AND employment_type != ''
+    GROUP BY employment_type
+    ORDER BY count DESC
+  ");
+  $jobs_by_type = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+  $jobs_by_type = [];
+}
+
+// Feedback by User Type (Seekers vs Companies)
+$feedback_by_user_type = [];
+try {
+  $stmt = $pdo->query("
+    SELECT 
+      CASE 
+        WHEN user_id IS NOT NULL THEN 'Seekers'
+        WHEN company_id IS NOT NULL THEN 'Companies'
+        ELSE 'Other'
+      END as user_type,
+      COUNT(*) as count
+    FROM feedback
+    GROUP BY user_type
+    ORDER BY count DESC
+  ");
+  $feedback_by_user_type = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+  $feedback_by_user_type = [];
+}
+
+// Premium vs Normal Users
+$premium_vs_normal = [
+  'premium_seekers' => 0,
+  'normal_seekers' => 0,
+  'premium_companies' => 0,
+  'normal_companies' => 0
+];
+
+try {
+  // Premium Seekers
+  $stmt = $pdo->query("SELECT COUNT(*) as count FROM users WHERE role = 'user' AND LOWER(package) = 'premium'");
+  $premium_vs_normal['premium_seekers'] = (int)$stmt->fetchColumn();
+} catch (PDOException $e) {
+  $premium_vs_normal['premium_seekers'] = 0;
+}
+
+try {
+  // Normal Seekers
+  $stmt = $pdo->query("SELECT COUNT(*) as count FROM users WHERE role = 'user' AND (LOWER(package) != 'premium' OR package IS NULL)");
+  $premium_vs_normal['normal_seekers'] = (int)$stmt->fetchColumn();
+} catch (PDOException $e) {
+  $premium_vs_normal['normal_seekers'] = 0;
+}
+
+try {
+  // Premium Companies
+  $stmt = $pdo->query("SELECT COUNT(*) as count FROM companies WHERE LOWER(member) = 'premium'");
+  $premium_vs_normal['premium_companies'] = (int)$stmt->fetchColumn();
+} catch (PDOException $e) {
+  $premium_vs_normal['premium_companies'] = 0;
+}
+
+try {
+  // Normal Companies
+  $stmt = $pdo->query("SELECT COUNT(*) as count FROM companies WHERE (LOWER(member) != 'premium' OR member IS NULL)");
+  $premium_vs_normal['normal_companies'] = (int)$stmt->fetchColumn();
+} catch (PDOException $e) {
+  $premium_vs_normal['normal_companies'] = 0;
+}
+
+$premium_total = $premium_vs_normal['premium_seekers'] + $premium_vs_normal['premium_companies'];
+$normal_total = $premium_vs_normal['normal_seekers'] + $premium_vs_normal['normal_companies'];
+
 /* -------------------- Handle Add Admin form (same page) -------------------- */
 $admin_success = '';
 $admin_error   = '';
-
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add_admin') {
   $full_name = trim($_POST['full_name'] ?? '');
   $email     = trim($_POST['email'] ?? '');
@@ -34,28 +126,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add_a
   $phone     = trim($_POST['phone'] ?? '');
   $address   = trim($_POST['address'] ?? '');
   $profile_picture = null;
-
   // Required fields
   if ($full_name === '' || $email === '' || $password === '' || $phone === '' || $address === '') {
     $admin_error = "All fields are required.";
   } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
     $admin_error = "Email is not valid.";
   }
-
   // Photo is required
   if ($admin_error === '') {
     if (!isset($_FILES['profile_picture']) || $_FILES['profile_picture']['error'] === UPLOAD_ERR_NO_FILE) {
       $admin_error = "Photo is required for admin profile.";
     }
   }
-
   // Validate + save image
   if ($admin_error === '' && isset($_FILES['profile_picture'])) {
     if ($_FILES['profile_picture']['error'] === UPLOAD_ERR_OK) {
       $allowed = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
       $ext  = strtolower(pathinfo($_FILES['profile_picture']['name'], PATHINFO_EXTENSION));
       $size = $_FILES['profile_picture']['size'] ?? 0;
-
       if (!in_array($ext, $allowed, true)) {
         $admin_error = "Invalid image type. Allowed: " . implode(', ', $allowed);
       } elseif ($size > 3 * 1024 * 1024) {
@@ -66,7 +154,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add_a
         $rand     = bin2hex(random_bytes(4));
         $filename = "admin_" . time() . "_" . $rand . "." . $ext;
         $destFS   = $dir . "/" . $filename;
-
         if (!move_uploaded_file($_FILES['profile_picture']['tmp_name'], $destFS)) {
           $admin_error = "Failed to save uploaded photo.";
         } else {
@@ -77,7 +164,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add_a
       $admin_error = "Upload error (code: " . (int)$_FILES['profile_picture']['error'] . ").";
     }
   }
-
   // Insert admin
   if ($admin_error === '') {
     try {
@@ -96,23 +182,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add_a
     }
   }
 }
-
 /* -------------------- Handle CURRENT ADMIN PROFILE UPDATE -------------------- */
 $profile_success = '';
 $profile_error   = '';
-
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'update_admin_profile') {
   $p_full_name = trim($_POST['p_full_name'] ?? '');
   $p_email     = trim($_POST['p_email'] ?? '');
   $p_phone     = trim($_POST['p_phone'] ?? '');
   $p_address   = trim($_POST['p_address'] ?? '');
-
   if ($p_full_name === '' || $p_email === '' || $p_address === '') {
     $profile_error = "Full name, email, and address are required.";
   } elseif (!filter_var($p_email, FILTER_VALIDATE_EMAIL)) {
     $profile_error = "Email is not valid.";
   }
-
   // Load current row for old photo cleanup
   $adminRow = [];
   if ($profile_error === '') {
@@ -124,7 +206,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
       $profile_error = "Could not load current profile.";
     }
   }
-
   // Optional photo replacement
   $new_photo = null;
   if ($profile_error === '' && isset($_FILES['p_profile_picture']) && $_FILES['p_profile_picture']['error'] !== UPLOAD_ERR_NO_FILE) {
@@ -132,7 +213,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
       $allowed = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
       $ext  = strtolower(pathinfo($_FILES['p_profile_picture']['name'], PATHINFO_EXTENSION));
       $size = $_FILES['p_profile_picture']['size'] ?? 0;
-
       if (!in_array($ext, $allowed, true)) {
         $profile_error = "Invalid image type. Allowed: " . implode(', ', $allowed);
       } elseif ($size > 3 * 1024 * 1024) {
@@ -143,7 +223,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
         $rand     = bin2hex(random_bytes(4));
         $filename = "admin_" . $current_admin_id . "_" . time() . "_" . $rand . "." . $ext;
         $destFS   = $dir . "/" . $filename;
-
         if (!move_uploaded_file($_FILES['p_profile_picture']['tmp_name'], $destFS)) {
           $profile_error = "Failed to save uploaded photo.";
         } else {
@@ -158,7 +237,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
       $profile_error = "Upload error (code: " . (int)$_FILES['p_profile_picture']['error'] . ").";
     }
   }
-
   // Update DB
   if ($profile_error === '') {
     try {
@@ -170,7 +248,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
       }
       $sql .= " WHERE user_id=?";
       $params[] = $current_admin_id;
-
       $upd = $pdo->prepare($sql);
       $upd->execute($params);
       $profile_success = "Profile updated successfully.";
@@ -179,7 +256,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
     }
   }
 }
-
 /* -------------------- Companies -------------------- */
 try {
   $stmt = $pdo->query("SELECT * FROM companies ORDER BY company_id DESC");
@@ -188,7 +264,6 @@ try {
   $companies = [];
   $error_message = "Error loading companies data: " . $e->getMessage();
 }
-
 /* -------------------- Users (seekers + admins) -------------------- */
 try {
   $stmt2 = $pdo->query("SELECT * FROM users ORDER BY user_id DESC");
@@ -199,7 +274,6 @@ try {
 }
 $user_seekers = array_filter($seekers, fn($s) => ($s['role'] ?? '') === 'user');
 $admins       = array_filter($seekers, fn($s) => ($s['role'] ?? '') === 'admin');
-
 /* -------------------- Jobs -------------------- */
 try {
   $sql = "SELECT j.job_id, j.company_id, j.job_title, j.job_description, j.location,
@@ -214,7 +288,6 @@ try {
   $jobs = [];
   $jobs_error = "Error loading jobs data: " . $e->getMessage();
 }
-
 /* -------------------- Applications (ALL, for Applied Jobs tab) -------------------- */
 try {
   $q = "
@@ -237,7 +310,6 @@ try {
   $all_apps = [];
   $apps_error = "Error loading applications: " . $e->getMessage();
 }
-
 /* -------------------- Load current admin for Profile display -------------------- */
 $profile_admin = [];
 try {
@@ -247,7 +319,6 @@ try {
 } catch (PDOException $e) {
   $profile_admin = [];
 }
-
 /* -------------------- Feedback (seekers & companies) -------------------- */
 if (!function_exists('jh_words_preview')) {
   function jh_words_preview($text, $maxWords = 10, $ellipsis = '…')
@@ -259,10 +330,8 @@ if (!function_exists('jh_words_preview')) {
     return implode(' ', array_slice($parts, 0, $maxWords)) . $ellipsis;
   }
 }
-
 $fb_seekers = [];
 $fb_companies = [];
-
 try {
   // Seekers feedback
   $qS = "
@@ -276,7 +345,6 @@ try {
 } catch (PDOException $e) {
   $fb_seekers = [];
 }
-
 try {
   // Companies feedback
   $qC = "
@@ -290,11 +358,9 @@ try {
 } catch (PDOException $e) {
   $fb_companies = [];
 }
-
 // Counts for the title bar (used by JS)
 $fb_seekers_count   = isset($fb_seekers)   ? count($fb_seekers)   : 0;
 $fb_companies_count = isset($fb_companies) ? count($fb_companies) : 0;
-
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -305,6 +371,7 @@ $fb_companies_count = isset($fb_companies) ? count($fb_companies) : 0;
   <title>JobHive | Admin</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     body {
       background: #f8fafc;
@@ -349,6 +416,8 @@ $fb_companies_count = isset($fb_companies) ? count($fb_companies) : 0;
       margin-bottom: 2.4rem;
     }
 
+    
+
     /* inline edit button inside inputs */
     .field-control {
       position: relative;
@@ -380,11 +449,90 @@ $fb_companies_count = isset($fb_companies) ? count($fb_companies) : 0;
       outline: none;
     }
 
-
     .content {
       margin-left: 250px;
       padding: 40px 30px 30px;
       min-height: 100vh;
+    }
+
+    /* Dashboard Section with Ink Background */
+    #dashboardSection {
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      color: #ffffff;
+      border-radius: 1rem;
+      padding: 2rem;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    }
+
+    #dashboardSection h2 {
+      color: #ffc107;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+      margin-bottom: 1.5rem;
+    }
+
+    #dashboardSection p {
+      color: #e0e0e0;
+      margin-bottom: 2rem;
+      font-size: 1.1rem;
+    }
+
+    /* Stats cards with ink background */
+    #dashboardSection .card {
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 1rem;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    #dashboardSection .card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+    }
+
+    #dashboardSection .card-body {
+      padding: 1.5rem;
+    }
+
+    #dashboardSection .card-title {
+      color: #ffc107;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+
+    #dashboardSection .display-6 {
+      color: #ffffff;
+      font-size: 2.5rem;
+      font-weight: 700;
+    }
+
+   
+
+    /* Chart containers with ink background */
+    #dashboardSection .chart-container {
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 1rem;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    }
+
+    #dashboardSection .chart-title {
+      color: #ffc107;
+      font-weight: 600;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
+      #dashboardSection {
+        padding: 1.5rem;
+      }
+
+      #dashboardSection .display-6 {
+        font-size: 2rem;
+      }
     }
 
     @media (max-width: 900px) {
@@ -559,8 +707,24 @@ $fb_companies_count = isset($fb_companies) ? count($fb_companies) : 0;
       background: #cff4fc !important;
       color: #055160 !important;
     }
-  </style>
 
+    .chart-container {
+      background: #fff;
+      border-radius: 0.9rem;
+      padding: 1.25rem;
+      box-shadow: 0 2px 14px rgba(0, 0, 0, .05);
+      margin-bottom: 20px;
+      height: 300px;
+      position: relative;
+    }
+
+    .chart-title {
+      font-weight: 600;
+      margin-bottom: 10px;
+      color: #22223b;
+      text-align: center;
+    }
+  </style>
   <script>
     // Remember last opened section (admins or feedback) and restore on refresh
     function showSection(sectionId, linkElement) {
@@ -568,7 +732,6 @@ $fb_companies_count = isset($fb_companies) ? count($fb_companies) : 0;
       if (sectionId) document.getElementById(sectionId).style.display = 'block';
       document.querySelectorAll('.sidebar .nav-link').forEach(link => link.classList.remove('active'));
       if (linkElement) linkElement.classList.add('active');
-
       const remember = ['adminsSection', 'feedbackSection'];
       if (remember.includes(sectionId)) {
         sessionStorage.setItem('lastSection', sectionId);
@@ -576,7 +739,6 @@ $fb_companies_count = isset($fb_companies) ? count($fb_companies) : 0;
         sessionStorage.removeItem('lastSection');
       }
     }
-
     window.addEventListener('DOMContentLoaded', () => {
       const last = sessionStorage.getItem('lastSection');
       const linkMap = {
@@ -590,7 +752,6 @@ $fb_companies_count = isset($fb_companies) ? count($fb_companies) : 0;
         showSection('dashboardSection', linkMap.dashboardSection);
       }
     });
-
     document.addEventListener('DOMContentLoaded', () => {
       const btn = document.getElementById('togglePwd');
       const input = document.getElementById('adminPwd');
@@ -619,6 +780,177 @@ $fb_companies_count = isset($fb_companies) ? count($fb_companies) : 0;
         reader.readAsDataURL(input.files[0]);
       }
     }
+
+    // Initialize charts when dashboard is loaded
+    document.addEventListener('DOMContentLoaded', function() {
+      // Check if dashboard section is visible
+      const dashboardSection = document.getElementById('dashboardSection');
+      if (dashboardSection && dashboardSection.style.display !== 'none') {
+        initCharts();
+      }
+
+      // Also initialize charts when dashboard link is clicked
+      document.getElementById('dashboardLink').addEventListener('click', function() {
+        setTimeout(initCharts, 100);
+      });
+    });
+
+    function initCharts() {
+      // Feedback by User Type Chart
+      const feedbackByUserTypeCtx = document.getElementById('feedbackByUserTypeChart');
+      if (feedbackByUserTypeCtx) {
+        new Chart(feedbackByUserTypeCtx, {
+          type: 'bar',
+          data: {
+            labels: <?php echo json_encode(array_column($feedback_by_user_type, 'user_type')); ?>,
+            datasets: [{
+              label: 'Number of Feedback',
+              data: <?php echo json_encode(array_column($feedback_by_user_type, 'count')); ?>,
+              backgroundColor: [
+                '#FF6384', '#36A2EB'
+              ],
+              borderColor: [
+                '#FF4069', '#1E88E5'
+              ],
+              borderWidth: 1
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              y: {
+                beginAtZero: true,
+                ticks: {
+                  precision: 0
+                }
+              }
+            },
+            plugins: {
+              legend: {
+                display: false
+              },
+              title: {
+                display: true,
+                text: 'Feedback by User Type'
+              }
+            }
+          }
+        });
+      }
+
+      // Job Seekers by Category Chart
+      const seekersByCategoryCtx = document.getElementById('seekersByCategoryChart');
+      if (seekersByCategoryCtx) {
+        new Chart(seekersByCategoryCtx, {
+          type: 'bar',
+          data: {
+            labels: <?php echo json_encode(array_column($seekers_by_category, 'job_category')); ?>,
+            datasets: [{
+              label: 'Number of Seekers',
+              data: <?php echo json_encode(array_column($seekers_by_category, 'count')); ?>,
+              backgroundColor: '#36A2EB',
+              borderColor: '#1E88E5',
+              borderWidth: 1
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              y: {
+                beginAtZero: true,
+                ticks: {
+                  precision: 0
+                }
+              }
+            },
+            plugins: {
+              legend: {
+                display: false
+              },
+              title: {
+                display: true,
+                text: 'Job Seekers by Category'
+              }
+            }
+          }
+        });
+      }
+
+      // Jobs by Employment Type Chart
+      const jobsByTypeCtx = document.getElementById('jobsByTypeChart');
+      if (jobsByTypeCtx) {
+        new Chart(jobsByTypeCtx, {
+          type: 'doughnut',
+          data: {
+            labels: <?php echo json_encode(array_column($jobs_by_type, 'employment_type')); ?>,
+            datasets: [{
+              data: <?php echo json_encode(array_column($jobs_by_type, 'count')); ?>,
+              backgroundColor: [
+                '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF'
+              ],
+              borderWidth: 1
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                position: 'right',
+              },
+              title: {
+                display: true,
+                text: 'Jobs by Employment Type'
+              }
+            }
+          }
+        });
+      }
+
+      // Premium vs Normal Users Chart
+      const premiumVsNormalCtx = document.getElementById('premiumVsNormalChart');
+      if (premiumVsNormalCtx) {
+        new Chart(premiumVsNormalCtx, {
+          type: 'pie',
+          data: {
+            labels: ['Premium Users', 'Normal Users'],
+            datasets: [{
+              data: [<?php echo $premium_total; ?>, <?php echo $normal_total; ?>],
+              backgroundColor: [
+                '#FFCE56', '#4BC0C0'
+              ],
+              borderWidth: 1
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                position: 'right',
+              },
+              title: {
+                display: true,
+                text: 'Premium vs Normal Users'
+              },
+              tooltip: {
+                callbacks: {
+                  label: function(context) {
+                    const label = context.label || '';
+                    const value = context.raw || 0;
+                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                    const percentage = Math.round((value / total) * 100);
+                    return `${label}: ${value} (${percentage}%)`;
+                  }
+                }
+              }
+            }
+          }
+        });
+      }
+    }
   </script>
 </head>
 
@@ -638,7 +970,6 @@ $fb_companies_count = isset($fb_companies) ? count($fb_companies) : 0;
       <a class="nav-link" href="index.php">Logout</a>
     </nav>
   </div>
-
   <!-- Content -->
   <div class="content">
     <!-- Dashboard Section -->
@@ -671,8 +1002,35 @@ $fb_companies_count = isset($fb_companies) ? count($fb_companies) : 0;
           </div>
         </div>
       </div>
-    </div>
 
+      <!-- Charts Row -->
+      <div class="row mt-4">
+        <div class="col-md-6 mb-4">
+          <div class="chart-container">
+            <div class="chart-title">Feedback by User Type</div>
+            <canvas id="feedbackByUserTypeChart"></canvas>
+          </div>
+        </div>
+        <div class="col-md-6 mb-4">
+          <div class="chart-container">
+            <div class="chart-title">Job Seekers by Category</div>
+            <canvas id="seekersByCategoryChart"></canvas>
+          </div>
+        </div>
+        <div class="col-md-6 mb-4">
+          <div class="chart-container">
+            <div class="chart-title">Jobs by Employment Type</div>
+            <canvas id="jobsByTypeChart"></canvas>
+          </div>
+        </div>
+        <div class="col-md-6 mb-4">
+          <div class="chart-container">
+            <div class="chart-title">Premium vs Normal Users</div>
+            <canvas id="premiumVsNormalChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
     <!-- Companies Section -->
     <div id="companiesSection" class="section" style="display:none;">
       <div class="companies-title-bar mb-4">
@@ -685,7 +1043,6 @@ $fb_companies_count = isset($fb_companies) ? count($fb_companies) : 0;
       <?php if (!empty($error_message)): ?>
         <div class="alert alert-danger"><?php echo htmlspecialchars($error_message); ?></div>
       <?php endif; ?>
-
       <?php if (empty($companies)): ?>
         <div class="alert alert-info">No companies found.</div>
       <?php else: ?>
@@ -725,7 +1082,6 @@ $fb_companies_count = isset($fb_companies) ? count($fb_companies) : 0;
         </div>
       <?php endif; ?>
     </div>
-
     <!-- Seekers Section -->
     <div id="seekersSection" class="section" style="display:none;">
       <div class="companies-title-bar mb-4">
@@ -738,7 +1094,6 @@ $fb_companies_count = isset($fb_companies) ? count($fb_companies) : 0;
       <?php if (!empty($seekers_error)): ?>
         <div class="alert alert-danger"><?php echo htmlspecialchars($seekers_error); ?></div>
       <?php endif; ?>
-
       <?php if (empty($user_seekers)): ?>
         <div class="alert alert-info">No seekers found.</div>
       <?php else: ?>
@@ -780,7 +1135,6 @@ $fb_companies_count = isset($fb_companies) ? count($fb_companies) : 0;
         </div>
       <?php endif; ?>
     </div>
-
     <!-- Jobs Section -->
     <div id="jobsSection" class="section" style="display:none;">
       <div class="companies-title-bar mb-4">
@@ -790,11 +1144,9 @@ $fb_companies_count = isset($fb_companies) ? count($fb_companies) : 0;
           : ($job_count === 1 ? "1 Job Information" : "{$job_count} Jobs Information");
         ?>
       </div>
-
       <?php if (!empty($jobs_error)): ?>
         <div class="alert alert-danger"><?php echo htmlspecialchars($jobs_error); ?></div>
       <?php endif; ?>
-
       <?php if (empty($jobs)): ?>
         <div class="alert alert-info">No jobs found.</div>
       <?php else: ?>
@@ -838,7 +1190,6 @@ $fb_companies_count = isset($fb_companies) ? count($fb_companies) : 0;
         </div>
       <?php endif; ?>
     </div>
-
     <!-- Applied Jobs (ALL with status colors) -->
     <div id="appliedSection" class="section" style="display:none;">
       <div class="companies-title-bar mb-4">
@@ -848,11 +1199,9 @@ $fb_companies_count = isset($fb_companies) ? count($fb_companies) : 0;
           : ($app_count === 1 ? "1 Application" : "{$app_count} Applications");
         ?>
       </div>
-
       <?php if (!empty($apps_error)): ?>
         <div class="alert alert-danger"><?php echo htmlspecialchars($apps_error); ?></div>
       <?php endif; ?>
-
       <?php if (empty($all_apps)): ?>
         <div class="alert alert-info">There are no applications yet.</div>
       <?php else: ?>
@@ -895,29 +1244,23 @@ $fb_companies_count = isset($fb_companies) ? count($fb_companies) : 0;
         </div>
       <?php endif; ?>
     </div>
-
     <!-- Add Admin Role Section -->
     <div id="adminsSection" class="section" style="display:none;">
       <div class="companies-title-bar mb-4">Add Admin Role</div>
-
       <?php if ($admin_success): ?><div class="alert alert-success"><?php echo htmlspecialchars($admin_success); ?></div><?php endif; ?>
       <?php if ($admin_error): ?><div class="alert alert-danger"><?php echo htmlspecialchars($admin_error); ?></div><?php endif; ?>
-
       <div class="form-card mb-4">
         <form method="post" id="addAdminForm" enctype="multipart/form-data" novalidate>
           <input type="hidden" name="action" value="add_admin">
-
           <div class="form-grid">
             <div class="col-6">
               <label class="form-label">Full Name</label>
               <input type="text" name="full_name" class="form-control" required>
             </div>
-
             <div class="col-6">
               <label class="form-label">Email</label>
               <input type="email" name="email" class="form-control" required>
             </div>
-
             <div class="col-6">
               <label class="form-label">Password</label>
               <div class="input-group">
@@ -925,22 +1268,18 @@ $fb_companies_count = isset($fb_companies) ? count($fb_companies) : 0;
                 <button class="btn btn-outline-secondary" type="button" id="togglePwd">Show</button>
               </div>
             </div>
-
             <div class="col-6">
               <label class="form-label">Phone</label>
               <input type="text" name="phone" class="form-control" pattern="[0-9+\-()\s]{6,20}" title="Phone only" required>
             </div>
-
             <div class="col-6">
               <label class="form-label">Address</label>
               <input type="text" name="address" class="form-control" required>
             </div>
-
             <div class="col-6">
               <label class="form-label">Photo (JPG/PNG/GIF/WebP, max 3MB)</label>
               <input type="file" name="profile_picture" class="form-control" accept=".jpg,.jpeg,.png,.gif,.webp,image/*" required>
             </div>
-
             <div class="full form-actions">
               <button type="submit" class="btn btn-warning fw-bold">Add Admin Role</button>
               <button type="reset" class="btn btn-outline-secondary">Clear</button>
@@ -948,7 +1287,6 @@ $fb_companies_count = isset($fb_companies) ? count($fb_companies) : 0;
           </div>
         </form>
       </div>
-
       <div class="companies-title-bar mb-3">Admins</div>
       <?php if (empty($admins)): ?>
         <div class="alert alert-info">No admins yet.</div>
@@ -989,18 +1327,14 @@ $fb_companies_count = isset($fb_companies) ? count($fb_companies) : 0;
         </div>
       <?php endif; ?>
     </div>
-
     <!-- Profile (for CURRENT ADMIN only) -->
     <div id="profileSection" class="section" style="display:none;">
       <div class="companies-title-bar mb-4">Profile</div>
-
       <?php if ($profile_success): ?><div class="alert alert-success"><?php echo htmlspecialchars($profile_success); ?></div><?php endif; ?>
       <?php if ($profile_error): ?><div class="alert alert-danger"><?php echo htmlspecialchars($profile_error); ?></div><?php endif; ?>
-
       <div class="profile-card">
         <form method="post" enctype="multipart/form-data">
           <input type="hidden" name="action" value="update_admin_profile">
-
           <div class="text-center mb-3">
             <img src="<?php echo !empty($profile_admin['profile_picture']) ? 'profile_pics/' . htmlspecialchars($profile_admin['profile_picture']) : 'default_user.png'; ?>"
               class="profile-img" id="profilePreview" alt="Profile">
@@ -1008,7 +1342,6 @@ $fb_companies_count = isset($fb_companies) ? count($fb_companies) : 0;
               <input type="file" name="p_profile_picture" accept="image/*" class="form-control" onchange="previewProfilePic(this)">
             </div>
           </div>
-
           <div class="form-edit-row">
             <div style="flex:1" class="field-control">
               <div class="field-label">Full Name</div>
@@ -1020,7 +1353,6 @@ $fb_companies_count = isset($fb_companies) ? count($fb_companies) : 0;
               <?php endif; ?>
             </div>
           </div>
-
           <div class="form-edit-row">
             <div style="flex:1" class="field-control">
               <div class="field-label">Email</div>
@@ -1032,7 +1364,6 @@ $fb_companies_count = isset($fb_companies) ? count($fb_companies) : 0;
               <?php endif; ?>
             </div>
           </div>
-
           <div class="form-edit-row">
             <div style="flex:1" class="field-control">
               <div class="field-label">Phone</div>
@@ -1044,7 +1375,6 @@ $fb_companies_count = isset($fb_companies) ? count($fb_companies) : 0;
               <?php endif; ?>
             </div>
           </div>
-
 
           <div class="form-edit-row">
             <div style="flex:1" class="field-control">
@@ -1058,14 +1388,12 @@ $fb_companies_count = isset($fb_companies) ? count($fb_companies) : 0;
             </div>
           </div>
 
-
           <div class="mt-3 text-center">
             <button type="submit" class="btn btn-warning px-4">Save Changes</button>
           </div>
         </form>
       </div>
     </div>
-
     <!-- Feedback Section -->
     <div id="feedbackSection" class="section" style="display:none;">
       <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
@@ -1080,7 +1408,6 @@ $fb_companies_count = isset($fb_companies) ? count($fb_companies) : 0;
           <button type="button" class="btn btn-outline-warning fw-semibold js-fb-tab" data-tab="companies">Companies</button>
         </div>
       </div>
-
       <!-- SEEKERS TABLE -->
       <div id="fbSeekersWrap">
         <?php if (empty($fb_seekers)): ?>
@@ -1129,7 +1456,6 @@ $fb_companies_count = isset($fb_companies) ? count($fb_companies) : 0;
           </div>
         <?php endif; ?>
       </div>
-
       <!-- COMPANIES TABLE -->
       <div id="fbCompaniesWrap" class="d-none">
         <?php if (empty($fb_companies)): ?>
@@ -1179,7 +1505,6 @@ $fb_companies_count = isset($fb_companies) ? count($fb_companies) : 0;
         <?php endif; ?>
       </div>
     </div>
-
     <!-- View Feedback Modal -->
     <div class="modal fade" id="fbViewModal" tabindex="-1" aria-hidden="true">
       <div class="modal-dialog modal-lg modal-dialog-centered">
@@ -1221,7 +1546,6 @@ $fb_companies_count = isset($fb_companies) ? count($fb_companies) : 0;
         </div>
       </div>
     </div>
-
     <script>
       // Feedback tab switcher (no navigation)
       (function() {
@@ -1258,15 +1582,12 @@ $fb_companies_count = isset($fb_companies) ? count($fb_companies) : 0;
           sessionStorage.setItem('fb_tab', tab);
           updateCount(tab);
         }
-
         seekersBtn?.addEventListener('click', () => setTab('seekers'));
         companiesBtn?.addEventListener('click', () => setTab('companies'));
-
         // When clicking the sidebar "Feedback", default to seekers
         document.getElementById('feedbackLink')?.addEventListener('click', () => {
           setTimeout(() => setTab(sessionStorage.getItem('fb_tab') || 'seekers'), 0);
         });
-
         // If feedback is already visible (restored by lastSection), apply saved tab
         window.addEventListener('DOMContentLoaded', () => {
           const fbSec = document.getElementById('feedbackSection');
@@ -1275,12 +1596,10 @@ $fb_companies_count = isset($fb_companies) ? count($fb_companies) : 0;
           }
         });
       })();
-
       // Feedback view modal
       document.addEventListener('click', function(e) {
         const btn = e.target.closest('.js-fb-view');
         if (!btn) return;
-
         const type = btn.getAttribute('data-fb-type') || 'seeker';
         const id = btn.getAttribute('data-id') || '—';
         const name = btn.getAttribute('data-name') || '—';
@@ -1288,23 +1607,19 @@ $fb_companies_count = isset($fb_companies) ? count($fb_companies) : 0;
         const tier = btn.getAttribute('data-tier') || '—';
         const when = btn.getAttribute('data-when') || '—';
         const msg = btn.getAttribute('data-msg') || '';
-
         document.getElementById('fbModalTitle').textContent = type === 'company' ? 'Company Feedback' : 'Seeker Feedback';
         document.getElementById('fbTierLabel').textContent = type === 'company' ? 'Member' : 'Package';
-
         document.getElementById('fbMetaId').textContent = (type === 'company' ? 'Company #' : 'User #') + id;
         document.getElementById('fbMetaName').textContent = name;
         document.getElementById('fbMetaEmail').textContent = email;
         document.getElementById('fbMetaTier').textContent = tier;
         document.getElementById('fbMetaWhen').textContent = when;
         document.getElementById('fbMessage').textContent = msg;
-
         const modalEl = document.getElementById('fbViewModal');
         const m = new bootstrap.Modal(modalEl);
         m.show();
       });
     </script>
-
   </div>
 </body>
 

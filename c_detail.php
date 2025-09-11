@@ -323,12 +323,13 @@ if (!$company) {
                     <li class="nav-item"><a class="nav-link" href="user_home.php">Home</a></li>
                     <li class="nav-item"><a class="nav-link" href="all_companies.php">All Companies</a></li>
                     <li class="nav-item"><span class="nav-link disabled">Hello, <?= e($_SESSION['full_name'] ?? 'User') ?></span></li>
+                    <li class="nav-item"><a class="nav-link" href="logout.php">Logout</a></li>
                     <li class="nav-item">
                         <button class="theme-toggle ms-2 me-2" id="themeToggle" aria-label="Toggle theme">
                             <i class="bi bi-sun-fill" id="themeIcon"></i>
                         </button>
                     </li>
-                    <li class="nav-item"><a class="nav-link" href="logout.php">Logout</a></li>
+                    
                 </ul>
             </div>
         </div>

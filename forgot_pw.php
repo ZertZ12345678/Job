@@ -507,6 +507,8 @@ $resetExpiresEpoch = $_SESSION['reset_expires_at'] ?? 0;
             text-align: center;
         }
 
+
+
         /* Brand link under the card */
         .brand-logo {
             color: var(--ink);
@@ -543,7 +545,7 @@ $resetExpiresEpoch = $_SESSION['reset_expires_at'] ?? 0;
 
 <body data-reset-expires="<?= htmlspecialchars((string)$resetExpiresEpoch) ?>">
     <div class="box">
-        <div class="title">Forgot password</div>
+        <div class="title">Forgot Password</div>
 
         <?php if ($msg): ?>
             <div class="alert <?= htmlspecialchars($alert) ?> text-center" role="alert">
@@ -559,9 +561,9 @@ $resetExpiresEpoch = $_SESSION['reset_expires_at'] ?? 0;
                     <label for="email" class="form-label">Email address</label>
                     <input type="email" class="form-control" id="email" name="email" required maxlength="100" />
                 </div>
-                <button type="submit" class="btn btn-warning mt-1">Send code</button>
+                <button type="submit" class="btn btn-warning mt-1">Send Code</button>
             </form>
-            <div class="text-center mt-2"><a href="login.php" class="text-decoration-none" style="color:#ffe08a;font-weight:700;">Back to login</a></div>
+            <div class="text-center mt-2"><a href="login.php" class="text-decoration-none" style="color:#ffe08a;font-weight:700;">Back to Login</a></div>
 
         <?php elseif ($stage === 'otp'): ?>
             <form action="forgot_pw.php" method="POST" autocomplete="off" class="mb-2">
@@ -571,20 +573,20 @@ $resetExpiresEpoch = $_SESSION['reset_expires_at'] ?? 0;
                     <input type="text" pattern="\d{6}" maxlength="6" class="form-control" id="otp" name="otp" required />
                 </div>
                 <div id="otp-timer" class="muted mb-2"></div>
-                <button type="submit" class="btn btn-warning">Verify code</button>
+                <button type="submit" class="btn btn-warning">Verify Code</button>
             </form>
             <form action="forgot_pw.php" method="POST" class="text-center">
                 <input type="hidden" name="stage" value="resend" />
                 <button id="btnResend" type="submit" class="btn btn-outline-secondary w-100" disabled>Send OTP</button>
                 <div class="small muted mt-1">We’ll send a new code when the timer hits 0:00.</div>
             </form>
-            <div class="text-center mt-2"><a href="login.php" class="text-decoration-none" style="color:#ffe08a;font-weight:700;">Back to login</a></div>
+            <div class="text-center mt-2"><a href="login.php" class="text-decoration-none" style="color:#ffe08a;font-weight:700;">Back to Login</a></div>
 
         <?php elseif ($stage === 'setpw'): ?>
             <form action="forgot_pw.php" method="POST" autocomplete="off">
                 <input type="hidden" name="stage" value="setpw" />
                 <div class="mb-2">
-                    <label for="npw" class="form-label">New password</label>
+                    <label for="npw" class="form-label">New Password</label>
                     <input type="password"
                         class="form-control"
                         id="npw"
@@ -595,7 +597,7 @@ $resetExpiresEpoch = $_SESSION['reset_expires_at'] ?? 0;
                         title="<?= htmlspecialchars(PW_POLICY_HUMAN) ?>" />
                 </div>
                 <div class="mb-2">
-                    <label for="cpw" class="form-label">Confirm password</label>
+                    <label for="cpw" class="form-label">Confirm Password</label>
                     <input type="password"
                         class="form-control"
                         id="cpw"
@@ -605,15 +607,19 @@ $resetExpiresEpoch = $_SESSION['reset_expires_at'] ?? 0;
                         pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()\-\_\=\+\[\]\{\};:,.?~]).{8,}"
                         title="<?= htmlspecialchars(PW_POLICY_HUMAN) ?>" />
                 </div>
-                <button type="submit" class="btn btn-warning mt-1">Change password</button>
+                <button type="submit" class="btn btn-warning mt-1">Change Password</button>
                 <div class="muted mt-2"><?= htmlspecialchars(PW_POLICY_HUMAN) ?></div>
             </form>
             <div class="text-center mt-2"><a href="login.php" class="text-decoration-none" style="color:#ffe08a;font-weight:700;">Back to login</a></div>
+            <div class="brand-chip" role="img" aria-label="JobHive brand">Job<span>Hive</span></div>
+
+
+
         <?php endif; ?>
     </div>
 
     <!-- Brand link under card, like signup/login -->
-    <a href="index.php" class="brand-logo"><span>JobHive</span></a>
+
 
     <?php if ($stage === 'otp'): ?>
         <script>

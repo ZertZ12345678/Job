@@ -376,13 +376,15 @@ if ($pp > 85) $barClass = 'bg-success';
                         <h5 class="mb-0 fw-semibold">Dashboard</h5>
                     </div>
                     <div class="d-flex align-items-center gap-3">
-                        <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
-                            <i class="bi bi-sun-fill" id="themeIcon"></i>
-                        </button>
+                        
                         <a href="user_profile.php" class="text-muted small d-none d-sm-inline text-decoration-none">
                             <?php echo htmlspecialchars($user['full_name'] ?? 'User'); ?>
                         </a>
                         <a href="user_profile.php" class="d-inline-block"><img src="<?php echo $avatar_url; ?>" class="avatar" alt="Avatar"></a>
+
+                        <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
+                            <i class="bi bi-sun-fill" id="themeIcon"></i>
+                        </button>
                     </div>
                 </div>
             </div>

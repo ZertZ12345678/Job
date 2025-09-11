@@ -404,13 +404,14 @@ $avatarSrc = $hasLogo ? ('company_logos/' . e($company['logo'])) : svg_avatar_da
                     <li class="nav-item"><a class="nav-link" href="c_dashboard.php">Dashboard</a></li>
                     <li class="nav-item"><a class="nav-link active" href="company_profile.php">Profile</a></li>
                     <li class="nav-item"><a class="nav-link" href="post_job.php">Post Job</a></li>
+                    <li class="nav-item"><a class="btn btn-outline-warning ms-2" href="logout.php">Logout</a></li>
                     <!-- Theme Toggle Button -->
                     <li class="nav-item">
                         <button class="theme-toggle ms-3" id="themeToggle" aria-label="Toggle theme">
                             <i class="bi bi-sun-fill" id="themeIcon"></i>
                         </button>
                     </li>
-                    <li class="nav-item"><a class="btn btn-outline-warning ms-2" href="logout.php">Logout</a></li>
+                    
                 </ul>
             </div>
         </div>

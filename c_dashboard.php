@@ -219,6 +219,8 @@ $barClass = $pp > 85 ? 'bg-success' : ($pp > 60 ? 'bg-info' : ($pp > 30 ? 'bg-wa
             margin-bottom: 10px;
         }
 
+
+
         .sidebar .nav-link {
             color: var(--sidebar-text);
             border-radius: .6rem;
@@ -342,6 +344,16 @@ $barClass = $pp > 85 ? 'bg-success' : ($pp > 60 ? 'bg-info' : ($pp > 30 ? 'bg-wa
                 margin-left: 0;
             }
         }
+
+        /* Make KPI card labels black in light mode */
+        .kpi-card .text-muted.small {
+            color: #000000 !important;
+        }
+
+        /* Keep KPI card labels white in dark mode */
+        [data-theme="dark"] .kpi-card .text-muted.small {
+            color: #ffffff !important;
+        }
     </style>
 </head>
 
@@ -385,13 +397,14 @@ $barClass = $pp > 85 ? 'bg-success' : ($pp > 60 ? 'bg-info' : ($pp > 30 ? 'bg-wa
                         <h5 class="mb-0 fw-semibold">Company Dashboard</h5>
                     </div>
                     <div class="d-flex align-items-center gap-3">
-                        <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
-                            <i class="bi bi-sun-fill" id="themeIcon"></i>
-                        </button>
+
                         <a href="company_profile.php" class="text-muted small d-none d-sm-inline text-decoration-none">
                             <?= h($company['company_name'] ?? 'Company'); ?>
                         </a>
                         <a href="company_profile.php" class="d-inline-block"><img src="<?= $logo_url; ?>" class="avatar" alt="Logo"></a>
+                        <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
+                            <i class="bi bi-sun-fill" id="themeIcon"></i>
+                        </button>
                     </div>
                 </div>
             </div>

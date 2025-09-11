@@ -417,11 +417,6 @@ if ($job && isset($job['status'])) {
     </main>
     <footer class="mt-5 py-4 text-white">
         <div class="container d-flex flex-column align-items-center">
-            <div class="mb-2">
-                <a href="#" class="text-white text-decoration-none me-3">About</a>
-                <a href="#" class="text-white text-decoration-none me-3">Contact</a>
-                <a href="#" class="text-white text-decoration-none">Privacy Policy</a>
-            </div>
             <small>&copy; <?= date('Y') ?> JobHive. All rights reserved.</small>
         </div>
     </footer>

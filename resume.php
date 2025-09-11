@@ -609,13 +609,10 @@ if ($job && isset($job['status'])) {
         </div>
     </main>
     <footer class="mt-5 py-4 bg-dark text-white">
-        <div class="container d-flex flex-column align-items-center">
-            <div class="mb-2">
-                <a href="#" class="text-white text-decoration-none me-3">About</a>
-                <a href="#" class="text-white text-decoration-none me-3">Contact</a>
-                <a href="#" class="text-white text-decoration-none">Privacy Policy</a>
-            </div>
+        <div class="container d-flex flex-column align-items-center"><br>
+            
             <small>&copy; <?= date('Y') ?> JobHive. All rights reserved.</small>
+            <br>
         </div>
     </footer>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>

@@ -371,6 +371,30 @@ $otpExpiresEpoch = $_SESSION['otp_expires_at'] ?? 0;
       color: var(--ink);
     }
 
+    /* Make "Send OTP" match "Verify & Sign In" size */
+    #btnResend {
+      display: block;
+      /* not inline */
+      width: 100%;
+      /* full width like .btn-warning */
+      padding: 12px 0;
+      /* same vertical padding */
+      border-radius: 6px;
+      /* same corners */
+      font-weight: 600;
+      /* same weight */
+      box-sizing: border-box;
+      margin-bottom: 12px;
+      /* optional: same spacing */
+    }
+
+    /* Optional: keep disabled look but same size */
+    #btnResend:disabled {
+      opacity: .65;
+      cursor: not-allowed;
+    }
+
+
     .alert {
       border-radius: 6px;
       padding: 10px 12px;
@@ -472,8 +496,8 @@ $otpExpiresEpoch = $_SESSION['otp_expires_at'] ?? 0;
             <label for="password" class="form-label">Password</label>
             <input type="password" class="form-control" id="password" name="password" required minlength="6" />
           </div>
-          <button type="submit" class="btn btn-warning">Login</button>
-          <div class="forgot-password"><a href="forgot_pw.php">Forgot password?</a></div>
+          <button type="submit" class="btn btn-warning">LOGIN</button>
+          <div class="forgot-password"><a href="forgot_pw.php">Forgot Password?</a></div>
         </form>
         <div class="d-grid gap-2 mt-2">
           <a class="btn btn-outline-secondary" href="sign_up.php">Register as User</a>
@@ -494,7 +518,7 @@ $otpExpiresEpoch = $_SESSION['otp_expires_at'] ?? 0;
         <form action="login.php" method="POST">
           <input type="hidden" name="stage" value="resend" />
           <button id="btnResend" type="submit" class="btn btn-outline-secondary" disabled>Send OTP</button>
-          <div class="small text-muted">We'll send a new code when the timer hits 0:00.</div>
+          <div class="small muted mt-1">We’ll send a new code when the timer hits 0:00.</div>
         </form>
         <div class="d-grid gap-2 mt-3">
           <a class="btn btn-outline-secondary" href="sign_up.php">Register as User</a>
