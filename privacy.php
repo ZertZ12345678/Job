@@ -393,12 +393,8 @@ $privacyUrl = 'privacy.php?' . http_build_query(['return' => $returnParam]);
                         <li>Enable paid features (e.g., Premium resume) and process related records.</li>
                     </ul>
                 </div>
-                <div class="section-card prose" id="cookies">
-                    <h2>4. Cookies &amp; Tracking</h2>
-                    <p>We use cookies and similar technologies to keep you signed in, remember preferences, and understand usage. You can control cookies in your browser; disabling some may affect functionality.</p>
-                </div>
                 <div class="section-card prose" id="share">
-                    <h2>5. Sharing &amp; Disclosure</h2>
+                    <h2>4. Sharing &amp; Disclosure</h2>
                     <ul>
                         <li><strong>With Companies:</strong> we share your applications and relevant profile data with companies you apply to.</li>
                         <li><strong>Service Providers:</strong> hosting, analytics, and security vendors under contractual safeguards.</li>
@@ -406,31 +402,31 @@ $privacyUrl = 'privacy.php?' . http_build_query(['return' => $returnParam]);
                     </ul>
                 </div>
                 <div class="section-card prose" id="retention">
-                    <h2>6. Data Retention</h2>
+                    <h2>5. Data Retention</h2>
                     <p>We keep personal data only as long as needed for the purposes above, or as required by law, then delete or anonymize it.</p>
                 </div>
                 <div class="section-card prose" id="security">
-                    <h2>7. Security</h2>
+                    <h2>6. Security</h2>
                     <p>We apply technical and organizational measures (encryption where applicable, access controls, monitoring) to protect your data. No method is 100% secure, but we strive to safeguard information.</p>
                 </div>
                 <div class="section-card prose" id="rights">
-                    <h2>8. Your Rights</h2>
+                    <h2>7. Your Rights</h2>
                     <p>Depending on your jurisdiction, you may request access, correction, deletion, or portability of your data, and object to or restrict certain processing. Contact us to make a request.</p>
                 </div>
                 <div class="section-card prose" id="children">
-                    <h2>9. Children's Privacy</h2>
+                    <h2>8. Children's Privacy</h2>
                     <p>JobHive is not directed to children under 16. If you believe a child provided us personal data, contact us and we'll take appropriate steps.</p>
                 </div>
                 <div class="section-card prose" id="intl">
-                    <h2>10. International Transfers</h2>
+                    <h2>9. International Transfers</h2>
                     <p>Your data may be processed in countries different from your own. We use safeguards consistent with applicable law when transferring data.</p>
                 </div>
                 <div class="section-card prose" id="changes">
-                    <h2>11. Changes</h2>
+                    <h2>10. Changes</h2>
                     <p>We may update this Privacy Policy. The "Effective date" above shows the latest version. Continued use means you accept the updated policy.</p>
                 </div>
                 <div class="section-card prose" id="contact">
-                    <h2>12. Contact</h2>
+                    <h2>11. Contact</h2>
                     <p>Questions or requests? Email <a href="mailto:support@jobhive.mm">support@jobhive.mm</a>.</p>
                 </div>
             </div>

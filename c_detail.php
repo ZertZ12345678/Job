@@ -1,17 +1,23 @@
 <?php
-// c_detail.php  (logged-in detail)
+// c_detail.php  — Company detail (accessible by job seeker or company)
 require_once "connect.php";
 if (session_status() === PHP_SESSION_NONE) session_start();
-/* ===== Require login ===== */
-if (!isset($_SESSION['user_id'])) {
+
+/* ===== Auth: allow either job seeker (user) or company ===== */
+$logged_user_id    = $_SESSION['user_id']    ?? null;   // job seeker
+$logged_company_id = $_SESSION['company_id'] ?? null;   // company
+
+if (!$logged_user_id && !$logged_company_id) {
     header("Location: login.php?next=" . urlencode("c_detail.php" . (isset($_SERVER['QUERY_STRING']) ? "?{$_SERVER['QUERY_STRING']}" : "")));
     exit;
 }
+
 /* ===== Helpers ===== */
 function e($v)
 {
     return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
 }
+
 function initials_from_name($name): string
 {
     $name = trim((string)$name);
@@ -24,6 +30,7 @@ function initials_from_name($name): string
     }
     return $ini ?: 'C';
 }
+
 function svg_initials_avatar(string $text, int $size = 120): string
 {
     $ini = initials_from_name($text);
@@ -40,6 +47,7 @@ function svg_initials_avatar(string $text, int $size = 120): string
 SVG;
     return 'data:image/svg+xml;base64,' . base64_encode($svg);
 }
+
 function company_logo_src(?string $filename, string $company_name, string $dir = "company_logos"): string
 {
     $file = trim((string)$filename);
@@ -51,25 +59,22 @@ function company_logo_src(?string $filename, string $company_name, string $dir =
     }
     return svg_initials_avatar($company_name, 120);
 }
-/* ===== Robust company_id parsing ===== */
-$company_id = null;
-// preferred: ?company_id=#
-$cid = filter_input(INPUT_GET, 'company_id', FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
-if ($cid) $company_id = $cid;
-// fallback: ?id=#
-if ($company_id === null) {
-    $cid2 = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
-    if ($cid2) $company_id = $cid2;
+
+/* ===== Determine which company to show =====
+   Priority:
+   1) ?company_id= in URL (validated)
+   2) if a company is logged in and no param -> show its own detail
+   3) otherwise (user logged in but no param) -> go to All Companies
+*/
+$company_id = filter_input(INPUT_GET, 'company_id', FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+if (!$company_id && $logged_company_id) {
+    $company_id = (int)$logged_company_id;
 }
-// fallback: /c_detail.php/#
-if ($company_id === null && !empty($_SERVER['PATH_INFO'])) {
-    if (preg_match('~/(\d+)$~', $_SERVER['PATH_INFO'], $m)) $company_id = (int)$m[1];
-}
-/* ===== If still missing, go back to the logged-in list ===== */
 if (!$company_id) {
     header("Location: all_companies.php");
     exit;
 }
+
 /* ===== Fetch company ===== */
 $stmt = $pdo->prepare("
     SELECT company_id, company_name, email, phone, address, c_detail, logo
@@ -83,7 +88,12 @@ if (!$company) {
     header("Location: all_companies.php");
     exit;
 }
-/* ===== View ===== */
+
+/* ===== Navbar bits ===== */
+$homeHref = $logged_company_id ? 'company_home.php' : 'user_home.php';
+$helloName = $logged_company_id
+    ? trim($_SESSION['company_name'] ?? 'Company')
+    : trim($_SESSION['full_name'] ?? 'User');
 ?>
 <!doctype html>
 <html lang="en">
@@ -114,6 +124,7 @@ if (!$company) {
             --btn-primary-bg: #ffaa2b;
             --btn-primary-text: #22223b;
             --btn-primary-hover: #e6991f;
+            --link-normal: #22223b;
         }
 
         [data-theme="dark"] {
@@ -121,12 +132,13 @@ if (!$company) {
             --bg-secondary: #1e1e1e;
             --bg-tertiary: #2d2d2d;
             --text-primary: #e9ecef;
-            --text-secondary: #adb5bd;
-            --text-muted: #6c757d;
+            --text-secondary: #ced4da;
+            --text-muted: #adb5bd;
             --text-white: #ffffff;
             --border-color: #343a40;
             --navbar-bg: #1e1e1e;
-            --navbar-text: #e9ecef;
+            --navbar-text: #ffffff;
+            /* << white text in dark mode */
             --navbar-border: #343a40;
             --card-bg: #1e1e1e;
             --card-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.3);
@@ -135,20 +147,21 @@ if (!$company) {
             --btn-primary-bg: #ffaa2b;
             --btn-primary-text: #22223b;
             --btn-primary-hover: #e6991f;
+            --link-normal: #ffffff;
+            /* links show white in dark mode */
         }
 
         body {
             background-color: var(--bg-primary);
             font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
             color: var(--text-primary);
-            transition: background-color 0.3s, color 0.3s;
+            transition: background-color .3s, color .3s;
         }
 
-        /* ===== Navbar brand (JobHive logo) ===== */
+        /* ===== Navbar (exact items required) ===== */
         .navbar {
             background-color: var(--navbar-bg) !important;
             border-bottom: 1px solid var(--navbar-border);
-            transition: background-color 0.3s, border-color 0.3s;
         }
 
         .navbar-brand {
@@ -157,62 +170,62 @@ if (!$company) {
             text-decoration: none !important;
         }
 
-        .navbar-brand:hover {
-            color: var(--btn-primary-bg) !important;
-            text-decoration: none !important;
-        }
-
-        /* ===== Navbar links ===== */
-        .navbar-nav .nav-item:not(.dropdown) .nav-link {
+        .navbar-nav .nav-link {
+            color: var(--navbar-text) !important;
             position: relative;
             padding-bottom: 4px;
-            transition: color 0.2s ease-in-out;
             text-decoration: none !important;
-            color: var(--navbar-text) !important;
         }
 
-        /* yellow underline effect */
-        .navbar-nav .nav-item:not(.dropdown) .nav-link::after {
+        .navbar-nav .nav-link::after {
             content: "";
             position: absolute;
             left: 0;
             bottom: 0;
             width: 0%;
             height: 2px;
-            background-color: var(--btn-primary-bg);
-            transition: width 0.25s ease-in-out;
+            background: var(--btn-primary-bg);
+            transition: width .25s;
         }
 
-        /* expand underline on hover OR when active */
-        .navbar-nav .nav-item:not(.dropdown) .nav-link:hover::after,
-        .navbar-nav .nav-item:not(.dropdown) .nav-link.active::after {
+        .navbar-nav .nav-link:hover::after,
+        .navbar-nav .nav-link.active::after {
             width: 100%;
         }
 
-        /* active link stays yellow */
-        .navbar-nav .nav-item:not(.dropdown) .nav-link.active {
-            font-weight: bold;
-            color: var(--btn-primary-bg) !important;
-        }
-
         .nav-link.disabled {
-            color: var(--text-muted) !important;
+            opacity: .9;
         }
 
+        .theme-toggle {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--navbar-text);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .theme-toggle:hover {
+            background: var(--bg-tertiary);
+        }
+
+        /* ===== Card ===== */
         .company-card {
             background-color: var(--card-bg);
             border: 0;
             border-radius: 16px;
             overflow: hidden;
             box-shadow: var(--card-shadow);
-            transition: background-color 0.3s, box-shadow 0.3s;
         }
 
         .company-header {
             background: var(--company-header-bg);
             color: var(--company-header-text);
             padding: 2rem;
-            transition: background-color 0.3s;
         }
 
         .company-logo {
@@ -227,113 +240,68 @@ if (!$company) {
         .company-body {
             padding: 2rem;
             background-color: var(--card-bg);
-            transition: background-color 0.3s;
-        }
-
-        h1,
-        h5 {
-            color: var(--text-primary);
-            font-weight: 700;
-            transition: color 0.3s;
         }
 
         .info-item {
             margin-bottom: 1rem;
             font-size: 15px;
-            color: var(--text-primary);
-            transition: color 0.3s;
-        }
-
-        .info-item span {
-            font-weight: 700;
-            color: var(--text-primary);
-            transition: color 0.3s;
-        }
-
-        p {
-            color: var(--text-primary);
-            font-weight: 500;
-            line-height: 1.6;
-            transition: color 0.3s;
         }
 
         a {
-            color: var(--text-primary);
+            color: var(--link-normal);
             font-weight: 600;
-            transition: color 0.3s;
-        }
-
-        a:hover {
-            text-decoration: underline;
         }
 
         .btn-outline-secondary {
             color: var(--text-primary);
             border-color: var(--border-color);
-            background-color: transparent;
-            transition: all 0.3s;
+            background: transparent;
         }
 
         .btn-outline-secondary:hover {
-            background-color: var(--bg-tertiary);
-            border-color: var(--border-color);
-            color: var(--text-primary);
-        }
-
-        .theme-toggle {
-            background: transparent;
-            border: 1px solid var(--border-color);
-            color: var(--text-primary);
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.3s;
-        }
-
-        .theme-toggle:hover {
             background: var(--bg-tertiary);
         }
 
-        .navbar-toggler {
-            border-color: var(--text-primary);
-        }
-
-        .navbar-toggler-icon {
-            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba%2834, 34, 59, 0.75%29' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e");
-        }
-
-        [data-theme="dark"] .navbar-toggler-icon {
-            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba%28233, 236, 239, 0.75%29' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e");
+        /* Force text white in dark mode */
+        [data-theme="dark"] h1,
+        [data-theme="dark"] h5,
+        [data-theme="dark"] small,
+        [data-theme="dark"] .info-item,
+        [data-theme="dark"] .info-item span,
+        [data-theme="dark"] p,
+        [data-theme="dark"] a {
+            color: #ffffff !important;
         }
     </style>
 </head>
 
 <body>
+    <!-- NAVBAR: Home, All companies, Hello(...), Logout, Toggle -->
     <nav class="navbar navbar-expand-lg navbar-white shadow-sm sticky-top">
         <div class="container">
-            <a class="navbar-brand" href="user_home.php">JobHive</a>
+            <a class="navbar-brand" href="<?= e($homeHref) ?>">JobHive</a>
+
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav">
                 <span class="navbar-toggler-icon"></span>
             </button>
+
             <div class="collapse navbar-collapse" id="mainNav">
-                <ul class="navbar-nav ms-auto">
-                    <li class="nav-item"><a class="nav-link" href="user_home.php">Home</a></li>
-                    <li class="nav-item"><a class="nav-link" href="all_companies.php">All Companies</a></li>
-                    <li class="nav-item"><span class="nav-link disabled">Hello, <?= e($_SESSION['full_name'] ?? 'User') ?></span></li>
+                <ul class="navbar-nav ms-auto align-items-lg-center gap-lg-2">
+                    <li class="nav-item"><a class="nav-link" href="<?= e($homeHref) ?>">Home</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="all_companies.php">All companies</a></li>
+                    <li class="nav-item"><span class="nav-link disabled">Hello, <?= e($helloName) ?></span></li>
                     <li class="nav-item"><a class="nav-link" href="logout.php">Logout</a></li>
                     <li class="nav-item">
-                        <button class="theme-toggle ms-2 me-2" id="themeToggle" aria-label="Toggle theme">
+                        <button class="theme-toggle ms-2" id="themeToggle" aria-label="Toggle theme">
                             <i class="bi bi-sun-fill" id="themeIcon"></i>
                         </button>
                     </li>
-                    
                 </ul>
             </div>
         </div>
     </nav>
+
+    <!-- Content -->
     <div class="container my-5">
         <div class="card company-card shadow">
             <div class="company-header d-flex align-items-center gap-4">
@@ -344,38 +312,42 @@ if (!$company) {
                 </div>
             </div>
             <div class="company-body">
-                <div class="info-item"><span>Email:</span> <a href="mailto:<?= e($company['email']) ?>"><?= e($company['email']) ?></a></div>
-                <div class="info-item"><span>Phone:</span> <?= e($company['phone'] ?: '—') ?></div>
+                <div class="info-item"><span class="fw-semibold">Email:</span> <a href="mailto:<?= e($company['email']) ?>"><?= e($company['email']) ?></a></div>
+                <div class="info-item"><span class="fw-semibold">Phone:</span> <?= e($company['phone'] ?: '—') ?></div>
+
                 <?php if (!empty($company['c_detail'])): ?>
                     <hr>
                     <h5>About <?= e($company['company_name']) ?></h5>
                     <p><?= nl2br(e($company['c_detail'])) ?></p>
                 <?php endif; ?>
+
                 <hr>
+                <!-- Back button: only to All Companies (per your request) -->
                 <a class="btn btn-outline-secondary btn-sm" href="all_companies.php">&larr; Back to All Companies</a>
             </div>
         </div>
     </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // Theme toggle functionality
+        // Theme toggle with proper icon + dark-mode colors
         const themeToggle = document.getElementById('themeToggle');
         const themeIcon = document.getElementById('themeIcon');
         const html = document.documentElement;
-        // Check for saved theme preference or default to light
-        const currentTheme = localStorage.getItem('theme') || 'light';
-        html.setAttribute('data-theme', currentTheme);
-        updateThemeIcon(currentTheme);
+
+        const current = localStorage.getItem('theme') || 'light';
+        html.setAttribute('data-theme', current);
+        updateIcon(current);
+
         themeToggle.addEventListener('click', () => {
-            const theme = html.getAttribute('data-theme');
-            const newTheme = theme === 'dark' ? 'light' : 'dark';
-            html.setAttribute('data-theme', newTheme);
-            localStorage.setItem('theme', newTheme);
-            updateThemeIcon(newTheme);
+            const t = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+            html.setAttribute('data-theme', t);
+            localStorage.setItem('theme', t);
+            updateIcon(t);
         });
 
-        function updateThemeIcon(theme) {
-            if (theme === 'dark') {
+        function updateIcon(t) {
+            if (t === 'dark') {
                 themeIcon.classList.remove('bi-sun-fill');
                 themeIcon.classList.add('bi-moon-fill');
             } else {
