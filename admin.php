@@ -1011,12 +1011,7 @@ $fb_companies_count = isset($fb_companies) ? count($fb_companies) : 0;
             <canvas id="feedbackByUserTypeChart"></canvas>
           </div>
         </div>
-        <div class="col-md-6 mb-4">
-          <div class="chart-container">
-            <div class="chart-title">Job Seekers by Category</div>
-            <canvas id="seekersByCategoryChart"></canvas>
-          </div>
-        </div>
+        
         <div class="col-md-6 mb-4">
           <div class="chart-container">
             <div class="chart-title">Jobs by Employment Type</div>
@@ -1027,6 +1022,13 @@ $fb_companies_count = isset($fb_companies) ? count($fb_companies) : 0;
           <div class="chart-container">
             <div class="chart-title">Premium vs Normal Users</div>
             <canvas id="premiumVsNormalChart"></canvas>
+          </div>
+        </div>
+
+        <div class="col-md-6 mb-4">
+          <div class="chart-container">
+            <div class="chart-title">Job Seekers by Category</div>
+            <canvas id="seekersByCategoryChart"></canvas>
           </div>
         </div>
       </div>
@@ -1619,6 +1621,150 @@ $fb_companies_count = isset($fb_companies) ? count($fb_companies) : 0;
         const m = new bootstrap.Modal(modalEl);
         m.show();
       });
+
+
+      // Feedback by User Type Chart
+  const feedbackByUserTypeCtx = document.getElementById('feedbackByUserTypeChart');
+  if (feedbackByUserTypeCtx) {
+    new Chart(feedbackByUserTypeCtx, {
+      type: 'bar',
+      data: {
+        labels: <?php echo json_encode(array_column($feedback_by_user_type, 'user_type')); ?>,
+        datasets: [{
+          label: 'Number of Feedback',
+          data: <?php echo json_encode(array_column($feedback_by_user_type, 'count')); ?>,
+          backgroundColor: ['#FF6384', '#36A2EB'],
+          borderColor: ['#FF4069', '#1E88E5'],
+          borderWidth: 1
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: { precision: 0, color: "#fff" },
+            grid: { color: "rgba(255,255,255,0.2)" }
+          },
+          x: {
+            ticks: { color: "#fff" },
+            grid: { color: "rgba(255,255,255,0.2)" }
+          }
+        },
+        plugins: {
+          legend: {
+            display: false,
+            labels: { color: "#fff" }
+          },
+          title: {
+            display: true,
+            text: 'Feedback by User Type',
+            color: "#fff"
+          }
+        }
+      }
+    });
+  }
+
+  // Job Seekers by Category Chart
+  const seekersByCategoryCtx = document.getElementById('seekersByCategoryChart');
+  if (seekersByCategoryCtx) {
+    new Chart(seekersByCategoryCtx, {
+      type: 'bar',
+      data: {
+        labels: <?php echo json_encode(array_column($seekers_by_category, 'job_category')); ?>,
+        datasets: [{
+          label: 'Number of Seekers',
+          data: <?php echo json_encode(array_column($seekers_by_category, 'count')); ?>,
+          backgroundColor: '#36A2EB',
+          borderColor: '#1E88E5',
+          borderWidth: 1
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: { precision: 0, color: "#fff" },
+            grid: { color: "rgba(255,255,255,0.2)" }
+          },
+          x: {
+            ticks: { color: "#fff" },
+            grid: { color: "rgba(255,255,255,0.2)" }
+          }
+        },
+        plugins: {
+          legend: { display: false, labels: { color: "#fff" } },
+          title: { display: true, text: 'Job Seekers by Category', color: "#fff" }
+        }
+      }
+    });
+  }
+
+  // Jobs by Employment Type Chart
+  const jobsByTypeCtx = document.getElementById('jobsByTypeChart');
+  if (jobsByTypeCtx) {
+    new Chart(jobsByTypeCtx, {
+      type: 'doughnut',
+      data: {
+        labels: <?php echo json_encode(array_column($jobs_by_type, 'employment_type')); ?>,
+        datasets: [{
+          data: <?php echo json_encode(array_column($jobs_by_type, 'count')); ?>,
+          backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF'],
+          borderWidth: 1
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'right', labels: { color: "#fff" } },
+          title: { display: true, text: 'Jobs by Employment Type', color: "#fff" }
+        }
+      }
+    });
+  }
+
+  // Premium vs Normal Users Chart
+  const premiumVsNormalCtx = document.getElementById('premiumVsNormalChart');
+  if (premiumVsNormalCtx) {
+    new Chart(premiumVsNormalCtx, {
+      type: 'pie',
+      data: {
+        labels: ['Premium Users', 'Normal Users'],
+        datasets: [{
+          data: [<?php echo $premium_total; ?>, <?php echo $normal_total; ?>],
+          backgroundColor: ['#FFCE56', '#4BC0C0'],
+          borderWidth: 1
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'right', labels: { color: "#fff" } },
+          title: { display: true, text: 'Premium vs Normal Users', color: "#fff" },
+          tooltip: {
+            callbacks: {
+              label: function(context) {
+                const label = context.label || '';
+                const value = context.raw || 0;
+                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                const percentage = Math.round((value / total) * 100);
+                return `${label}: ${value} (${percentage}%)`;
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+
+
+
     </script>
   </div>
 </body>

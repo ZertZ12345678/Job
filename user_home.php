@@ -655,6 +655,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'feedb
     .notif-card.pending .fw-semibold {
       color: #1565c0 !important;
     }
+
+    /* Dark mode: "Application Submitted" notification text = white */
+    [data-theme="dark"] .notif-card:not(.accepted):not(.rejected):not(.pending) .card-body,
+    [data-theme="dark"] .notif-card:not(.accepted):not(.rejected):not(.pending) .card-body .fw-semibold,
+    [data-theme="dark"] .notif-card:not(.accepted):not(.rejected):not(.pending) .card-body .text-muted {
+      color: #ffffff !important;
+    }
   </style>
 </head>
 
