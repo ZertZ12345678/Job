@@ -103,7 +103,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                   email        = :email,
                   phone        = :phone,
                   address      = :address,
-                  c_detail     = :c_detail";          // <-- include detail
+                  c_detail     = :c_detail";    
         $params = [
             ':company_name' => $company_name,
             ':email'        => $email,
@@ -183,6 +183,13 @@ $avatarSrc = $hasLogo ? ('company_logos/' . e($company['logo'])) : svg_avatar_da
             --bg-tertiary: #2d2d2d;
         }
 
+        .navbar .navbar-brand {
+            color: #ffc107 !important;
+            /* solid gold */
+            font-weight: 700;
+            letter-spacing: 0.5px;
+        }
+
         /* Global transitions */
         body,
         .navbar,
@@ -243,6 +250,8 @@ $avatarSrc = $hasLogo ? ('company_logos/' . e($company['logo'])) : svg_avatar_da
         }
 
         /* ===== Navbar link underline on hover ===== */
+
+
         .navbar-nav .nav-link {
             position: relative;
             padding-bottom: 4px;
@@ -411,7 +420,7 @@ $avatarSrc = $hasLogo ? ('company_logos/' . e($company['logo'])) : svg_avatar_da
                             <i class="bi bi-sun-fill" id="themeIcon"></i>
                         </button>
                     </li>
-                    
+
                 </ul>
             </div>
         </div>

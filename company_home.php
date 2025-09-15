@@ -924,6 +924,11 @@ try {
       color: var(--button-text) !important;
     }
 
+    [data-theme="dark"] #chatbot-container #chatbot-input::placeholder {
+      color: #ffffff;
+      opacity: 0.9;
+    }
+
     /* Chatbot Animations */
     @keyframes pulse {
       0% {
@@ -1021,6 +1026,8 @@ try {
     .chatbot-typing:nth-child(3) {
       animation-delay: 0.4s;
     }
+
+
 
     @keyframes typing {
 

@@ -59,8 +59,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $phone            = trim($_POST['phone'] ?? '');
     $address          = trim($_POST['address'] ?? '');
     $b_date           = trim($_POST['b_date'] ?? '');
-    $gender           = trim($_POST['gender'] ?? '');        // NEW
-    $education        = trim($_POST['education'] ?? '');     // NEW
+    $gender           = trim($_POST['gender'] ?? '');       
+    $education        = trim($_POST['education'] ?? '');   
     $job_category     = trim($_POST['job_category'] ?? '');
     $current_position = trim($_POST['current_position'] ?? '');
     if ($b_date !== '') {
@@ -100,8 +100,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                   phone = :phone,
                   address = :address,
                   b_date = :b_date,
-                  gender = :gender,                -- NEW
-                  education = :education,          -- NEW
+                  gender = :gender,               
+                  education = :education,        
                   job_category = :job_category,
                   current_position = :current_position";
         $params = [
@@ -440,7 +440,7 @@ $avatarSrc = $hasPhoto ? ('profile_pics/' . e($user['profile_picture'])) : svg_a
                     <li class="nav-item"><a class="nav-link" href="user_home.php">Home</a></li>
                     <li class="nav-item"><a class="nav-link active" href="user_profile.php">Profile</a></li>
                     <li class="nav-item"><a class="nav-link" href="all_companies.php">All Companies</a></li>
-                    
+
                     <li class="nav-item"><a class="btn btn-outline-warning ms-2" href="index.php">Logout</a></li>
 
                     <!-- Theme Toggle Button -->
@@ -580,20 +580,21 @@ $avatarSrc = $hasPhoto ? ('profile_pics/' . e($user['profile_picture'])) : svg_a
         </form>
     </div>
     <script>
-        // Theme toggle functionality - matching about.php
+        // ===== Theme toggle (same behavior) =====
         const themeToggle = document.getElementById('themeToggle');
         const themeIcon = document.getElementById('themeIcon');
         const html = document.documentElement;
-        // Check for saved theme preference or default to light
+
         const currentTheme = localStorage.getItem('theme') || 'light';
         html.setAttribute('data-theme', currentTheme);
         updateThemeIcon(currentTheme);
+
         themeToggle.addEventListener('click', () => {
             const theme = html.getAttribute('data-theme');
-            const newTheme = theme === 'dark' ? 'light' : 'dark';
-            html.setAttribute('data-theme', newTheme);
-            localStorage.setItem('theme', newTheme);
-            updateThemeIcon(newTheme);
+            const next = theme === 'dark' ? 'light' : 'dark';
+            html.setAttribute('data-theme', next);
+            localStorage.setItem('theme', next);
+            updateThemeIcon(next);
         });
 
         function updateThemeIcon(theme) {
@@ -606,29 +607,60 @@ $avatarSrc = $hasPhoto ? ('profile_pics/' . e($user['profile_picture'])) : svg_a
             }
         }
 
+        // ===== Edit helpers =====
+        function forceBlack(el) {
+            // make text black even in dark mode
+            el.classList.add('editing'); // optional class hook if you add CSS later
+            el.style.setProperty('color', '#000', 'important');
+            el.style.setProperty('background-color', '#fff8ec', 'important');
+
+            // for selects, also ensure the selected option renders black
+            if (el.tagName === 'SELECT') {
+                // Some browsers need a tiny kick to repaint option color
+                el.addEventListener('change', () => {
+                    el.style.setProperty('color', '#000', 'important');
+                }, {
+                    once: true
+                });
+                // If it already has a value, enforce immediately
+                requestAnimationFrame(() => {
+                    el.style.setProperty('color', '#000', 'important');
+                });
+            }
+        }
+
         function toggleEdit(btn) {
-            const input = btn.parentNode.querySelector("input, select");
+            const input = btn.parentNode.querySelector('input, select');
             if (!input) return;
-            if (input.hasAttribute("readonly")) input.removeAttribute("readonly");
-            if (input.hasAttribute("disabled")) input.removeAttribute("disabled");
-            input.focus();
-            input.style.backgroundColor = "#fff8ec";
-            // handle hidden mirrors for selects
-            if (input.tagName === "SELECT") {
+
+            if (input.hasAttribute('readonly')) input.removeAttribute('readonly');
+            if (input.hasAttribute('disabled')) input.removeAttribute('disabled');
+
+            // if this select had a hidden mirror, disable the mirror
+            if (input.tagName === 'SELECT') {
                 const name = input.name;
                 const hidden = document.querySelector(`input[type="hidden"][name="${name}"]`);
                 if (hidden) hidden.disabled = true;
             }
+
+            // visually indicate editing + force black text
+            forceBlack(input);
+            input.focus();
         }
 
+        // ===== Avatar preview =====
         function previewProfilePic(input) {
             if (input.files && input.files[0]) {
                 const reader = new FileReader();
-                reader.onload = e => document.getElementById('profilePreview').src = e.target.result;
+                reader.onload = e => {
+                    const img = document.getElementById('profilePreview');
+                    if (img) img.src = e.target.result;
+                };
                 reader.readAsDataURL(input.files[0]);
             }
         }
     </script>
+
 </body>
 
 </html>

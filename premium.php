@@ -82,11 +82,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $reference = $pp_email;
                 }
                 $pay = $pdo->prepare("
-          INSERT INTO premium_payment (user_id, payment_method, amount, description, reference, status)
-          VALUES (?, ?, ?, ?, ?, ?)
-        ");
-                $pay->execute([$user_id, $method_post, $amount, $description, $reference, $status]);
-                $ok = true;
+  INSERT INTO premium_payment (user_id, payment_method, amount, description, reference, status)
+  VALUES (?, ?, ?, ?, ?, ?)
+");
+$pay->execute([$user_id, $method_post, $amount, $description, $reference, $status]);
+
+// mark session package
+$_SESSION['package'] = 'premium';
+
+// optional flash message
+$_SESSION['flash_success'] = "Upgraded to Premium. Enjoy resume templates and auto-fill.";
+
+// redirect straight to home
+header("Location: user_home.php?upgraded=1", true, 303);
+exit;
+
             } catch (PDOException $ex) {
                 $err = 'Could not upgrade at the moment. Please try again.';
             }
@@ -304,6 +314,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         /* Dark mode form text adjustments */
+
+        
         [data-theme="dark"] .form-label {
             color: #ffffff !important;
         }
@@ -325,10 +337,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             color: #ffffff;
         }
 
-        
-
         /* Dark mode text adjustments for the description paragraph */
         [data-theme="dark"] .card-premium .card-body p.text-muted {
+            color: #ffffff !important;
+        }
+
+        /* Dark mode wallet box text adjustments */
+        [data-theme="dark"] .wallet-box h6,
+        [data-theme="dark"] .wallet-box .form-control-plaintext,
+        [data-theme="dark"] .wallet-box ol,
+        [data-theme="dark"] .wallet-box li,
+        [data-theme="dark"] .wallet-box label {
+            color: #ffffff !important;
+        }
+
+        [data-theme="dark"] .wallet-box .bi {
             color: #ffffff !important;
         }
 
@@ -412,6 +435,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         .theme-toggle:hover {
             background: var(--input-bg);
+        }
+
+
+        [data-theme="dark"] .gateway-box h6,
+        [data-theme="dark"] .gateway-box .form-label,
+        [data-theme="dark"] .gateway-box p.text-muted {
+            color: #ffffff !important;
+        }
+
+        [data-theme="dark"] .gateway-box .bi {
+            color: #ffffff !important;
+        }
+
+
+        [data-theme="dark"] input::placeholder,
+        [data-theme="dark"] textarea::placeholder,
+        [data-theme="dark"] select::placeholder {
+            color: rgba(255, 255, 255, 0.7) !important;
         }
     </style>
 </head>

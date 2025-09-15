@@ -350,6 +350,15 @@ if ($job && isset($job['status'])) {
         }
 
         /* Dark Mode Text Fixes */
+        /* Dark mode: force all text inside "Company Contact" card to white */
+        [data-theme="dark"] .card h3.h6.fw-bold.mb-3,
+        [data-theme="dark"] .card h3.h6.fw-bold.mb-3~div,
+        [data-theme="dark"] .card h3.h6.fw-bold.mb-3~div span {
+            color: #ffffff !important;
+        }
+
+
+
         [data-theme="dark"] .text-muted {
             color: #ffffff !important;
         }
@@ -526,7 +535,7 @@ if ($job && isset($job['status'])) {
     </main>
     <footer class="mt-5 py-4 text-white">
         <div class="container d-flex flex-column align-items-center">
-            
+
             <small>&copy; <?= date('Y') ?> JobHive. All rights reserved.</small>
         </div>
     </footer>

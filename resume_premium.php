@@ -1222,11 +1222,9 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
             const tpl3 = document.getElementById('tpl-t3');
             let originalHTML = '';
             let currentTplKey = 't1';
-
             /* ---- Theme Management ---- */
             const THEME_KEY = 'theme'; // Use the same key as job_detail.php
             const THEME_PARAM = 'theme';
-
             // Set theme icon based on current theme
             function updateThemeIcon(theme) {
                 if (theme === 'dark') {
@@ -1237,19 +1235,16 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
                     themeIcon.classList.add('bi-sun-fill');
                 }
             }
-
             // Get theme from URL parameter
             function getThemeFromURL() {
                 const urlParams = new URLSearchParams(window.location.search);
                 return urlParams.get(THEME_PARAM);
             }
-
             // Initialize theme on page load
             function initTheme() {
                 // Check for theme parameter in URL
                 const urlTheme = getThemeFromURL();
                 const savedTheme = localStorage.getItem(THEME_KEY);
-
                 // Determine which theme to use (URL parameter takes precedence)
                 let currentTheme;
                 if (urlTheme && (urlTheme === 'dark' || urlTheme === 'light')) {
@@ -1261,11 +1256,9 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
                 } else {
                     currentTheme = 'light'; // Default theme
                 }
-
                 document.documentElement.setAttribute('data-theme', currentTheme);
                 updateThemeIcon(currentTheme);
             }
-
             // Toggle theme function
             function toggleTheme() {
                 const currentTheme = document.documentElement.getAttribute('data-theme');
@@ -1274,13 +1267,10 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
                 localStorage.setItem(THEME_KEY, newTheme);
                 updateThemeIcon(newTheme);
             }
-
             // Initialize theme on page load
             initTheme();
-
             // Add event listener to theme toggle
             themeToggle.addEventListener('click', toggleTheme);
-
             /* ---- Session model: only for photo + accent (no DB writes) ---- */
             const STORAGE_KEY = 'resumePremiumModel';
             const defaultModel = {
@@ -1378,7 +1368,6 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
                 applyEditMode();
                 applyPhoto();
             }
-
             /* ---- Photo handling ---- */
             function applyPhoto() {
                 const hasPhoto = !!resumeModel.photoSrc;
@@ -1403,11 +1392,9 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
                     fr.readAsDataURL(file);
                 });
             }
-
             /* Init */
             setAccent(resumeModel.accent || '#0EA5E9');
             setTemplate('t1');
-
             /* UI */
             swatches.forEach(s => s.addEventListener('click', () => setAccent(s.dataset.color)));
             hexInput.addEventListener('change', () => setAccent(hexInput.value));
@@ -1442,7 +1429,6 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
                 resumeModel.photoSrc = '';
                 applyPhoto();
             });
-
             // Update the Apply Resume button to include the current theme
             if (btnApply) {
                 const currentTheme = document.documentElement.getAttribute('data-theme');
@@ -1452,7 +1438,6 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
                 href += separator + 'theme=' + encodeURIComponent(currentTheme);
                 btnApply.setAttribute('href', href);
             }
-
             btnApply?.addEventListener('click', function(ev) {
                 const url = this.getAttribute('href') || 'resume.php';
                 setTimeout(() => {
@@ -1461,7 +1446,6 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
                     } catch (e) {}
                 }, 0);
             });
-
             /* Capture helpers */
             function isIOS() {
                 return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -1470,7 +1454,6 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
             function isSafari() {
                 return /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
             }
-
             async function ensureImages(node) {
                 const imgs = Array.from(node.querySelectorAll('img'));
                 await Promise.all(imgs.map(img => img.complete ? Promise.resolve() : new Promise(r => (img.onload = img.onerror = r))));
@@ -1479,6 +1462,9 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
             function buildSnapshotNode() {
                 const cloneStage = stage.cloneNode(true);
                 cloneStage.id = 'snapshotStage';
+                // Force light theme for the captured resume
+                cloneStage.setAttribute('data-theme', 'light');
+
                 Object.assign(cloneStage.style, {
                     width: A4_W + 'px',
                     height: A4_H + 'px',
@@ -1488,21 +1474,73 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
                     position: 'fixed',
                     left: '-10000px',
                     top: '0',
-                    background: '#ffffff',
+                    background: '#ffffff', // Force white background
                     overflow: 'hidden'
                 });
+
                 const liveResume = stage.querySelector('.resume');
                 const resumeClone = liveResume ? liveResume.cloneNode(true) : document.createElement('div');
                 const wrapper = document.createElement('div');
                 Object.assign(wrapper.style, {
                     width: A4_W + 'px',
                     height: A4_H + 'px',
-                    background: '#ffffff',
+                    background: '#ffffff', // Force white background
                     overflow: 'hidden'
                 });
                 wrapper.appendChild(resumeClone);
                 cloneStage.innerHTML = '';
                 cloneStage.appendChild(wrapper);
+
+                // Force light theme styles for all resume elements
+                const allElements = cloneStage.querySelectorAll('*');
+                allElements.forEach(el => {
+                    // Reset any potentially dark backgrounds
+                    el.style.backgroundColor = '';
+                    el.style.background = '';
+                    // Force text color to dark
+                    el.style.color = '#0f172a';
+                });
+
+                // Add a style tag to enforce light mode colors
+                const styleTag = document.createElement('style');
+                styleTag.textContent = `
+                    #snapshotStage, #snapshotStage * {
+                        color: #0f172a !important;
+                        background-color: transparent !important;
+                    }
+                    #snapshotStage .resume-content {
+                        background-color: #ffffff !important;
+                    }
+                    #snapshotStage .section-title {
+                        color: var(--accent) !important;
+                    }
+                    #snapshotStage .t2 .head {
+                        background: var(--accent) !important;
+                        color: #ffffff !important;
+                    }
+                    #snapshotStage .t3 .left {
+                        background: #0b1220 !important;
+                        color: #e5e7eb !important;
+                    }
+                    #snapshotStage .t3 .chip {
+                        background: rgba(255, 255, 255, .05) !important;
+                        border-color: #e5e7eb !important;
+                        color: #e5e7eb !important;
+                    }
+                    #snapshotStage .muted {
+                        color: #6b7280 !important;
+                    }
+                    #snapshotStage .t1 .side {
+                        background: color-mix(in srgb, var(--accent) 9%, white) !important;
+                        border-right-color: var(--accent) !important;
+                    }
+                    #snapshotStage .avatar-fallback {
+                        background: var(--accent) !important;
+                        color: #ffffff !important;
+                    }
+                `;
+                cloneStage.appendChild(styleTag);
+
                 (function enforce(el) {
                     const resume = el.querySelector('.resume');
                     if (!resume) return;
@@ -1523,10 +1561,10 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
                         resume.style.gridTemplateColumns = '300px 1fr';
                     }
                 })(cloneStage);
+
                 document.body.appendChild(cloneStage);
                 return cloneStage;
             }
-
             async function renderWithHtml2Canvas(node) {
                 if (typeof html2canvas !== 'function') throw new Error('html2canvas not loaded');
                 await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
@@ -1538,7 +1576,6 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
                     imageTimeout: 15000
                 });
             }
-
             async function renderBlobWithDomToImage(node) {
                 if (!window.domtoimage) throw new Error('dom-to-image-more not loaded');
                 return window.domtoimage.toBlob(node, {
@@ -1548,7 +1585,6 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
                     height: A4_H
                 });
             }
-
             async function captureA4() {
                 const snap = buildSnapshotNode();
                 try {
@@ -1571,7 +1607,6 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
                     document.body.removeChild(snap);
                 }
             }
-
             /* Downloads */
             btnPNG?.addEventListener('click', async () => {
                 try {
@@ -1602,7 +1637,6 @@ if ($job_id) $applyHref .= '?job_id=' . urlencode((string)$job_id);
                     console.error(err);
                 }
             });
-
             btnPDF?.addEventListener('click', async () => {
                 try {
                     const out = await captureA4();
