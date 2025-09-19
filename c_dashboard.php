@@ -219,6 +219,12 @@ $barClass = $pp > 85 ? 'bg-success' : ($pp > 60 ? 'bg-info' : ($pp > 30 ? 'bg-wa
             margin-bottom: 10px;
         }
 
+        /* Recent Applicants: make the email/phone line black */
+        #applicants .table tbody .small.text-muted {
+            color: #000000 !important;
+            opacity: 1 !important;
+            /* in case any muted styles reduce opacity */
+        }
 
 
         .sidebar .nav-link {
